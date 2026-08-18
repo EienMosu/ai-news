@@ -10,8 +10,16 @@ const FORMATTER = new Intl.DateTimeFormat("en-CA", {
  * capture and persisted as `ingestDay`; readers follow the stored pointer and
  * never compute a date. See spec §4.
  *
- * en-CA formats as YYYY-MM-DD, which is what we want for lexicographic keys.
+ * Reads parts by name (year, month, day) instead of relying on `format()` output
+ * to ensure consistent YYYY-MM-DD format regardless of CLDR data — the result is
+ * a persisted DynamoDB partition key and must not vary with Node/ICU versions.
+ *
+ * Throws RangeError for invalid dates (e.g. `new Date("garbage")`); this is by
+ * design, as a bogus key is worse than an early error.
  */
 export function istanbulDay(at: Date): string {
-  return FORMATTER.format(at);
+  const parts = FORMATTER.formatToParts(at);
+  const get = (type: "year" | "month" | "day") =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }

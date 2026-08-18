@@ -30,4 +30,14 @@ describe("istanbulDay", () => {
     expect(d.toISOString().slice(0, 10)).toBe("2026-08-17");
     expect(istanbulDay(d)).toBe("2026-08-18");
   });
+
+  it("throws RangeError for an invalid date", () => {
+    expect(() => istanbulDay(new Date("garbage"))).toThrow(RangeError);
+  });
+
+  it("throws RangeError with the message 'Invalid time value'", () => {
+    expect(() => istanbulDay(new Date("garbage"))).toThrow(
+      "Invalid time value"
+    );
+  });
 });
