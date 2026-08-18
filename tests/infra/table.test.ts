@@ -6,6 +6,9 @@ import { AiNewsStack } from "../../infra/lib/ai-news-stack.js";
 const template = () =>
   Template.fromStack(new AiNewsStack(new App(), "Test", {
     env: { account: "111111111111", region: "eu-central-1" },
+    alertEmail: "alerts@example.com",
+    backupRepo: "EienMosu/ai-news",
+    githubTokenParam: "/ai-news/github-token",
   }));
 
 describe("article table", () => {

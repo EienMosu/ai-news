@@ -22,6 +22,7 @@
     "aws-cdk-lib": "^2.265.0",
     "aws-sdk-client-mock": "^4.1.0",
     "constructs": "^10.8.1",
+    "esbuild": "^0.28.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   },
@@ -36,6 +37,9 @@
   "pnpm": {
     "overrides": {
       "@smithy/types": "4.17.2"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
