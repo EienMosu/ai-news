@@ -4,7 +4,7 @@ import { MAX_TOKENS, RANK_INPUT_CAP, RANK_MODEL, TruncationError, rankArticles }
 const candidate = (n: number) => ({
   urlHash: String(n).padStart(64, "0"),
   title: `Title ${n}`, summary: "s", sourceName: "TechCrunch",
-  category: "news", publishedAt: null, points: null,
+  category: "news", section: "ai", publishedAt: null, points: null,
 });
 
 /** Shaped like the streaming client: content[0] is a thinking block, exactly as spec §6 warns. */

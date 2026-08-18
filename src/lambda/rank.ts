@@ -3,7 +3,8 @@ import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { istanbulDay } from "../lib/core/day.js";
 import { computeScore } from "../lib/core/score.js";
 import { BEDROCK_ABORT_MS } from "../lib/rank/model.js";
-import { TruncationError, rankArticles } from "../lib/rank/bedrock.js";
+import { TruncationError, RANK_INPUT_CAP, rankArticles } from "../lib/rank/bedrock.js";
+import { allocateRankingCap } from "../lib/rank/allocate.js";
 import { reconcile, type RankingEntry } from "../lib/rank/reconcile.js";
 import { countCorroboration } from "../lib/rank/corroboration.js";
 import { backupDay } from "../lib/rank/backup.js";
@@ -96,6 +97,9 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
     summary: String(a.summary ?? ""),
     sourceName: String(a.sourceName ?? ""),
     category: String(a.category ?? "news"),
+    // Defaults to "ai" for any pre-migration item written before `section` existed; every
+    // source in the registry sets one going forward (sources.ts requires it at compile time).
+    section: String(a.section ?? "ai"),
     publishedAt: (a.publishedAt as string | null) ?? null,
     points: (a.points as number | null) ?? null,
   }));
@@ -149,12 +153,19 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
   // articles ranked on an earlier day — so slicing by them selects on write history rather
   // than on importance.
   //
-  // Computed once per article, not once per comparison: sort() calls the comparator
-  // O(n log n) times, and degradedScore is pure given `now`, so recomputing it inline in the
-  // comparator repeats the same work for the same article on every comparison it's part of.
-  const withScore = candidates.map((c) => ({ c, degraded: degradedScore(c, now) }));
-  withScore.sort((a, b) => b.degraded - a.degraded);
-  const ordered = withScore.map((x) => x.c);
+  // Computed once per article, not once per comparison: allocateRankingCap sorts each
+  // per-section group, and degradedScore is pure given `now`, so recomputing it inline in a
+  // comparator would repeat the same work for the same article on every comparison it's part
+  // of.
+  //
+  // Allocated per section (Part 2), not sorted globally and sliced: design tops out at a 0.7
+  // source weight while an AI `lab` announcement reaches 1.0, so a global sort outranks design
+  // by construction rather than merit, and on a busy AI day a global slice could squeeze
+  // design out of the ranked set entirely. allocateRankingCap returns every candidate, with
+  // each section's fair share first, so rankArticles's own `slice(0, RANK_INPUT_CAP)` backstop
+  // (still in force) selects exactly that fair share.
+  const scored = candidates.map((c) => ({ item: c, section: c.section, score: degradedScore(c, now) }));
+  const ordered = allocateRankingCap(scored, RANK_INPUT_CAP);
 
   const controller = new AbortController();
   const abortTimer = setTimeout(() => controller.abort(), BEDROCK_ABORT_MS);

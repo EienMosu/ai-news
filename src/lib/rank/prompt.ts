@@ -8,6 +8,9 @@ export interface RankCandidate {
   summary: string;
   sourceName: string;
   category: string;
+  /** The topic vertical ("ai" | "design"). Told to the model so it scores importance within
+   *  the article's own field rather than against the other vertical. */
+  section: string;
   publishedAt: string | null;
   /**
    * `null` is the value a caller sets deliberately. `undefined` is what actually comes back
@@ -47,9 +50,11 @@ export const RANKING_SCHEMA = {
           importance: {
             type: "number",
             description:
-              "0-100. 90+ is a major model or capability release, a landmark result, or " +
-              "a development that changes what practitioners do this week. 50 is routine " +
-              "industry news. Below 20 is marketing, funding minutiae, or rehashed coverage.",
+              "0-100, scored within the article's own section (see each line's tag) -- " +
+              "never compare an ai article against a design one. 90+ is a major release " +
+              "or landmark result IN THAT FIELD, or changes what its practitioners do this " +
+              "week. 50 is routine industry news. Below 20 is marketing, funding minutiae, " +
+              "or rehashed coverage.",
           },
           clusterId: {
             type: "string",
@@ -81,13 +86,13 @@ export function buildRankPrompt(candidates: RankCandidate[]): {
     idToHash.set(id, c.urlHash);
     const summary = truncate(c.summary, SUMMARY_CHARS_FOR_RANKING);
     const points = c.points == null ? "" : ` | ${c.points} points`;
-    return `${id} | ${c.sourceName} (${c.category})${points}\n  ${c.title}\n  ${summary}`;
+    return `${id} | ${c.section} | ${c.sourceName} (${c.category})${points}\n  ${c.title}\n  ${summary}`;
   });
 
   const text =
-    `Here are ${candidates.length} AI-related articles captured today. Score each one's ` +
-    `importance to someone who follows AI closely, and group articles covering the same ` +
-    `underlying story.\n\n` +
+    `Here are ${candidates.length} articles captured today, spanning two sections: ai and ` +
+    `design. Score each one's importance within its OWN section, never against the other, ` +
+    `and group articles covering the same underlying story.\n\n` +
     `Return an entry for EVERY id below. Use the id exactly as written.\n\n` +
     lines.join("\n\n");
 

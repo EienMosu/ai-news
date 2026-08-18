@@ -7,6 +7,7 @@ const candidate = (n: number) => ({
   summary: "x".repeat(900),
   sourceName: "TechCrunch",
   category: "news" as const,
+  section: "ai",
   publishedAt: "2026-08-18T09:00:00.000Z",
   points: 12,
 });
@@ -50,6 +51,25 @@ describe("buildRankPrompt", () => {
     // `missing`, which is indistinguishable from the model failing.
     expect(RANKING_SCHEMA.required).toContain("items");
     expect(RANKING_SCHEMA.properties.items.items.required).toContain("id");
+  });
+
+  it("tells the model each article's section, and a design article's own section, not just ai's", () => {
+    // Mutation: dropping `${c.section} |` from the per-article line in buildRankPrompt makes
+    // this fail -- the model would see design articles with no cue that they belong to a
+    // different vertical than the ai ones next to them.
+    const designArticle = { ...candidate(1), section: "design" };
+    const { text } = buildRankPrompt([candidate(1), designArticle]);
+    expect(text).toContain("a0 | ai |");
+    expect(text).toContain("a1 | design |");
+  });
+
+  it("tells the model to score importance within an article's own section, not across sections", () => {
+    // Mutation: reverting the `importance` description to a single AI-only rubric (dropping
+    // "within the article's own section") makes this fail -- a significant CSS release and a
+    // significant model release should both be able to score highly.
+    const description = RANKING_SCHEMA.properties.items.items.properties.importance.description;
+    expect(description).toContain("within the article's own section");
+    expect(description).not.toMatch(/^0-100\. 90\+ is a major model or capability release/);
   });
 });
 

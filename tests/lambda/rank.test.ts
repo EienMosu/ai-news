@@ -175,6 +175,24 @@ describe("rank handler", () => {
     expect(ddb.commandCalls(PutCommand)).toHaveLength(2);
   });
 
+  it("passes each stored article's section to rankArticles, defaulting a missing attribute to ai", async () => {
+    // stored(2) has no `section` attribute at all -- exactly what queryDay returns for any
+    // item written before this migration existed.
+    vi.mocked(queryDay).mockResolvedValue([
+      { ...stored(1), section: "design" },
+      stored(2),
+    ]);
+
+    await handler();
+
+    // Mutation: deleting the `section: String(a.section ?? "ai"),` line in rank.ts's
+    // candidates mapping makes every entry below `undefined`, so neither filter below
+    // matches anything and both assertions fail.
+    const passed = vi.mocked(rankArticles).mock.calls[0]![0] as { section: string }[];
+    expect(passed.filter((c) => c.section === "design")).toHaveLength(1);
+    expect(passed.filter((c) => c.section === "ai")).toHaveLength(1);
+  });
+
   it("gives clustered articles a corroboration above 1 and singletons exactly 1", async () => {
     vi.mocked(rankArticles).mockResolvedValue({
       response: { items: [

@@ -81,4 +81,30 @@ export const SOURCES: SourceDef[] = [
     url: "https://www.reddit.com/r/MachineLearning/hot.rss" },
   { id: "hfpapers", name: "HF Daily Papers", kind: "hfPapers", category: "research", section: "ai",
     url: "https://huggingface.co/api/daily_papers?limit=20" },
+
+  // Design vertical (Part 1). All eight probed live and confirmed parsing cleanly through the
+  // existing parseFeed -- nothing in the ingest layer changes for these.
+  //
+  // No design source qualifies as `lab`: Figma, Google Design, Material, Airbnb, Adobe and
+  // Spotify design blogs all 404 or return zero items. That absence is real, not an oversight
+  // to "fix" by inventing one -- it is why the ranking cap is allocated per section rather than
+  // by a single global sort (design's ceiling is the 0.7 `news` weight, never the 1.0 `lab`
+  // weight an AI source can reach).
+  { id: "smashing", name: "Smashing Magazine", kind: "rss", category: "news", section: "design",
+    url: "https://www.smashingmagazine.com/feed/" },
+  { id: "alistapart", name: "A List Apart", kind: "rss", category: "news", section: "design",
+    // Uses <dc:date> instead of <pubDate>; parseFeed already handles it.
+    url: "https://alistapart.com/main/feed/" },
+  { id: "csstricks", name: "CSS-Tricks", kind: "rss", category: "news", section: "design",
+    url: "https://css-tricks.com/feed/" },
+  { id: "creativebloq", name: "Creative Bloq", kind: "rss", category: "news", section: "design",
+    url: "https://www.creativebloq.com/feeds/all" },
+  { id: "nngroup", name: "Nielsen Norman Group", kind: "rss", category: "research", section: "design",
+    url: "https://www.nngroup.com/feed/rss/" },
+  { id: "uxcollective", name: "UX Collective", kind: "rss", category: "community", section: "design",
+    url: "https://uxdesign.cc/feed" },
+  { id: "sidebar", name: "Sidebar", kind: "rss", category: "community", section: "design",
+    url: "https://sidebar.io/feed.xml" },
+  { id: "awwwards", name: "Awwwards", kind: "rss", category: "community", section: "design",
+    url: "https://www.awwwards.com/blog/feed" },
 ];
