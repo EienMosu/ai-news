@@ -18,6 +18,13 @@ export class Monitoring extends Construct {
     super(scope, id);
 
     const topic = new sns.Topic(this, "Alerts", { displayName: "ai-news alerts" });
+    // An email subscription sits in PendingConfirmation until the confirmation link in the
+    // subscribe email is clicked — the topic and every alarm/budget pointed at it deploy
+    // looking healthy regardless. Until that click happens, all three alarms and both budgets
+    // below are silently useless: they fire, SNS has nowhere to deliver, and no one is told.
+    // Checkable post-deploy with `aws sns list-subscriptions-by-topic --topic-arn <arn>`: a
+    // confirmed subscription shows a real SubscriptionArn; an unconfirmed one shows the literal
+    // string "PendingConfirmation" instead of an ARN.
     topic.addSubscription(new subs.EmailSubscription(props.alertEmail));
     const notify = new actions.SnsAction(topic);
 
@@ -35,6 +42,18 @@ export class Monitoring extends Construct {
     // The alarm that matters most. If EventBridge stops firing, no error is ever raised and
     // no datapoint is ever published — the system goes quiet and looks healthy. Only
     // treatMissingData: BREACHING turns that silence into a page.
+    //
+    // Two consequences of that same property, both intentional, not bugs:
+    // - Day-one false alarm: on a fresh deploy, before capture has ever run, there are zero
+    //   datapoints in the window and BREACHING fires once. Invoking capture manually right
+    //   after deploy publishes the first Invocations datapoint and clears it. Any other
+    //   treatMissingData setting would trade this one-time, expected alarm for permanent
+    //   silence during a real stoppage — not a trade worth making.
+    // - Detection latency: the metric period is 25 hours (below), so after a *real* stoppage
+    //   this fires roughly 25-50 hours later, not within the hour. That delay is deliberate: a
+    //   25-hour trailing window (vs. the 1-hour capture schedule) is what stops a single missed
+    //   run from paging the owner, which is the same cry-wolf failure this alarm exists to
+    //   avoid. Tolerating one missed run costs a day of extra detection latency on a real one.
     new cloudwatch.Alarm(this, "CaptureStopped", {
       metric: props.capture.metricInvocations({ period: Duration.hours(25) }),
       threshold: 1,
