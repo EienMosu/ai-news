@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { captureAll } from "../../src/lib/ingest/capture.js";
 import { SOURCES } from "../../src/lib/ingest/sources.js";
+import { normalizeUrl, urlHash } from "../../src/lib/core/url.js";
 
 const fixture = (n: string) => readFileSync(new URL(`../fixtures/${n}`, import.meta.url), "utf8");
 const NOW = new Date("2026-08-18T12:00:00.000Z");
@@ -50,10 +51,43 @@ describe("captureAll", () => {
     expect(categories.size).toBeGreaterThan(1);
   });
 
-  it("deduplicates by urlHash across sources", async () => {
-    const r = await captureAll({ fetchText: stubFetch(), now: NOW });
+  // The default stub now gives every source distinct content (Fix 6), so a
+  // plain "no urlHash repeats" check over that data can never fail — it's
+  // trivially true for an array whose elements are already distinct, and
+  // would still pass if the Map were replaced with a plain array. This test
+  // forces a genuine collision so the assertion can actually fail on a
+  // dedup regression.
+  it("deduplicates by urlHash across sources, keeping the earlier registry source and not hiding the shadowed source's count", async () => {
+    const tc = SOURCES.find((s) => s.id === "techcrunch")!;
+    const verge = SOURCES.find((s) => s.id === "verge")!;
+    const sharedUrl = "https://collide.example.com/duplicate-story";
+    const expectedHash = urlHash(normalizeUrl(sharedUrl));
+
+    const r = await captureAll({
+      fetchText: stubFetch({
+        [tc.url]: rssFor("techcrunch", sharedUrl),
+        [verge.url]: rssFor("verge", sharedUrl),
+      }),
+      now: NOW,
+    });
+
+    // No urlHash repeats anywhere in the result, generally.
     const hashes = r.articles.map((a) => a.urlHash);
     expect(new Set(hashes).size).toBe(hashes.length);
+
+    // Specifically: the collided URL survives exactly once, ...
+    const matches = r.articles.filter((a) => a.urlHash === expectedHash);
+    expect(matches).toHaveLength(1);
+    // ... and it's the earlier-registered source's copy — first-wins, not
+    // last-wins.
+    expect(matches[0]?.source).toBe("techcrunch");
+
+    // Losing the dedup race is not the same as being dead: the count is
+    // deliberately taken before dedup, so verge — whose item never made it
+    // into the final array — must still report a non-zero count rather
+    // than looking like a dead source.
+    expect(r.perSourceCounts["techcrunch"]).toBeGreaterThan(0);
+    expect(r.perSourceCounts["verge"]).toBeGreaterThan(0);
   });
 
   // One dead source must not take the run down with it.
