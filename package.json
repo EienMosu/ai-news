@@ -14,11 +14,12 @@
   "license": "ISC",
   "packageManager": "pnpm@10.34.0",
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^24.13.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.0",
     "zod": "^4.4.3"
   }
 }
