@@ -103,18 +103,23 @@ describe("resolveDay", () => {
     expect(resolveDay({ interim: false }, sixAM)).toEqual({ day: "2026-08-18", interim: false });
   });
 
-  it("lets an explicit day override interim, exactly as it already overrides the default", () => {
-    // The runbook's manual re-rank of a specific day must not be silently coerced into interim
-    // handling just because both fields happen to be set on the same event.
-    // Mutation: changing `if (event?.day) return { day: event.day, interim: false };` to keep
-    // `interim: Boolean(event?.interim)` instead of hardcoding `false` makes this read
-    // `interim: true` instead of `false`, forcing status "partial" on what the runbook expects
-    // to be a normal manual re-rank.
-    expect(resolveDay({ day: "2026-07-01", interim: true }, eighteenHundred)).toEqual({
-      day: "2026-07-01", interim: false,
-    });
+  it("lets an explicit day override which day is picked, without resetting interim", () => {
+    // `day` and `interim` are independent: `day` decides WHICH day, `interim` decides whether
+    // this run may be the final word on it. The runbook's manual override sends `{ day }` with
+    // no `interim`, so it defaults to `false` here -- but a caller that explicitly asks for
+    // BOTH (a manual interim re-run of a specific day) gets exactly that, not a silently
+    // downgraded final run. (Whether a "final" run over that day is actually allowed to report
+    // "complete" is a SEPARATE, calendar-based check in `handler` -- see `dayNotYetOver` --
+    // this function only ever decides which day and which intent, never finality.)
+    //
+    // Mutation: reverting to `if (event?.day) return { day: event.day, interim: false };`
+    // (unconditionally dropping interim whenever day is explicit) makes the second assertion
+    // below read `interim: false` instead of `true`.
     expect(resolveDay({ day: "2026-07-01" }, sixAM)).toEqual({
       day: "2026-07-01", interim: false,
+    });
+    expect(resolveDay({ day: "2026-07-01", interim: true }, eighteenHundred)).toEqual({
+      day: "2026-07-01", interim: true,
     });
   });
 });
@@ -380,22 +385,70 @@ describe("rank handler", () => {
     expect(out.ranked).toBe(2);
     expect(out.truncated).toBe(0);
     expect(out.llmStatus).toBe("ok");
-    // Mutation: changing `const status: "complete" | "partial" = interim ? "partial" : (...)`
-    // to drop the `interim ? "partial" :` prefix (keeping only the inner ternary) makes this
-    // read "complete" instead, because every other condition for "complete" is satisfied here.
+    // Mutation: dropping the whole `interim || dayNotYetOver` condition (i.e. computing
+    // `status` from just the ranked/truncated/llmStatus/enrichmentFailed ternary, unguarded)
+    // makes this read "complete" instead, because every one of those conditions is satisfied
+    // here. Note this scenario alone can't isolate `interim` from `dayNotYetOver` -- today is
+    // also never-yet-over, so either term alone would still force "partial" here. The test
+    // below ("an interim run over a past day...") is what isolates `interim` specifically.
     expect(out.status).toBe("partial");
   });
 
-  it("still reports complete for a non-interim run when everything ranks cleanly", async () => {
-    // Same clean-run mocks as above, but without `interim: true` -- the base case Change 2
-    // must not break. Isolates that the ternary's non-interim branch still evaluates the real
-    // completion conditions rather than something that always fails closed.
-    const out = await handler({ day: "2026-08-18" });
+  it("never reports complete for an explicit day that is today, even fully ranked and clean", async () => {
+    // The exact hazard this guard exists to close: runbook step 8 invokes rank by hand with
+    // `{"day":"<today>"}` -- an explicit day, no `interim` -- and everything about the run can
+    // go perfectly (every article ranked, nothing truncated, no write failures). Before the
+    // calendar guard, that combination was indistinguishable from a genuinely finished day.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T07:00:00Z")); // 10:00 Europe/Istanbul on the 19th
 
-    // Mutation: hardcoding the status expression's condition to `true` (forcing "partial" on
-    // every run, interim or not) makes this fail while the interim test above stays green --
-    // together the two pin both sides of the `interim ? "partial" : (...)` branch.
+    const out = await handler({ day: "2026-08-19" }); // explicit, and equal to today
+
+    expect(out.ranked).toBe(2);
+    expect(out.truncated).toBe(0);
+    expect(out.llmStatus).toBe("ok");
+    // Mutation: changing `const dayNotYetOver = day >= istanbulDay(now);` to `day >
+    // istanbulDay(now)` (strictly greater, instead of greater-or-equal) makes this read
+    // "complete" instead of "partial" -- day equals today exactly, and `>` excludes that case
+    // while `>=` correctly includes it.
+    expect(out.status).toBe("partial");
+  });
+
+  it("still reports complete for an explicit day that is yesterday, when the run is clean", async () => {
+    // The override must keep working for its actual purpose: re-ranking a day that has
+    // genuinely ended. Without this test, a mutation that makes the calendar guard too broad
+    // (e.g. always true) would sail through -- every other test either expects "partial" for
+    // an unrelated reason or uses a day that happens to be "today" on purpose.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T07:00:00Z")); // 10:00 Europe/Istanbul on the 19th
+
+    const out = await handler({ day: "2026-08-18" }); // explicit, and strictly before today
+
+    expect(out.ranked).toBe(2);
+    // Mutation: changing `const dayNotYetOver = day >= istanbulDay(now);` to the unconditional
+    // `true` makes this read "partial" instead of "complete" -- the override would no longer
+    // be able to finalize ANY day, defeating its entire purpose.
     expect(out.status).toBe("complete");
+  });
+
+  it("still reports partial for an interim run over a day that has already ended", async () => {
+    // Isolates `interim` from `dayNotYetOver`: unlike the "forces status partial on an interim
+    // run" test above (where `day` is always today, so `dayNotYetOver` alone would also force
+    // partial), this run explicitly targets YESTERDAY while still marked `interim` -- only the
+    // `interim` term of the guard is available to force "partial" here.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T07:00:00Z")); // 10:00 Europe/Istanbul on the 19th
+
+    const out = await handler({ day: "2026-08-18", interim: true });
+
+    expect(out.day).toBe("2026-08-18");
+    expect(out.ranked).toBe(2);
+    expect(out.truncated).toBe(0);
+    expect(out.llmStatus).toBe("ok");
+    // Mutation: changing `interim || dayNotYetOver` to just `dayNotYetOver` (dropping the
+    // `interim ||` term) makes this read "complete" instead of "partial" -- `day` is strictly
+    // before today, so `dayNotYetOver` alone is `false` and cannot force it.
+    expect(out.status).toBe("partial");
   });
 
   it("does not block the following morning's final run from completing the same day", async () => {

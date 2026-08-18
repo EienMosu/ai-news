@@ -82,23 +82,26 @@ export function targetDay(now: Date): string {
  * The 18:00 CfnSchedule sends `{ interim: true }`. Re-targeting `targetDay` (yesterday) at
  * 18:00 would just re-rank a day the 06:00 run already finished — the "already complete"
  * guard would then skip it, making the second run a no-op. So `interim: true` targets TODAY
- * instead: whatever has been captured so far. That day is deliberately never allowed to
- * become the day this run marks `"complete"` (see the `status` computation in `handler`) —
- * the evening's articles have not been captured yet, and marking it complete here would make
- * tomorrow's 06:00 final run skip it via the same guard, stranding everything captured after
- * 18:00 unranked forever.
+ * instead: whatever has been captured so far.
  *
- * An explicit `{ day }` overrides both branches, exactly as it did before `interim` existed —
- * that is how the runbook re-ranks one specific day by hand, and a manual override must not be
- * silently coerced into "interim" handling just because both fields happened to be set.
+ * `day` and `interim` are independent: `day`, when given, decides WHICH day is ranked and
+ * nothing else — it does not reset `interim` to `false`. `interim` decides whether this run is
+ * allowed to be the FINAL word on that day, which is why the runbook's manual override (an
+ * explicit `day`, no `interim`) still defaults to `interim: false` and the 18:00 schedule (no
+ * `day`) still defaults to targeting today. A caller is free to combine both — e.g. a manual
+ * interim re-run of a specific day — and get exactly what each field says on its own.
+ *
+ * This function does NOT decide whether a day can actually be marked `"complete"`, on purpose:
+ * that is `handler`'s `dayNotYetOver` check, and it does not trust `interim` (or anything else
+ * a caller sets) either. See the comment there for why.
  */
 export function resolveDay(
   event: { day?: string; interim?: boolean } | undefined,
   now: Date,
 ): { day: string; interim: boolean } {
-  if (event?.day) return { day: event.day, interim: false };
   const interim = Boolean(event?.interim);
-  return { day: interim ? istanbulDay(now) : targetDay(now), interim };
+  const day = event?.day ?? (interim ? istanbulDay(now) : targetDay(now));
+  return { day, interim };
 }
 
 /**
@@ -356,7 +359,19 @@ export async function handler(
   // so no matter how cleanly this run scores what HAS been captured, marking today
   // "complete" now would make tomorrow's 06:00 final run skip it via the already-complete
   // guard above, stranding everything captured after 18:00.
-  const status: "complete" | "partial" = interim
+  //
+  // `dayNotYetOver` closes a hazard `interim` alone leaves open: runbook step 8 tells an
+  // operator to invoke rank by hand with `{"day":"<today>"}` -- an explicit day, no `interim`
+  // flag, so `resolveDay` reports `interim: false` and nothing above would stop that call from
+  // marking TODAY "complete". Tomorrow's 06:00 final run would then hit the already-complete
+  // guard and skip today entirely, stranding everything captured after the manual run forever
+  // -- the exact failure the interim run exists to prevent, reachable through the runbook we
+  // ship. Finality is a property of the calendar, not of the payload: a day that has not
+  // ended cannot be finally ranked no matter who asks or which fields they set, so this check
+  // does not depend on `interim`, `force`, or any future caller getting a flag combination
+  // right -- ISO date strings compare correctly with `<`, so no date arithmetic is needed.
+  const dayNotYetOver = day >= istanbulDay(now);
+  const status: "complete" | "partial" = interim || dayNotYetOver
     ? "partial"
     : ranked === afterEnrichment.length && truncated === 0 && llmStatus === "ok" &&
       enrichmentFailed === 0
