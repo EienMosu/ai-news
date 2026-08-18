@@ -483,8 +483,17 @@ const text = msg.content.find((b) => b.type === "text")?.text;
 
 - `max_tokens` caps thinking **plus** response text. The original 3K output estimate was
   30 tokens per article; ~100 items with a one-sentence rationale each is realistically
-  4.5-7K before thinking. Set 32000 and validate against a real batch with
-  `countTokens()` before deploying.
+  4.5-7K before thinking. Set 32000 and validate against a real batch before deploying.
+
+  > **[revised]** The original instruction said to validate with `countTokens()`. **That does
+  > not work on Bedrock, and it fails in the worst possible way.** Measured 2026-08-18: the
+  > method is present and callable on `AnthropicBedrock`, does **not** throw, and RESOLVES with
+  > `{"Output":{"__type":"com.amazon.coral.service#UnknownOperationException"},"Version":"1.0"}`
+  > — an AWS error envelope handed back as though it were a successful response. So
+  > `const { input_tokens } = await countTokens(...)` yields `undefined` and the caller carries
+  > on. A missing method fails loudly; this fails plausibly, and no `typeof` guard detects it.
+  > Validate instead from the `usage` field of one real ranking call, which the smoke script
+  > runs once before the first scheduled run.
 - **`stop_reason === "max_tokens"` branches separately** from a failed call. Truncation
   yields invalid JSON, which would otherwise be caught as a generic Bedrock failure and
   silently degrade the whole day, looking identical to an outage.
@@ -648,8 +657,10 @@ Three things, all free, sized for a single-user project:
    what catches a silently stopped schedule.
 3. **Two AWS Budget alarms**, plus calendar reminders for the Free Plan expiry and the
    90-day closure date. Thresholds are set against expected spend (§8, cost) rather than
-   against zero: **$15/month** as the "higher than it should be" warning and **$30/month**
-   as "something is wrong — go look". A $5 alarm would fire during normal operation and
+   against zero: **$25/month** as the "higher than it should be" warning and **$40/month**
+   as "something is wrong — go look". These were $15/$30 until the cost estimate was corrected
+   upward; at a ~$16.30 worst case a $15 warning fires in a legitimate month. A $5 alarm would
+   fire during normal operation and
    be ignored within a week, which is worse than no alarm. This is the only defense
    against the failure that destroys the product.
 
