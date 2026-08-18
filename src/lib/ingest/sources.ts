@@ -18,6 +18,24 @@ export interface SourceDef {
    * touching the orchestrator.
    */
   maxItems?: number;
+  /**
+   * How this source's primary key is derived. Defaults to "url".
+   *
+   * "title" exists for exactly one reason: Google News wrapper links. Spec §3 records the
+   * measurement — the wrapper cannot be resolved to a publisher URL server-side (Google
+   * resolves it in client-side JavaScript), and the wrapper token is opaque, so hashing it
+   * risks re-keying the same article onto a later day and duplicating it in the archive.
+   * A title hash is deterministic; its failure mode (two posts sharing a title) collapses
+   * to a dedup rather than a duplicate, which is the safe direction.
+   *
+   * Requires publisherSuffix handling — see below. Do not set one without the other.
+   */
+  hashStrategy?: "url" | "title";
+  /**
+   * This source's titles carry a trailing " - <Publisher>" label that must be stripped
+   * before the title is stored or hashed, and whose removal can leave nothing behind.
+   */
+  publisherSuffix?: boolean;
 }
 
 /** Spec §3. arXiv cs.AI is deliberately absent — 268 items/day would drown the feed. */
@@ -40,6 +58,7 @@ export const SOURCES: SourceDef[] = [
     url: "https://huggingface.co/blog/feed.xml" },
   // Anthropic publishes no RSS feed; Google News is the only keyless route.
   { id: "anthropic", name: "Anthropic", kind: "rss", category: "lab",
+    hashStrategy: "title", publisherSuffix: true,
     url: "https://news.google.com/rss/search?q=site:anthropic.com&hl=en-US&gl=US&ceid=US:en" },
   // Algolia's /search endpoint is relevance-sorted, not date-sorted, so its
   // results span 2023-2026 interleaved -- our recency window filtered the

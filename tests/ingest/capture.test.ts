@@ -349,4 +349,55 @@ describe("captureAll", () => {
       expect(r.quarantined["techcrunch"]).toBe(0);
     });
   });
+
+  // Spec §3: the Anthropic source is a Google News search wrapper. Its titles carry a
+  // trailing " - <Publisher>" label, and its links are opaque wrapper tokens whose
+  // multi-day stability is unproven, so this source alone keys by title, not url.
+  describe("Google News source (anthropic): hashStrategy, publisher suffix, quarantine", () => {
+    const anthropic = SOURCES.find((s) => s.id === "anthropic")!;
+
+    const gnewsFeed = (title: string, link: string) =>
+      `<?xml version="1.0"?><rss version="2.0"><channel><item>` +
+      `<title>${title}</title><link>${link}</link>` +
+      `<pubDate>Mon, 18 Aug 2026 09:00:00 GMT</pubDate></item></channel></rss>`;
+
+    const runAnthropic = async (title: string, link: string) =>
+      await captureAll({
+        now: NOW,
+        fetchText: stubFetch({ [anthropic.url]: gnewsFeed(title, link) }),
+      });
+
+    it("keys a title-strategy source by title, so a changed wrapper url does not re-key it", async () => {
+      const a = (await runAnthropic("Anthropic ships a thing - Anthropic",
+        "https://news.google.com/rss/articles/AAA")).articles.find((x) => x.source === "anthropic");
+      const b = (await runAnthropic("Anthropic ships a thing - Anthropic",
+        "https://news.google.com/rss/articles/BBB")).articles.find((x) => x.source === "anthropic");
+
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      expect(b!.urlHash).toBe(a!.urlHash);                                  // same story, same key
+      expect(b!.url).toBe("https://news.google.com/rss/articles/BBB");      // url still refreshes
+    });
+
+    it("strips the publisher suffix from the stored title", async () => {
+      const r = await runAnthropic("Anthropic ships a thing - Anthropic",
+        "https://news.google.com/rss/articles/AAA");
+      expect(r.articles.find((x) => x.source === "anthropic")!.title)
+        .toBe("Anthropic ships a thing");
+    });
+
+    it("quarantines an item whose title is nothing but the publisher suffix", async () => {
+      // Observed live 2026-08-18. Without this, every such item hashes identically under
+      // hashStrategy "title" and they silently overwrite one another.
+      const r = await runAnthropic(" - Anthropic", "https://news.google.com/rss/articles/AAA");
+      expect(r.articles.filter((x) => x.source === "anthropic")).toHaveLength(0);
+      expect(r.quarantined.anthropic).toBe(1);
+    });
+
+    it("drops CDN fragments that site: matched on a subdomain", async () => {
+      const r = await runAnthropic("some pdf text - www-cdn.anthropic.com",
+        "https://news.google.com/rss/articles/CCC");
+      expect(r.articles.filter((x) => x.source === "anthropic")).toHaveLength(0);
+    });
+  });
 });

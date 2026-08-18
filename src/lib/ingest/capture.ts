@@ -4,6 +4,12 @@ import { parseFeed, type FeedItem } from "./fetchers/rss.js";
 import { parseHnResponse } from "./fetchers/hn.js";
 import { parseHfPapers } from "./fetchers/hfPapers.js";
 import { SOURCES, type SourceDef } from "./sources.js";
+import { stripPublisherSuffix } from "./title.js";
+
+// A site: query matches subdomains, so anthropic.com's CDN turns PDF fragments into
+// "articles" (observed live 2026-08-18: www-cdn.anthropic.com). The publisher label
+// Google News appends is the only place that origin survives.
+const CDN_PUBLISHER_SUFFIX = /\s-\s(?:[a-z0-9-]+\.)*www-cdn\.[a-z0-9.-]+$/i;
 
 /** What captureAll needs from the outside world, injected so tests never touch the network. */
 export interface CaptureDeps {
@@ -51,9 +57,12 @@ function toArticle(
   now: Date,
 ): NormalizedArticle | null {
   const normalized = normalizeUrl(item.link);
-  const hash = normalized.startsWith("http")
-    ? urlHash(normalized)
-    : titleHash(item.title, src.name);
+  // An explicit "title" strategy wins outright (spec §3). Otherwise prefer the url, and
+  // fall back to the title for links that are not http(s) at all.
+  const hash =
+    src.hashStrategy === "title" || !normalized.startsWith("http")
+      ? titleHash(item.title, src.name)
+      : urlHash(normalized);
 
   const candidate = {
     urlHash: hash,
@@ -190,7 +199,27 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
     const validArticles: NormalizedArticle[] = [];
     try {
       for (const item of itemsFor(src, outcome.value.body)) {
-        const article = toArticle(src, item, deps.now);
+        // Google News appends " - <Publisher>" to every title and sometimes appends
+        // nothing else. Both the stored title and the hash must see the cleaned form.
+        const rawTitle = item.title;
+        const cleanedTitle = src.publisherSuffix ? stripPublisherSuffix(rawTitle) : rawTitle;
+
+        if (src.publisherSuffix && CDN_PUBLISHER_SUFFIX.test(rawTitle)) {
+          // dropped as out of scope, not quarantined — nothing is broken, it is
+          // simply not news.
+          filtered[src.id]!++;
+          continue;
+        }
+
+        // Empty after stripping means the feed gave no title at all. Under
+        // hashStrategy "title" every such item hashes identically, so letting one
+        // through silently destroys the next.
+        if (cleanedTitle.length === 0) {
+          quarantined[src.id]!++;
+          continue;
+        }
+
+        const article = toArticle(src, { ...item, title: cleanedTitle }, deps.now);
         if (!article) {
           // Failed NormalizedArticleSchema — quarantined rather than written
           // with holes, and counted separately so this doesn't read the same
@@ -205,7 +234,10 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
     }
 
     const { kept, filteredCount } = filterToRecentWindow(src, validArticles, deps.now);
-    filtered[src.id] = filteredCount;
+    // Additive: the publisher-suffix CDN-fragment drop above already may have
+    // incremented filtered[src.id] for this source, and that count must survive
+    // rather than being overwritten by the recency-window's own filtered count.
+    filtered[src.id]! += filteredCount;
     for (const article of kept) mergeIntoSeen(bySeenHash, article);
     perSourceCounts[src.id] = kept.length;
   });
