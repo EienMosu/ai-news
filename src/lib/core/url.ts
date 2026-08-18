@@ -79,9 +79,13 @@ export function urlHash(normalized: string): string {
 }
 
 /**
- * Identity fallback for sources whose links are opaque redirect wrappers we
- * failed to resolve — notably the Google News RSS fallback used for Anthropic
- * (spec §3).
+ * Identity fallback used when a link is not an http(s) URL, so it cannot be
+ * hashed with urlHash. Currently unreachable in this codebase: every fetcher
+ * only ever emits http(s) links (an Atom entry with no resolvable link is
+ * dropped, not passed through with an opaque id). No redirect resolution is
+ * attempted anywhere today. Reserved for a future step that resolves wrapper
+ * URLs — e.g. the Google News RSS fallback used for Anthropic (spec §3) —
+ * which has not been built yet.
  */
 export function titleHash(title: string, sourceName: string): string {
   return sha256(`${title.trim().toLowerCase()}|${sourceName}`);

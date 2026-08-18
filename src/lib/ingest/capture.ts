@@ -14,11 +14,15 @@ export interface CaptureDeps {
 /**
  * Everything a run produced, including the parts that look like nothing
  * happened. perSourceCounts and errors exist so a dead feed (zero items) is
- * distinguishable from a genuinely quiet news day.
+ * distinguishable from a genuinely quiet news day; quarantined exists so a
+ * source whose items all fail schema validation is distinguishable from
+ * both — that failure mode also reports perSourceCounts 0, and without a
+ * separate counter it is indistinguishable from a dead feed.
  */
 export interface CaptureResult {
   articles: NormalizedArticle[];
   perSourceCounts: Record<string, number>;
+  quarantined: Record<string, number>;
   errors: { source: string; message: string }[];
 }
 
@@ -66,10 +70,28 @@ function toArticle(
 }
 
 /**
+ * Merges a newly-seen article into the dedup map. Content fields are
+ * first-writer-wins in registry order (the primary publisher/lab has the
+ * better summary and image), with one exception: points is the one field
+ * only Hacker News produces, so if the record already stored has no points
+ * and the incoming one does, the incoming points are backfilled onto the
+ * stored record rather than being discarded.
+ */
+function mergeIntoSeen(bySeenHash: Map<string, NormalizedArticle>, article: NormalizedArticle) {
+  const existing = bySeenHash.get(article.urlHash);
+  if (!existing) {
+    bySeenHash.set(article.urlHash, article);
+  } else if (existing.points === null && article.points !== null) {
+    bySeenHash.set(article.urlHash, { ...existing, points: article.points });
+  }
+}
+
+/**
  * One failing source must never fail the run, but it must also never look like
  * a quiet news day — hence perSourceCounts and errors in the result. Sources
  * are fetched with allSettled so one dead feed cannot take down the others;
- * dedup by urlHash is first-writer-wins in registry order (SOURCES above).
+ * dedup by urlHash is first-writer-wins in registry order (SOURCES above),
+ * except for points (see mergeIntoSeen).
  */
 export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
   const settled = await Promise.allSettled(
@@ -77,6 +99,10 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
   );
 
   const perSourceCounts: Record<string, number> = {};
+  // Initialised for every source up front so a healthy source reads 0 rather
+  // than being absent from the map.
+  const quarantined: Record<string, number> = {};
+  for (const src of SOURCES) quarantined[src.id] = 0;
   const errors: { source: string; message: string }[] = [];
   const bySeenHash = new Map<string, NormalizedArticle>();
 
@@ -92,9 +118,15 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
     try {
       for (const item of itemsFor(src, outcome.value.body)) {
         const article = toArticle(src, item, deps.now);
-        if (!article) continue;
+        if (!article) {
+          // Failed NormalizedArticleSchema — quarantined rather than written
+          // with holes, and counted separately so this doesn't read the same
+          // as a dead feed that produced nothing at all.
+          quarantined[src.id]!++;
+          continue;
+        }
         produced++;
-        if (!bySeenHash.has(article.urlHash)) bySeenHash.set(article.urlHash, article);
+        mergeIntoSeen(bySeenHash, article);
       }
     } catch (e) {
       errors.push({ source: src.id, message: String((e as Error).message) });
@@ -102,5 +134,5 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
     perSourceCounts[src.id] = produced;
   });
 
-  return { articles: [...bySeenHash.values()], perSourceCounts, errors };
+  return { articles: [...bySeenHash.values()], perSourceCounts, quarantined, errors };
 }

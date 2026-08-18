@@ -35,6 +35,11 @@ export const SOURCES: SourceDef[] = [
     url: "https://news.google.com/rss/search?q=site:anthropic.com&hl=en-US&gl=US&ceid=US:en" },
   { id: "hn", name: "Hacker News", kind: "hn", category: "community",
     url: "https://hn.algolia.com/api/v1/search?query=AI%20OR%20LLM%20OR%20OpenAI%20OR%20Anthropic&tags=story&numericFilters=points%3E50&hitsPerPage=30" },
+  // Reddit's JSON endpoints 403 without OAuth; the .rss route needs no key.
+  { id: "reddit-localllama", name: "r/LocalLLaMA", kind: "rss", category: "community",
+    url: "https://www.reddit.com/r/LocalLLaMA/hot.rss" },
+  { id: "reddit-ml", name: "r/MachineLearning", kind: "rss", category: "community",
+    url: "https://www.reddit.com/r/MachineLearning/hot.rss" },
   { id: "hfpapers", name: "HF Daily Papers", kind: "hfPapers", category: "research",
     url: "https://huggingface.co/api/daily_papers?limit=20" },
 ];
