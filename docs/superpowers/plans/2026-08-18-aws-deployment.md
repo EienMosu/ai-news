@@ -435,10 +435,16 @@ testable rather than aspirational.
 
 ```bash
 pnpm add @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
-pnpm add -D aws-sdk-client-mock aws-sdk-client-mock-vitest
+pnpm add -D aws-sdk-client-mock
 ```
 
 Commit the lockfile change with the task's final commit, not separately.
+
+Only the core package. `aws-sdk-client-mock-vitest` supplies custom matchers
+(`toHaveReceivedCommandWith` and friends) that nothing in this plan uses — every assertion
+below reads `ddb.commandCalls(...)` directly. An unused dependency in a Lambda project is not
+free: it is one more thing to audit and update, and the reason it was added would be invisible
+to the next reader.
 
 - [ ] **Step 2: Write the failing tests for `buildCaptureUpdate`**
 
