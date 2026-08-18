@@ -47,7 +47,7 @@ If any turns out false at implementation time, that is a finding — stop and re
 
 > **The $1 zero-spend budget will fire during normal operation.** Bedrock has no always-free
 > tier, so the first ranked day breaches it. This plan does **not** delete or modify either
-> existing budget — they belong to the account owner. Task 9 adds the spec's $15/$30 budgets
+> existing budget — they belong to the account owner. Task 9 adds the spec's $25/$40 budgets
 > alongside them and the runbook flags the conflict for the owner to resolve.
 
 ---
@@ -3084,7 +3084,13 @@ export class Monitoring extends Construct {
     // Budget names are unique per ACCOUNT, not per stack, so a hardcoded name makes a second
     // deploy of this template into the same account fail. Derived from the stack name instead.
     const stackName = Stack.of(this).stackName;
-    for (const [suffix, amount] of [["warning", 15], ["investigate", 30]] as const) {
+    // $25 / $40, NOT $15 / $30. The per-call hard cap is 32k max_tokens billed as output
+    // ($0.48) plus ~21k input ($0.06), so a month of one call a day tops out near $16.30
+    // against an expected $6.20. A $15 warning therefore sits INSIDE the plausible range and
+    // would fire in a legitimate busy month -- the same cry-wolf failure that makes the
+    // account's pre-existing $1 and $10 budgets useless. $25 says "top of the range you asked
+    // for"; $40 says "something is wrong".
+    for (const [suffix, amount] of [["warning", 25], ["investigate", 40]] as const) {
       new budgets.CfnBudget(this, `Budget${suffix}`, {
         budget: {
           budgetName: `${stackName}-${suffix}`,
@@ -3092,7 +3098,7 @@ export class Monitoring extends Construct {
           // tag must first be activated by hand in the Billing console and takes up to 24h to
           // take effect — until then the filter matches nothing and the budget is silently
           // dead. A budget that does not fire is worse than one that is slightly broad, which
-          // is the same principle that set these thresholds at $15/$30 instead of $5.
+          // is the same principle that set these thresholds at $25/$40 instead of $5.
           // This account holds one unrelated resource (a HelloWorld Lambda costing ~$0), so
           // account-wide and stack-scoped are equivalent here in practice. Revisit if the
           // account ever runs a second real workload.
