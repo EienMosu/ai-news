@@ -58,27 +58,47 @@ export async function handler(_event?: unknown): Promise<CaptureSummary> {
 
   const durationMs = Date.now() - startedAt.getTime();
 
-  await client.send(new PutCommand(buildLastRunPut(table, {
-    startedAt: nowIso,
-    durationMs,
-    perSourceCounts: result.perSourceCounts,
-    filtered: result.filtered,
-    quarantined: result.quarantined,
-    llmStatus: "skipped",
-    itemsWritten,
-    itemsFailed,
-    errors: result.errors,
-  })));
+  try {
+    await client.send(new PutCommand(buildLastRunPut(table, {
+      startedAt: nowIso,
+      durationMs,
+      perSourceCounts: result.perSourceCounts,
+      filtered: result.filtered,
+      quarantined: result.quarantined,
+      llmStatus: "skipped",
+      itemsWritten,
+      itemsFailed,
+      errors: result.errors,
+    })));
+  } catch (e) {
+    // This is the one write that must never disappear silently: if it's lost, the whole
+    // hour's diagnostics vanish even though the articles already landed. Unlike the
+    // per-article try/catch above (isolated so one bad item can't cost the other 169), this
+    // one is isolated so ITS failure can't erase the record of what succeeded — so log
+    // everything needed to reconstruct the run from CloudWatch and return normally rather
+    // than throwing.
+    console.error("META#lastRun write failed", {
+      itemsWritten,
+      itemsFailed,
+      perSourceCounts: result.perSourceCounts,
+      filtered: result.filtered,
+      quarantined: result.quarantined,
+      errors: result.errors,
+      error: String((e as Error).message ?? e),
+    });
+  }
 
   return { ingestDay, itemsWritten, itemsFailed, durationMs };
 }
 
 /** Kept here rather than in the domain layer so captureAll stays free of I/O policy. */
-async function fetchText(url: string): Promise<string> {
+export async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: { "User-Agent": "ai-news/1.0 (+https://github.com/EienMosu/ai-news)" },
     signal: AbortSignal.timeout(15_000),
   });
+  // Names the status, not the url: this message can reach CloudWatch (retained two weeks)
+  // or bubble into `errors` on META#lastRun, and feed URLs carry query strings.
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.text();
 }

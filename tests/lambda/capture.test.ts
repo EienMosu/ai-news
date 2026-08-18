@@ -9,7 +9,7 @@ vi.mock("../../src/lib/ingest/capture.js", () => ({
 }));
 
 import { captureAll } from "../../src/lib/ingest/capture.js";
-import { handler } from "../../src/lambda/capture.js";
+import { handler, fetchText } from "../../src/lambda/capture.js";
 
 const article = (n: number) => ({
   urlHash: String(n).padStart(64, "0"),
@@ -68,5 +68,40 @@ describe("capture handler", () => {
     // to spend the credit balance.
     const mod = await import("../../src/lambda/capture.js");
     expect(JSON.stringify(Object.keys(mod))).not.toContain("rank");
+  });
+
+  it("still returns a summary when the META#lastRun write itself fails", async () => {
+    // The one write that must never disappear silently -- but its own failure must not
+    // erase the record of what already succeeded, and must not throw out of the handler.
+    ddb.on(PutCommand).rejects(new Error("provisioned throughput exceeded"));
+    const out = await handler();
+    expect(out.itemsWritten).toBe(2);
+    expect(out.itemsFailed).toBe(0);
+  });
+});
+
+describe("fetchText", () => {
+  it("names the status without leaking the URL", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 404, statusText: "Not Found" }));
+    const message: string = await fetchText(
+      "https://example.com/feed?token=super-secret",
+    ).catch((e: Error) => e.message);
+    expect(message).toMatch(/^HTTP 404$/);
+    expect(message).not.toContain("example.com");
+    expect(message).not.toContain("super-secret");
+    spy.mockRestore();
+  });
+
+  it("passes a real AbortSignal, not a bare number that nothing reads", async () => {
+    let capturedSignal: unknown;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      capturedSignal = (init as RequestInit)?.signal;
+      return new Response("ok", { status: 200 });
+    });
+    await fetchText("https://example.com/feed");
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    spy.mockRestore();
   });
 });
