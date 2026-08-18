@@ -289,6 +289,55 @@ describe("days check", () => {
     const { lines } = await run();
     expect(hasLine(lines, "ok   2026-08-18 complete 42 articles")).toBe(true);
   });
+
+  it("says so explicitly when no days have been recorded yet, instead of printing nothing", async () => {
+    // Fix 4: silence here is indistinguishable from a hang or a permissions gap. Mutation:
+    // deleting `if (days.length === 0) return ok(...)` leaves the for-loop over an empty array
+    // to produce no line at all -- caught here since no "ok" line for this check would exist.
+    healthyAll();
+    doc.on(QueryCommand).resolves({ Items: [] });
+    const { failures, lines } = await run();
+    expect(hasLine(lines, "ok   no days recorded yet -- normal before the first rank run")).toBe(true);
+    expect(failures).toBe(0);
+  });
+});
+
+describe("TABLE_NAME precondition", () => {
+  it("fails once, naming the variable and where to get it, instead of three raw AWS errors", async () => {
+    // Fix 3: with TABLE_NAME unset, table/lastRun/days each used to call AWS with TableName:
+    // "" and dump a ValidationException about a string-length constraint -- three failures for
+    // one missing export, none of which mentioned a shell variable. Mutation: deleting the
+    // `if (!TABLE) { fail(...) } else { ... }` guard (running the three checks unconditionally
+    // again) is caught two ways below: the precondition message disappears, and the checks
+    // attempt real DynamoDB calls this test never configured a table/lastRun/days response for.
+    delete process.env.TABLE_NAME;
+    healthyToken();
+    healthyAlerts();
+    healthySchedules();
+    const { failures, lines } = await run();
+    expect(
+      hasLine(
+        lines,
+        'FAIL TABLE_NAME is not set. Get it from the stack output: aws cloudformation describe-stacks --stack-name AiNewsStack --query "Stacks[0].Outputs" -- then export TABLE_NAME=<the TableName value> and re-run.',
+      ),
+    ).toBe(true);
+    expect(failures).toBe(1);
+    expect(ddb.calls()).toHaveLength(0);
+    expect(doc.commandCalls(GetCommand)).toHaveLength(0);
+    expect(doc.commandCalls(QueryCommand)).toHaveLength(0);
+  });
+
+  it("still runs the checks that don't need a table", async () => {
+    // Guards against an overzealous fix that skips everything, not just the three table-backed
+    // checks, when TABLE_NAME is missing.
+    delete process.env.TABLE_NAME;
+    healthyToken();
+    healthyAlerts();
+    healthySchedules();
+    const { lines } = await run();
+    expect(hasLine(lines, "/ai-news/github-token present (value not read)")).toBe(true);
+    expect(hasLine(lines, "email owner@example.com confirmed")).toBe(true);
+  });
 });
 
 describe("github token check", () => {

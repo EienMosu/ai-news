@@ -63,52 +63,72 @@ export async function runSmoke(argv: string[] = process.argv.slice(2)): Promise<
     }
   }
 
-  await check("table", async () => {
-    const t = (
-      await new DynamoDBClient({}).send(new DescribeTableCommand({ TableName: TABLE }))
-    ).Table!;
-    t.TableStatus === "ACTIVE" ? ok("table ACTIVE") : fail(`table ${t.TableStatus}`);
-    t.BillingModeSummary?.BillingMode === "PAY_PER_REQUEST"
-      ? ok("billing PAY_PER_REQUEST")
-      : fail(`billing is ${t.BillingModeSummary?.BillingMode} -- provisioned costs ~$28/mo here`);
-    const gsi = t.GlobalSecondaryIndexes?.find((g) => g.IndexName === "feed-by-day");
-    gsi?.IndexStatus === "ACTIVE" ? ok("GSI feed-by-day ACTIVE") : fail("GSI missing or not ACTIVE");
-  });
-
-  await check("lastRun", async () => {
-    const out = await docClient().send(
-      new GetCommand({ TableName: TABLE, Key: { pk: "META#lastRun", sk: "A" } }),
+  // Every check below this point needs TABLE_NAME. Without this guard, an unset TABLE_NAME
+  // (empty string via the ?? "" above) doesn't fail once -- it fails three times, each as a
+  // raw DynamoDB ValidationException about a string-length constraint that never mentions a
+  // shell variable, forcing the reader to reverse-engineer "TableName: ''" back to "I forgot
+  // to export something." One clear failure, naming the variable and where to get it, replaces
+  // all three.
+  if (!TABLE) {
+    fail(
+      "TABLE_NAME is not set. Get it from the stack output: aws cloudformation " +
+        'describe-stacks --stack-name AiNewsStack --query "Stacks[0].Outputs" -- then ' +
+        "export TABLE_NAME=<the TableName value> and re-run.",
     );
-    const r = out.Item as Record<string, unknown> | undefined;
-    if (!r) return fail("META#lastRun absent -- capture has never completed");
-    const ageMin = Math.round((Date.now() - Date.parse(String(r.startedAt))) / 60_000);
-    ok(`last run ${ageMin}m ago, ${r.itemsWritten} written, ${r.itemsFailed} failed`);
-    if (ageMin > 130) fail(`last run ${ageMin}m ago -- hourly schedule may have stopped`);
+  } else {
+    await check("table", async () => {
+      const t = (
+        await new DynamoDBClient({}).send(new DescribeTableCommand({ TableName: TABLE }))
+      ).Table!;
+      t.TableStatus === "ACTIVE" ? ok("table ACTIVE") : fail(`table ${t.TableStatus}`);
+      t.BillingModeSummary?.BillingMode === "PAY_PER_REQUEST"
+        ? ok("billing PAY_PER_REQUEST")
+        : fail(`billing is ${t.BillingModeSummary?.BillingMode} -- provisioned costs ~$28/mo here`);
+      const gsi = t.GlobalSecondaryIndexes?.find((g) => g.IndexName === "feed-by-day");
+      gsi?.IndexStatus === "ACTIVE" ? ok("GSI feed-by-day ACTIVE") : fail("GSI missing or not ACTIVE");
+    });
 
-    // Spec §8: produced 0 AND filtered 0 AND quarantined 0 AND no error is the ONLY signature
-    // that means dead. Everything else -- quiet, rate-limited, drifting, or plainly healthy --
-    // gets its own line, so a source that IS producing is visible too, not just a broken one.
-    const perSource = (r.perSourceCounts ?? {}) as Record<string, number>;
-    const filteredBySource = (r.filtered ?? {}) as Record<string, number>;
-    const quarantinedBySource = (r.quarantined ?? {}) as Record<string, number>;
-    const errors = (r.errors ?? []) as { source: string }[];
-    for (const [id, produced] of Object.entries(perSource)) {
-      const filtered = filteredBySource[id] ?? 0;
-      const quarantined = quarantinedBySource[id] ?? 0;
-      const errored = errors.some((e) => e.source === id);
-      if (quarantined > 0) fail(`${id}: ${quarantined} quarantined -- feed shape changed`);
-      else if (produced === 0 && filtered === 0 && !errored) fail(`${id}: dead (nothing at all)`);
-      else if (produced === 0 && errored) ok(`${id}: fetch error, not dead`);
-      else if (produced === 0) ok(`${id}: quiet (${filtered} filtered)`);
-      else ok(`${id}: ${produced} produced`);
-    }
-  });
+    await check("lastRun", async () => {
+      const out = await docClient().send(
+        new GetCommand({ TableName: TABLE, Key: { pk: "META#lastRun", sk: "A" } }),
+      );
+      const r = out.Item as Record<string, unknown> | undefined;
+      if (!r) return fail("META#lastRun absent -- capture has never completed");
+      const ageMin = Math.round((Date.now() - Date.parse(String(r.startedAt))) / 60_000);
+      ok(`last run ${ageMin}m ago, ${r.itemsWritten} written, ${r.itemsFailed} failed`);
+      if (ageMin > 130) fail(`last run ${ageMin}m ago -- hourly schedule may have stopped`);
 
-  await check("days", async () => {
-    for (const d of await listDays(docClient(), TABLE, 5)) {
-      ok(`${d.day} ${d.status} ${d.articleCount} articles`);
-    }
-  });
+      // Spec §8: produced 0 AND filtered 0 AND quarantined 0 AND no error is the ONLY
+      // signature that means dead. Everything else -- quiet, rate-limited, drifting, or
+      // plainly healthy -- gets its own line, so a source that IS producing is visible too,
+      // not just a broken one.
+      const perSource = (r.perSourceCounts ?? {}) as Record<string, number>;
+      const filteredBySource = (r.filtered ?? {}) as Record<string, number>;
+      const quarantinedBySource = (r.quarantined ?? {}) as Record<string, number>;
+      const errors = (r.errors ?? []) as { source: string }[];
+      for (const [id, produced] of Object.entries(perSource)) {
+        const filtered = filteredBySource[id] ?? 0;
+        const quarantined = quarantinedBySource[id] ?? 0;
+        const errored = errors.some((e) => e.source === id);
+        if (quarantined > 0) fail(`${id}: ${quarantined} quarantined -- feed shape changed`);
+        else if (produced === 0 && filtered === 0 && !errored) fail(`${id}: dead (nothing at all)`);
+        else if (produced === 0 && errored) ok(`${id}: fetch error, not dead`);
+        else if (produced === 0) ok(`${id}: quiet (${filtered} filtered)`);
+        else ok(`${id}: ${produced} produced`);
+      }
+    });
+
+    await check("days", async () => {
+      const days = await listDays(docClient(), TABLE, 5);
+      // Silence here would read as "the check didn't run," indistinguishable from a hang or a
+      // permissions gap. A fresh deploy legitimately has no days yet -- say so explicitly
+      // instead of printing nothing.
+      if (days.length === 0) return ok("no days recorded yet -- normal before the first rank run");
+      for (const d of days) {
+        ok(`${d.day} ${d.status} ${d.articleCount} articles`);
+      }
+    });
+  }
 
   await check("github token", async () => {
     // WithDecryption is omitted (defaults to false) deliberately: this proves the parameter

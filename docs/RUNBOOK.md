@@ -71,6 +71,26 @@ Record whichever decision you make somewhere durable, then continue to step 1.
    This is the point of no return for the GO/NO-GO gate above — if you haven't made the budget
    decision yet, stop and go back to it now.
 
+   **When it finishes, `cdk deploy` prints an `Outputs:` block** with four values:
+   `AiNewsStack.TableName`, `AiNewsStack.CaptureFunctionName`, `AiNewsStack.RankFunctionName`,
+   and `AiNewsStack.VercelReaderUserName`. Every one of them is a name CDK generated at deploy
+   time — none of the four resources is named the way its logical ID suggests (the table
+   itself, in particular, synthesizes as `AWS::DynamoDB::GlobalTable`, so even hunting for "the
+   DynamoDB table" by resource type in the console will not find it under a name you'd
+   recognize). Copy all four now and export them for the rest of this session — steps 6-8 and
+   10 all read straight from these:
+   ```
+   export TABLE_NAME=<the TableName output>
+   export CAPTURE_FN=<the CaptureFunctionName output>
+   export RANK_FN=<the RankFunctionName output>
+   export VERCEL_USER=<the VercelReaderUserName output>
+   ```
+   Opening a new terminal later, or coming back to this weeks from now? These don't persist
+   between shells. Get them again with:
+   ```
+   aws cloudformation describe-stacks --stack-name AiNewsStack --query "Stacks[0].Outputs"
+   ```
+
 5. **Confirm the SNS subscription email.** AWS just sent an email to `<your-email>` with a
    "Confirm subscription" link. Click it now.
 
@@ -86,27 +106,25 @@ Record whichever decision you make somewhere durable, then continue to step 1.
    ```
    pnpm smoke --with-bedrock
    ```
+   This needs `TABLE_NAME` exported (step 4) — if you skipped that or it's unset, the script
+   says so itself, once, and tells you the exact command to get it, rather than running anyway
+   and dumping raw AWS errors.
+
    This is a read-only check of the table, the last capture run, the last few days, the GitHub
    token parameter, the alerts subscription, and the schedules — plus, because you passed
    `--with-bedrock`, one live Bedrock call proving the ranking model actually works with the
    IAM policy you just deployed. That one call costs about **$0.0001** (a 16-token response);
    it is the only thing in this entire project that spends money outside of normal operation,
-   which is why it's opt-in everywhere else. Expect several checks to still read "absent" at
-   this point — capture hasn't run yet, so `lastRun` and `days` have nothing to report. That's
-   normal; step 7 fixes it.
+   which is why it's opt-in everywhere else. Expect `lastRun` to report absent and `days` to
+   report "no days recorded yet" at this point — capture hasn't run yet. That's normal; step 7
+   fixes it.
 
 7. **Invoke capture once, by hand, then re-check.**
    ```
-   aws lambda invoke --function-name <CaptureFunction> /dev/stdout
+   aws lambda invoke --function-name "$CAPTURE_FN" /dev/stdout
    ```
-   Don't know `<CaptureFunction>`'s real name? Nothing in this stack prints it for you —
-   look it up:
-   ```
-   aws cloudformation describe-stack-resources --stack-name AiNewsStack \
-     --query "StackResources[?ResourceType=='AWS::Lambda::Function'].{Logical:LogicalResourceId,Physical:PhysicalResourceId}" \
-     --output table
-   ```
-   The one whose logical ID contains `CaptureFunction` is the one you want. Then re-run
+   (`$CAPTURE_FN` is the `CaptureFunctionName` output from step 4. If it's unset because you're
+   in a new shell, re-fetch it with the `describe-stacks` command shown there.) Then re-run
    `pnpm smoke` and confirm the `lastRun` check reports `itemsWritten > 0`.
 
    **Do this promptly, and expect one alarm email before you do.** The `CaptureStopped` alarm
@@ -125,22 +143,38 @@ Record whichever decision you make somewhere durable, then continue to step 1.
 
 8. **Invoke rank once, by hand, for today.**
    ```
-   aws lambda invoke --function-name <RankFunction> --payload '{"day":"<today, YYYY-MM-DD>"}' /dev/stdout
+   aws lambda invoke --function-name "$RANK_FN" \
+     --cli-binary-format raw-in-base64-out \
+     --payload '{"day":"<today, YYYY-MM-DD, Istanbul calendar day>"}' /dev/stdout
    ```
-   Find `<RankFunction>`'s real name the same way as step 7 (logical ID contains
-   `RankFunction`).
+   "Today" means the Istanbul (UTC+3, no DST) calendar date — the same one capture just wrote
+   articles under in step 7. This is almost always just today's date wherever you are; it only
+   diverges right around midnight UTC+3. Deliberately **not** "yesterday": the automatic 06:00
+   schedule always ranks the previous day, but this manual call passes an explicit `day` so it
+   ranks the day you just populated, not the one before it.
 
-9. **Confirm the backup landed.** Check that `archive/<day>.ndjson` exists in
-   `https://github.com/EienMosu/ai-news`. If it's missing, re-run `pnpm smoke` first — a
-   missing GitHub token parameter or a bad PAT scope is the most likely cause, and the `github
-   token` check will tell you which.
+   **`--cli-binary-format raw-in-base64-out` is not optional here, and its absence fails before
+   the call ever reaches AWS.** The `--payload` here is a raw JSON string, but AWS CLI v2
+   treats Lambda's `Payload` parameter as a binary blob and expects base64 by default — without
+   this flag you get `Invalid base64: "{...}"` from the CLI itself, on every stock v2 install.
+   (`$RANK_FN` is the `RankFunctionName` output from step 4, same caveat as `$CAPTURE_FN` above
+   if you're in a new shell.)
+
+9. **Confirm the backup landed.** Check that `archive/<the day you ranked in step 8>.ndjson`
+   exists in `https://github.com/EienMosu/ai-news`. If it's missing, re-run `pnpm smoke` first
+   — a missing GitHub token parameter or a bad PAT scope is the most likely cause, and the
+   `github token` check will tell you which.
 
 10. **Mint the Vercel access key. Human only — never an agent, never Claude.**
-    IAM console → Users → `VercelReader` → Create access key → paste the key ID and secret
-    directly into Vercel's environment variables. **Do not write it to a file. Do not echo it
-    to this terminal. Do not paste it into a chat window.** The CDK stack deliberately does not
-    create this key itself (see Task 8's IAM decisions) — it only creates the `VercelReader`
-    user the key belongs to.
+    IAM console → Users → search for `$VERCEL_USER` (the `VercelReaderUserName` output from
+    step 4 — the user is **not** literally named `VercelReader` in the console; CloudFormation
+    generated its real name at deploy time, the same way it did for the table and both
+    functions) → Create access key → paste the key ID and secret directly into Vercel's
+    environment variables. **Do not write it to a file. Do not echo it to this terminal. Do not
+    paste it into a chat window.** The CDK stack deliberately does not create this key itself
+    — CloudFormation has no way to hand you the secret half of an access key without
+    persisting it somewhere you'd then have to secure separately anyway, so the stack only
+    creates the user the key belongs to, and minting the key is left to this manual step.
 
     ⚠️ **This key is invisible to CDK, permanently.** Because it's minted outside the stack,
     `cdk diff` will never mention it, before or after it exists. If a future change ever forces
@@ -156,16 +190,18 @@ Record whichever decision you make somewhere durable, then continue to step 1.
 ## Verifying a healthy deploy, day to day
 
 ```
+export TABLE_NAME=<the TableName output — see step 4, or re-fetch it with describe-stacks>
 pnpm smoke                 # free — everything except the Bedrock round trip
 pnpm smoke --with-bedrock  # adds one ~$0.0001 live Bedrock call
 ```
 
 Read the failures literally — each one names the specific thing that's wrong (a table not
 ACTIVE, a subscription still `PendingConfirmation`, a schedule that's `DISABLED`, a source with
-a non-zero quarantine count) rather than a generic "something's wrong." If every check reports
-`FAIL` or "absent," that almost always means the resources genuinely don't exist yet (nothing
-deployed) or the shell running it has no `TABLE_NAME` set — it does not mean the script itself
-is broken.
+a non-zero quarantine count) rather than a generic "something's wrong." If `TABLE_NAME` isn't
+set, the script says exactly that, once, with the command to get it, instead of running the
+table-, last-run-, and days-checks anyway and dumping three separate raw AWS validation errors.
+If everything else reports `FAIL`, that means the resources genuinely don't exist yet (nothing
+deployed) — it does not mean the script itself is broken.
 
 ## Rollback
 
@@ -219,6 +255,7 @@ otherwise, and repeat that same decision if it does.
   account.
 - **Backup target:** GitHub repo `EienMosu/ai-news`, path `archive/<day>.ndjson`.
 - **GitHub token parameter:** `/ai-news/github-token` (SecureString, `eu-central-1`).
-- Function/table/user physical names are CDK-generated (not hardcoded) and are not printed by
-  this stack anywhere — use `aws cloudformation describe-stack-resources --stack-name
-  AiNewsStack` to look any of them up, as shown in step 7.
+- Table, both function, and the Vercel IAM user's physical names are all CDK-generated (none
+  is hardcoded to what its logical ID suggests). The stack outputs all four — see step 4. If
+  you've lost them, `aws cloudformation describe-stacks --stack-name AiNewsStack --query
+  "Stacks[0].Outputs"` gets them back any time after deploy, no matter how long ago.
