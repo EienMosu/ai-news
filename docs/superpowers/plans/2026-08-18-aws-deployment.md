@@ -572,6 +572,14 @@ describe("buildRankUpdate", () => {
     expect(a.whyItMatters).toBeUndefined();
     expect(a.score).toBeDefined();      // the score still updates
   });
+
+  it("writes no sort key when there is no score, so enrichment cannot move the item", () => {
+    // The enrichment pass runs before scoring. A gsi1sk built from a null score would move the
+    // article to an arbitrary position in the day, visible to any reader in between.
+    const a = attrs(buildRankUpdate("t", { ...rank, score: null, scoreVersion: null }));
+    expect(a.gsi1sk).toBeUndefined();
+    expect(a.llmImportance).toBeDefined();
+  });
 });
 ```
 
@@ -717,8 +725,9 @@ export interface RankWriteInput {
   whyItMatters: string | null;
   clusterId: string | null;
   corroborationToday: number | null;
-  score: number;
-  scoreVersion: string;
+  /** Null in the enrichment phase, which writes model output without touching the ordering. */
+  score: number | null;
+  scoreVersion: string | null;
 }
 
 export function buildRankUpdate(tableName: string, input: RankWriteInput): UpdateCommandInput {
@@ -729,7 +738,10 @@ export function buildRankUpdate(tableName: string, input: RankWriteInput): Updat
   b.set("corroborationToday", input.corroborationToday);
   b.set("score", input.score);
   b.set("scoreVersion", input.scoreVersion);
-  b.set("gsi1sk", buildSortKey(input.score, input.urlHash));
+  // Only when there is a score to encode. The rank handler writes enrichment first and scores
+  // second (spec §5's re-read pass), and the first write must not move the item in the index
+  // using a sort key built from a null.
+  if (input.score !== null) b.set("gsi1sk", buildSortKey(input.score, input.urlHash));
 
   return {
     TableName: tableName,
@@ -1268,7 +1280,7 @@ the invocation eligible for Lambda's default **2× async retry**, re-billing the
 call up to three times with no record of the day at all).
 
 **Files:**
-- Create: `src/lib/rank/prompt.ts`, `src/lib/rank/bedrock.ts`
+- Create: `src/lib/rank/model.ts`, `src/lib/rank/prompt.ts`, `src/lib/rank/bedrock.ts`
 - Test: `tests/rank/prompt.test.ts`, `tests/rank/bedrock.test.ts`
 
 **Interfaces:**
@@ -1280,10 +1292,46 @@ call up to three times with no record of the day at all).
   - `translateIds(response: unknown, idToHash: Map<string, string>): unknown`
   - `rankArticles(candidates: RankCandidate[], deps: RankDeps): Promise<RankOutcome>`
 
-- [ ] **Step 1: Install the SDK**
+- [ ] **Step 1: Install the SDK and create `src/lib/rank/model.ts`**
 
 ```bash
 pnpm add @anthropic-ai/bedrock-sdk
+```
+
+These four constants live in their own module because **`infra/lib/functions.ts` needs the
+model id to write the IAM policy, and `scripts/smoke.ts` needs it too.** Importing them from
+`bedrock.ts` would pull `@anthropic-ai/bedrock-sdk` into every `cdk synth` and every smoke run
+— slower at best, and a synth-time failure mode if the SDK does credential or environment work
+on import. A file with no imports cannot do that.
+
+```ts
+// src/lib/rank/model.ts — no imports, deliberately.
+
+/**
+ * The `global.` prefix is mandatory, not an EU-residency option. Spec §6: Sonnet 4.6 has no
+ * in-region on-demand availability outside eu-west-2 and a bare id returns HTTP 400, while
+ * regional prefixes such as `eu.` carry a 10% pricing premium. Verified ACTIVE and invokable
+ * in eu-central-1 on 2026-08-18.
+ */
+export const RANK_MODEL = "global.anthropic.claude-sonnet-4-6";
+
+/**
+ * Ranked in one call so clustering is globally consistent — an article can only be grouped
+ * with another the model saw at the same time. Spec §4 bounds a day at ~650 articles, so this
+ * cap can bite; everything beyond it keeps the degraded score capture assigned, and Task 7
+ * persists how many were left out.
+ */
+export const RANK_INPUT_CAP = 200;
+
+/** Caps thinking PLUS response text, not response text alone. Spec §6. */
+export const MAX_TOKENS = 32_000;
+
+/**
+ * ~600s. Task 8 sets the rank Lambda's timeout to 900s so this fires with 300s to spare: a
+ * Lambda timeout kills the environment with no catchable signal, so an abort at the same
+ * moment as the timeout would never let the degraded-mode fallback run.
+ */
+export const BEDROCK_ABORT_MS = 600_000;
 ```
 
 - [ ] **Step 2: Write the failing prompt tests**
@@ -1472,29 +1520,10 @@ Expected: PASS, all 7.
 
 ```ts
 import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
+import { MAX_TOKENS, RANK_INPUT_CAP, RANK_MODEL } from "./model.js";
 import { RANKING_SCHEMA, buildRankPrompt, translateIds, type RankCandidate } from "./prompt.js";
 
-/**
- * The `global.` prefix is mandatory, not an EU-residency option. Spec §6: Sonnet 4.6 has no
- * in-region on-demand availability outside eu-west-2 and a bare id returns HTTP 400, while
- * regional prefixes such as `eu.` carry a 10% pricing premium. Verified ACTIVE and invokable
- * in eu-central-1 on 2026-08-18.
- */
-export const RANK_MODEL = "global.anthropic.claude-sonnet-4-6";
-
-/**
- * Ranked in one call so clustering is globally consistent — an article can only be grouped
- * with another the model saw at the same time. Spec §4 bounds a day at ~650 articles, so this
- * cap can bite; everything beyond it keeps the degraded score capture assigned, and Task 7
- * persists how many were left out.
- */
-export const RANK_INPUT_CAP = 200;
-
-/** Caps thinking PLUS response text, not response text alone. Spec §6. */
-export const MAX_TOKENS = 32_000;
-
-/** ~600s, leaving margin inside Task 8's 900s Lambda timeout. See TruncationError below. */
-export const BEDROCK_ABORT_MS = 600_000;
+export { MAX_TOKENS, RANK_INPUT_CAP, RANK_MODEL };
 
 /**
  * Truncation is NOT an outage, and conflating them is the failure spec §6 calls out by name:
@@ -2134,8 +2163,9 @@ import { PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { istanbulDay } from "../lib/core/day.js";
 import { computeScore } from "../lib/core/score.js";
-import { rankArticles } from "../lib/rank/bedrock.js";
-import { reconcile } from "../lib/rank/reconcile.js";
+import { BEDROCK_ABORT_MS } from "../lib/rank/model.js";
+import { TruncationError, rankArticles } from "../lib/rank/bedrock.js";
+import { reconcile, type RankingEntry } from "../lib/rank/reconcile.js";
 import { countCorroboration } from "../lib/rank/corroboration.js";
 import { backupDay } from "../lib/rank/backup.js";
 import { buildRankUpdate } from "../lib/store/articles.js";
@@ -2573,7 +2603,7 @@ import type * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 // Imported, never re-typed. Two independent string literals for the same model drift apart
 // on the next model bump and the drift shows up as an IAM denial, not a compile error.
-import { RANK_MODEL } from "../../src/lib/rank/bedrock.js";
+import { RANK_MODEL } from "../../src/lib/rank/model.js";
 
 const BARE_MODEL = RANK_MODEL.replace(/^global\./, "");
 
@@ -2842,7 +2872,6 @@ import { Stack, type StackProps } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 import { ArticleTable } from "./table.js";
 import { Functions } from "./functions.js";
-import { Monitoring } from "./monitoring.js";
 
 export interface AiNewsStackProps extends StackProps {
   alertEmail: string;
@@ -2852,23 +2881,21 @@ export interface AiNewsStackProps extends StackProps {
 
 export class AiNewsStack extends Stack {
   readonly articleTable: ArticleTable;
+  readonly functions: Functions;
 
   constructor(scope: Construct, id: string, props: AiNewsStackProps) {
     super(scope, id, props);
 
     this.articleTable = new ArticleTable(this, "Articles");
 
-    const functions = new Functions(this, "Functions", {
+    this.functions = new Functions(this, "Functions", {
       table: this.articleTable.table,
       backupRepo: props.backupRepo,
       githubTokenParam: props.githubTokenParam,
     });
 
-    new Monitoring(this, "Monitoring", {
-      capture: functions.capture,
-      rank: functions.rank,
-      alertEmail: props.alertEmail,
-    });
+    // Monitoring is added by Task 9, which owns `monitoring.ts`. Do not import it here yet —
+    // this task must compile and synth on its own.
   }
 }
 ```
@@ -3048,7 +3075,29 @@ Read it in `infra/bin/ai-news.ts` with `app.node.tryGetContext("alertEmail")` an
 if it is absent — a monitoring stack that silently deploys with no subscriber is worse than
 one that refuses to deploy.
 
-- [ ] **Step 3: Run tests, synth, commit**
+- [ ] **Step 3: Wire `Monitoring` into the stack**
+
+Task 8 deliberately left this out so that it could compile and synth on its own. Add the
+import and the construct to `infra/lib/ai-news-stack.ts`:
+
+```ts
+import { Monitoring } from "./monitoring.js";
+```
+
+and, at the end of the `AiNewsStack` constructor:
+
+```ts
+    new Monitoring(this, "Monitoring", {
+      capture: this.functions.capture,
+      rank: this.functions.rank,
+      alertEmail: props.alertEmail,
+    });
+```
+
+`AiNewsStackProps.alertEmail` and the `required("alertEmail")` call in
+`infra/bin/ai-news.ts` already exist from Task 8 — do not duplicate them.
+
+- [ ] **Step 4: Run tests, synth, commit**
 
 ```bash
 pnpm vitest run tests/infra && pnpm synth -c alertEmail=someone@example.com
@@ -3078,7 +3127,7 @@ import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-r
 import { DescribeTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { SchedulerClient, ListSchedulesCommand } from "@aws-sdk/client-scheduler";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
-import { RANK_MODEL } from "../src/lib/rank/bedrock.js";
+import { RANK_MODEL } from "../src/lib/rank/model.js";
 import { docClient } from "../src/lib/store/client.js";
 import { listDays } from "../src/lib/store/query.js";
 
