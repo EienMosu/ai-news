@@ -16,10 +16,13 @@
   "packageManager": "pnpm@10.34.0",
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "aws-sdk-client-mock": "^4.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1112.0",
+    "@aws-sdk/lib-dynamodb": "^3.1112.0",
     "fast-xml-parser": "^5.11.0",
     "zod": "^4.4.3"
   }

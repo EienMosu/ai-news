@@ -1,0 +1,135 @@
+import { describe, expect, it } from "vitest";
+import { buildCaptureUpdate, buildRankUpdate } from "../../src/lib/store/articles.js";
+import type { NormalizedArticle } from "../../src/types/article.js";
+
+const HASH = "a".repeat(64);
+
+const article: NormalizedArticle = {
+  urlHash: HASH,
+  url: "https://example.com/post",
+  title: "A title",
+  summary: "A summary",
+  imageUrl: "https://example.com/i.png",
+  source: "techcrunch",
+  sourceName: "TechCrunch",
+  category: "news",
+  publishedAt: "2026-08-18T09:00:00.000Z",
+  publishedAtSource: "feed",
+  points: 42,
+};
+
+const base = {
+  article,
+  ingestDay: "2026-08-18",
+  score: 814,
+  scoreVersion: "v1-degraded",
+  now: "2026-08-18T12:00:00.000Z",
+};
+
+/** Every attribute name is aliased, so read them back through the alias map. */
+function attrs(cmd: { UpdateExpression?: string; ExpressionAttributeNames?: Record<string, string>; ExpressionAttributeValues?: Record<string, unknown> }) {
+  const out: Record<string, { value: unknown; guarded: boolean }> = {};
+  for (const [alias, name] of Object.entries(cmd.ExpressionAttributeNames ?? {})) {
+    const m = new RegExp(`${alias} = (if_not_exists\\(${alias}, )?(:v\\d+)\\)?`).exec(cmd.UpdateExpression ?? "");
+    if (m) out[name] = { value: cmd.ExpressionAttributeValues?.[m[2]!], guarded: Boolean(m[1]) };
+  }
+  return out;
+}
+
+describe("buildCaptureUpdate", () => {
+  it("addresses the item by its deterministic key", () => {
+    const cmd = buildCaptureUpdate("t", base);
+    expect(cmd.TableName).toBe("t");
+    expect(cmd.Key).toEqual({ pk: `ART#${HASH}`, sk: "A" });
+  });
+
+  it("guards the archive-pinning fields with if_not_exists", () => {
+    const a = attrs(buildCaptureUpdate("t", base));
+    for (const field of ["ingestDay", "firstSeenAt", "publishedAt", "hashVersion", "gsi1pk"]) {
+      expect(a[field], `${field} must be present`).toBeDefined();
+      expect(a[field]!.guarded, `${field} must use if_not_exists`).toBe(true);
+    }
+  });
+
+  it("does NOT guard the fields that must stay fresh", () => {
+    const a = attrs(buildCaptureUpdate("t", base));
+    for (const field of ["title", "summary", "url", "points"]) {
+      expect(a[field], `${field} must be present`).toBeDefined();
+      expect(a[field]!.guarded, `${field} must be overwritten every run`).toBe(false);
+    }
+  });
+
+  it("never reverts an already-ranked article's score back to the degraded one", () => {
+    // Capture runs hourly and always scores in degraded mode. Overwriting score/gsi1sk would
+    // move a ranked article back down the feed an hour after it was ranked.
+    const a = attrs(buildCaptureUpdate("t", base));
+    for (const field of ["score", "scoreVersion", "gsi1sk"]) {
+      expect(a[field], `${field} must be present`).toBeDefined();
+      expect(a[field]!.guarded, `${field} must use if_not_exists`).toBe(true);
+    }
+  });
+
+  it("pins the day partition so a re-seen article never leaves its first day", () => {
+    const a = attrs(buildCaptureUpdate("t", base));
+    expect(a.gsi1pk!.value).toBe("DAY#2026-08-18");
+    expect(a.gsi1pk!.guarded).toBe(true);
+  });
+
+  it("encodes the sort key zero-padded so lexicographic order is numeric order", () => {
+    const a = attrs(buildCaptureUpdate("t", { ...base, score: 7 }));
+    expect(a.gsi1sk!.value).toBe(`0007#${HASH}`);
+  });
+
+  it("omits null attributes entirely rather than writing null", () => {
+    const cmd = buildCaptureUpdate("t", {
+      ...base,
+      article: { ...article, imageUrl: null, points: null },
+    });
+    const a = attrs(cmd);
+    expect(a.imageUrl).toBeUndefined();
+    expect(a.points).toBeUndefined();
+    expect(JSON.stringify(cmd.ExpressionAttributeValues)).not.toContain("null");
+  });
+
+  it("stamps hashVersion so the key algorithm stays revisable", () => {
+    expect(attrs(buildCaptureUpdate("t", base)).hashVersion!.value).toBe(1);
+  });
+});
+
+describe("buildRankUpdate", () => {
+  const rank = {
+    urlHash: HASH,
+    llmImportance: 88,
+    whyItMatters: "Because.",
+    clusterId: "c1",
+    corroborationToday: 3,
+    score: 912,
+    scoreVersion: "v1",
+  };
+
+  it("refuses to create an item that capture never wrote", () => {
+    const cmd = buildRankUpdate("t", rank);
+    expect(cmd.ConditionExpression).toContain("attribute_exists");
+  });
+
+  it("moves the item within its day by rewriting only the sort key", () => {
+    const a = attrs(buildRankUpdate("t", rank));
+    expect(a.gsi1sk!.value).toBe(`0912#${HASH}`);
+    expect(a.gsi1pk).toBeUndefined();   // the day partition is never touched by ranking
+  });
+
+  it("omits enrichment fields the model did not supply, leaving prior values intact", () => {
+    const a = attrs(buildRankUpdate("t", { ...rank, llmImportance: null, whyItMatters: null }));
+    expect(a.llmImportance).toBeUndefined();
+    expect(a.whyItMatters).toBeUndefined();
+    expect(a.score).toBeDefined();      // the score still updates
+  });
+
+  it("writes no sort key when there is no score, so enrichment cannot move the item", () => {
+    // The enrichment pass runs before scoring. A gsi1sk built from a null score would move the
+    // article to an arbitrary position in the day, visible to any reader in between.
+    const a = attrs(buildRankUpdate("t", { ...rank, score: null, scoreVersion: null }));
+    expect(a.gsi1sk).toBeUndefined();
+    expect(a.llmImportance).toBeDefined();
+  });
+});
