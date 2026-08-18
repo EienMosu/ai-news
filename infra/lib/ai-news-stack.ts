@@ -2,6 +2,7 @@ import { Stack, type StackProps } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 import { ArticleTable } from "./table.js";
 import { Functions } from "./functions.js";
+import { Monitoring } from "./monitoring.js";
 
 export interface AiNewsStackProps extends StackProps {
   alertEmail: string;
@@ -24,7 +25,10 @@ export class AiNewsStack extends Stack {
       githubTokenParam: props.githubTokenParam,
     });
 
-    // Monitoring is added by Task 9, which owns `monitoring.ts`. Do not import it here yet —
-    // this task must compile and synth on its own.
+    new Monitoring(this, "Monitoring", {
+      capture: this.functions.capture,
+      rank: this.functions.rank,
+      alertEmail: props.alertEmail,
+    });
   }
 }
