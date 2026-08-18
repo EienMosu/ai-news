@@ -69,9 +69,15 @@ export const RANKING_SCHEMA = {
           },
         },
         required: ["id", "importance", "clusterId", "whyItMatters"],
+        additionalProperties: false,
       },
     },
   },
+  // Structured outputs reject any object that does not set this explicitly:
+  //   400 output_config.format.schema: For 'object' type, 'additionalProperties'
+  //   must be explicitly set to false
+  // A live call is the only thing that surfaces it -- the schema is valid JSON Schema.
+  additionalProperties: false,
   required: ["items"],
 };
 

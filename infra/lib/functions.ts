@@ -216,16 +216,31 @@ export class Functions extends Construct {
     // bypassing the `global.` profile entirely — the permission fails OPEN, not closed. AWS's
     // own documentation uses this condition for exactly this global-profile scenario.
     const profileArn = `arn:aws:bedrock:${region}:${account}:inference-profile/${RANK_MODEL}`;
+
+    // TWO statements, and the split is load-bearing: a single conditioned statement denies the
+    // very call we need. Proven with `aws iam simulate-custom-policy`:
+    //   conditioned statement, profile-targeted request  -> implicitDeny, 0 statements matched
+    //   same statement with the context key supplied     -> allowed
+    // `bedrock:InferenceProfileArn` is populated when a request reaches a FOUNDATION MODEL
+    // through a profile. When the request targets the PROFILE itself — which is what a modelId
+    // of "global.anthropic.claude-sonnet-4-6" does — the key is absent, StringEquals on an
+    // absent key is false, and the statement never matches. The first live ranking run failed
+    // with exactly this 403.
+    //
+    // 1: the profile itself. No condition — the resource ARN is already the constraint.
     this.rank.addToRolePolicy(new iam.PolicyStatement({
       actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-      resources: [
-        profileArn,
-        // Every region the profile can route to. Omitting them produces INTERMITTENT
-        // AccessDeniedException that fails only when a request happens to route to an
-        // unlisted region — the non-determinism is what pushes people to attach
-        // AmazonBedrockFullAccess. Spec §9.
-        `arn:aws:bedrock:*::foundation-model/${BARE_MODEL}`,
-      ],
+      resources: [profileArn],
+    }));
+
+    // 2: the underlying foundation model, in every region the profile can route to. Omitting
+    // those produces INTERMITTENT AccessDeniedException that fails only when a request happens
+    // to route to an unlisted region (spec §9). HERE the condition belongs and does real work:
+    // it stops this role invoking the bare model directly, so the only way through is our
+    // profile. Without it the grant fails OPEN.
+    this.rank.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      resources: [`arn:aws:bedrock:*::foundation-model/${BARE_MODEL}`],
       conditions: { StringEquals: { "bedrock:InferenceProfileArn": profileArn } },
     }));
 

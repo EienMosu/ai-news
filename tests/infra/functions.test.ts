@@ -116,11 +116,25 @@ describe("Functions", () => {
     expect(JSON.stringify(indexQueries)).toContain("DAY#");
   });
 
-  it("binds the bedrock grant to the inference profile, so it cannot fail open", () => {
-    // Without the condition the foundation-model ARN also authorises direct on-demand
-    // invocation of the bare model, bypassing the global profile.
-    const stmt = rankPolicyDocument().Statement.find((s: any) => String(s.Action).includes("bedrock"))!;
-    expect(JSON.stringify(stmt.Condition)).toContain("bedrock:InferenceProfileArn");
+  it("splits the bedrock grant so the profile call works and the bare model stays fenced", () => {
+    // Two statements, and the split is the point. A single CONDITIONED statement denies the
+    // call we actually make: `bedrock:InferenceProfileArn` is only populated when a request
+    // reaches a foundation model THROUGH a profile, so when the request targets the profile
+    // itself the key is absent and StringEquals on an absent key is false. The first live
+    // ranking run failed with exactly that 403, and `iam simulate-custom-policy` reproduces it.
+    const bedrock = rankPolicyDocument().Statement.filter((s: any) =>
+      String(s.Action).includes("bedrock"),
+    );
+    expect(bedrock).toHaveLength(2);
+
+    const onProfile = bedrock.find((s: any) => JSON.stringify(s.Resource).includes("inference-profile"))!;
+    const onModel = bedrock.find((s: any) => JSON.stringify(s.Resource).includes("foundation-model"))!;
+
+    // The profile statement must NOT be conditioned, or the call is denied outright.
+    expect(onProfile.Condition).toBeUndefined();
+    // The model statement MUST be, or the role could invoke the bare model directly and the
+    // grant fails OPEN — more access than intended, which nothing alerts on.
+    expect(JSON.stringify(onModel.Condition)).toContain("bedrock:InferenceProfileArn");
   });
 
   it("gives each function its own log group rather than logs on every log group", () => {
