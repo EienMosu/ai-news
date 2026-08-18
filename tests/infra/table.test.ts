@@ -42,8 +42,8 @@ describe("article table", () => {
     const proj = table.Properties.GlobalSecondaryIndexes[0].Projection;
     expect(proj.ProjectionType).toBe("INCLUDE");
     expect([...proj.NonKeyAttributes].sort()).toEqual([
-      "category", "clusterId", "corroborationToday", "imageUrl", "publishedAt",
-      "score", "scoreVersion", "source", "sourceName", "summary", "title", "url",
+      "category", "clusterId", "corroborationToday", "imageUrl", "points", "pointsImputed",
+      "publishedAt", "score", "scoreVersion", "source", "sourceName", "summary", "title", "url",
       "whyItMatters",
     ]);
   });

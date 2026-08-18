@@ -9,11 +9,14 @@ export interface CaptureWriteInput {
   ingestDay: string;
   score: number;
   scoreVersion: string;
+  /** From `computeScore`. Spec §4 lists it as an item attribute; without it a projected
+   *  `points` cannot be told apart from an imputed one. */
+  pointsImputed: boolean;
   now: string;
 }
 
 export function buildCaptureUpdate(tableName: string, input: CaptureWriteInput): UpdateCommandInput {
-  const { article: a, ingestDay, score, scoreVersion, now } = input;
+  const { article: a, ingestDay, score, scoreVersion, pointsImputed, now } = input;
   const b = updateBuilder();
 
   // Pinned once, for the life of the item. These four are the archive-integrity guarantee.
@@ -33,6 +36,9 @@ export function buildCaptureUpdate(tableName: string, input: CaptureWriteInput):
   b.set("category", a.category);
   b.set("publishedAtSource", a.publishedAtSource);
   b.set("points", a.points);
+  // Persisted, not just computed. computeScore already returns it and spec §4 lists it as an
+  // item attribute; it is what stops the UI from presenting an imputed 0.5 as a measurement.
+  b.set("pointsImputed", pointsImputed);
   b.set("v", SCHEMA_VERSION);
 
   // setIfAbsent, NOT set. Capture runs hourly and its score is always the DEGRADED one, so

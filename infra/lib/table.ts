@@ -13,8 +13,20 @@ import { Construct } from "constructs";
  *                   refresh pulled in. That is exactly "scoreVersion is the degraded one",
  *                   and it is unimplementable from the index without this attribute.
  *
- * Deliberately NOT projected: points, publishedAtSource, llmImportance, firstSeenAt,
- * hashVersion, v. The detail page reads the base item anyway.
+ * `points` and `pointsImputed` are here because spec §7 requires the detail page to show
+ * "the signals behind the score — source weight, corroboration today, engagement where it
+ * exists — shown plainly, so the ranking is inspectable rather than magic", and the spec
+ * never says whether that page reads the base item or renders from the already-fetched day.
+ * Under the second reading everything it shows must be projected. The question is genuinely
+ * open and the projection is not: project both and the page works either way.
+ *
+ * `pointsImputed` travels with `points` and is not optional decoration. Spec §5 imputes a
+ * neutral 0.5 for the ~9 sources that never carry engagement, so a projected `points` alone
+ * would let the UI show a confident-looking number the system guessed. Showing an imputed
+ * value as though it were measured is the same dishonesty spec §5 corrected when it renamed
+ * `clusterSize` to `corroborationToday`.
+ *
+ * Deliberately NOT projected: publishedAtSource, llmImportance, firstSeenAt, hashVersion, v.
  *
  * Erring wide is deliberate. A projection cannot be altered after the index is created --
  * changing it means deleting and recreating the index, and recreating it on a table that
@@ -24,6 +36,7 @@ import { Construct } from "constructs";
 export const FEED_CARD_ATTRIBUTES = [
   "title", "summary", "imageUrl", "url", "source", "sourceName", "category",
   "publishedAt", "clusterId", "corroborationToday", "whyItMatters", "score", "scoreVersion",
+  "points", "pointsImputed",
 ];
 
 export class ArticleTable extends Construct {

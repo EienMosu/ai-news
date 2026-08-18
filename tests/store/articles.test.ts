@@ -23,6 +23,7 @@ const base = {
   ingestDay: "2026-08-18",
   score: 814,
   scoreVersion: "v1-degraded",
+  pointsImputed: false,
   now: "2026-08-18T12:00:00.000Z",
 };
 
@@ -53,7 +54,7 @@ describe("buildCaptureUpdate", () => {
 
   it("does NOT guard the fields that must stay fresh", () => {
     const a = attrs(buildCaptureUpdate("t", base));
-    for (const field of ["title", "summary", "url", "points"]) {
+    for (const field of ["title", "summary", "url", "points", "pointsImputed"]) {
       expect(a[field], `${field} must be present`).toBeDefined();
       expect(a[field]!.guarded, `${field} must be overwritten every run`).toBe(false);
     }
@@ -101,6 +102,20 @@ describe("buildCaptureUpdate", () => {
     const a = attrs(buildCaptureUpdate("t", { ...base, article: { ...article, points: 0 } }));
     expect(a.points).toBeDefined();
     expect(a.points!.value).toBe(0);
+  });
+
+  it("writes pointsImputed, including the falsy-but-real value false", () => {
+    // pointsImputed is a boolean, so `false` is the common case (a source that does carry
+    // engagement) and is exactly as real as `true`. The builder's null/undefined guard must
+    // not be a falsy-value guard in disguise -- the same trap `points: 0` and `score: 0` cover
+    // above, just for a boolean instead of a number.
+    const withFalse = attrs(buildCaptureUpdate("t", { ...base, pointsImputed: false }));
+    expect(withFalse.pointsImputed).toBeDefined();
+    expect(withFalse.pointsImputed!.value).toBe(false);
+
+    const withTrue = attrs(buildCaptureUpdate("t", { ...base, pointsImputed: true }));
+    expect(withTrue.pointsImputed).toBeDefined();
+    expect(withTrue.pointsImputed!.value).toBe(true);
   });
 
   it("writes an empty-string value rather than treating it as absent", () => {
