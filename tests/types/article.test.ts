@@ -10,6 +10,7 @@ const valid = {
   source: "techcrunch",
   sourceName: "TechCrunch",
   category: "news" as const,
+  section: "ai" as const,
   publishedAt: "2026-08-18T09:00:00.000Z",
   publishedAtSource: "feed" as const,
   points: null,
@@ -30,6 +31,17 @@ describe("NormalizedArticleSchema", () => {
 
   it("rejects an unknown category", () => {
     expect(() => NormalizedArticleSchema.parse({ ...valid, category: "sports" })).toThrow();
+  });
+
+  it("rejects an unknown section", () => {
+    // Mutation: `section: z.enum(SECTIONS)` -> `section: z.string()` makes this pass silently
+    // for any string at all.
+    expect(() => NormalizedArticleSchema.parse({ ...valid, section: "sports" })).toThrow();
+  });
+
+  it("accepts the design section", () => {
+    const parsed = NormalizedArticleSchema.parse({ ...valid, section: "design" });
+    expect(parsed.section).toBe("design");
   });
 
   it("rejects a non-ISO publishedAt", () => {

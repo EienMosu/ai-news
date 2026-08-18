@@ -46,9 +46,21 @@ describe("article table", () => {
     expect(proj.ProjectionType).toBe("INCLUDE");
     expect([...proj.NonKeyAttributes].sort()).toEqual([
       "category", "clusterId", "corroborationToday", "imageUrl", "points", "pointsImputed",
-      "publishedAt", "score", "scoreVersion", "source", "sourceName", "summary", "title", "url",
-      "whyItMatters",
+      "publishedAt", "score", "scoreVersion", "section", "source", "sourceName", "summary",
+      "title", "url", "whyItMatters",
     ]);
+  });
+
+  it("projects section -- the one attribute that cannot be added after this table deploys", () => {
+    // Mutation: removing "section" from FEED_CARD_ATTRIBUTES in infra/lib/table.ts (or from
+    // this list) makes this fail on length alone -- 15 instead of 16 -- as well as on content.
+    // This is deliberately its own assertion, separate from the general projection test above,
+    // because this one attribute is the entire reason this task exists: a GSI projection is
+    // immutable after index creation, and nothing is deployed yet.
+    const table = Object.values(template().findResources("AWS::DynamoDB::GlobalTable"))[0]!;
+    const proj = table.Properties.GlobalSecondaryIndexes[0].Projection;
+    expect(proj.NonKeyAttributes).toHaveLength(16);
+    expect(proj.NonKeyAttributes).toContain("section");
   });
 
   it("enables point-in-time recovery", () => {

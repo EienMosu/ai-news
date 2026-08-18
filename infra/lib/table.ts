@@ -26,6 +26,14 @@ import { Construct } from "constructs";
  * value as though it were measured is the same dishonesty spec §5 corrected when it renamed
  * `clusterSize` to `corroborationToday`.
  *
+ * `section` (the AI/design topic vertical, orthogonal to `category`) is here for the same
+ * reason as `category` itself: the feed filters by section client-side over the
+ * already-fetched day, exactly as it already does for the category filter, so `section` must
+ * be projected or every card render would need a second read. This is the one attribute in
+ * this list that matters before the second vertical exists at all -- see the task that added
+ * it -- because a GSI projection is exactly the irreversible-without-backfill piece described
+ * below.
+ *
  * Deliberately NOT projected: publishedAtSource, llmImportance, firstSeenAt, hashVersion, v.
  *
  * Erring wide is deliberate. A projection cannot be altered after the index is created --
@@ -34,7 +42,7 @@ import { Construct } from "constructs";
  * a month at this volume. The costs are not symmetric, so this list is not minimal.
  */
 export const FEED_CARD_ATTRIBUTES = [
-  "title", "summary", "imageUrl", "url", "source", "sourceName", "category",
+  "title", "summary", "imageUrl", "url", "source", "sourceName", "category", "section",
   "publishedAt", "clusterId", "corroborationToday", "whyItMatters", "score", "scoreVersion",
   "points", "pointsImputed",
 ];

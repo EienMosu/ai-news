@@ -13,6 +13,7 @@ const article: NormalizedArticle = {
   source: "techcrunch",
   sourceName: "TechCrunch",
   category: "news",
+  section: "ai",
   publishedAt: "2026-08-18T09:00:00.000Z",
   publishedAtSource: "feed",
   points: 42,
@@ -46,10 +47,21 @@ describe("buildCaptureUpdate", () => {
 
   it("guards the archive-pinning fields with if_not_exists", () => {
     const a = attrs(buildCaptureUpdate("t", base));
-    for (const field of ["ingestDay", "firstSeenAt", "publishedAt", "hashVersion", "gsi1pk"]) {
+    for (const field of ["ingestDay", "firstSeenAt", "publishedAt", "hashVersion", "gsi1pk", "section"]) {
       expect(a[field], `${field} must be present`).toBeDefined();
       expect(a[field]!.guarded, `${field} must use if_not_exists`).toBe(true);
     }
+  });
+
+  it("writes section, pinned to the article's vertical at capture time", () => {
+    // Mutation: dropping `b.setIfAbsent("section", a.section);` from buildCaptureUpdate makes
+    // `a.section` undefined here -- red because the field is simply missing from the command.
+    const a = attrs(buildCaptureUpdate("t", base));
+    expect(a.section).toBeDefined();
+    expect(a.section!.value).toBe("ai");
+    // Pinned like the other archive-integrity fields, not refreshed like category: a source
+    // moving between verticals must not retroactively move an already-archived article.
+    expect(a.section!.guarded).toBe(true);
   });
 
   it("does NOT guard the fields that must stay fresh", () => {

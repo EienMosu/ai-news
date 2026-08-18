@@ -39,6 +39,7 @@ describe("parseHnResponse", () => {
         source: "hn",
         sourceName: "Hacker News",
         category: "community" as const,
+        section: "ai" as const,
         publishedAt: item.publishedAt,
         publishedAtSource: "feed" as const,
         points: item.points,

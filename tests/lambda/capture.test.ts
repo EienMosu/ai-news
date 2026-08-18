@@ -14,7 +14,7 @@ import { handler, fetchText } from "../../src/lambda/capture.js";
 const article = (n: number) => ({
   urlHash: String(n).padStart(64, "0"),
   url: `https://example.com/${n}`, title: `T${n}`, summary: "s", imageUrl: null,
-  source: "techcrunch", sourceName: "TechCrunch", category: "news" as const,
+  source: "techcrunch", sourceName: "TechCrunch", category: "news" as const, section: "ai" as const,
   publishedAt: "2026-08-18T09:00:00.000Z", publishedAtSource: "feed" as const, points: null,
 });
 

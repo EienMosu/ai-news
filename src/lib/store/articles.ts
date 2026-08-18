@@ -25,6 +25,11 @@ export function buildCaptureUpdate(tableName: string, input: CaptureWriteInput):
   b.setIfAbsent("publishedAt", a.publishedAt);
   b.setIfAbsent("hashVersion", HASH_VERSION);
   b.setIfAbsent("gsi1pk", dayPartition(ingestDay));
+  // Also pinned, but for a different reason than the four above: a source's registry entry
+  // can move between verticals (conceivable), but an already-archived article retroactively
+  // changing which vertical it belongs to is not obviously desirable -- unlike `category`
+  // below, which is corrected freely on every run.
+  b.setIfAbsent("section", a.section);
 
   // Refreshed every run.
   b.set("url", a.url);

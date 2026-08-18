@@ -32,6 +32,7 @@ describe("parseHfPapers", () => {
         source: "hf-papers",
         sourceName: "HuggingFace Daily Papers",
         category: "research" as const,
+        section: "ai" as const,
         publishedAt: item.publishedAt,
         publishedAtSource: "feed" as const,
         points: null,

@@ -1,4 +1,4 @@
-import type { Category } from "../../types/article.js";
+import type { Category, Section } from "../../types/article.js";
 
 /** The three adapter shapes captureAll knows how to dispatch to. */
 export type SourceKind = "rss" | "hn" | "hfPapers";
@@ -9,6 +9,12 @@ export interface SourceDef {
   name: string;
   kind: SourceKind;
   category: Category;
+  /**
+   * The topic vertical this source belongs to. Required rather than defaulted to "ai": a
+   * new source added without a section is a mistake worth catching at compile time, not a
+   * silent "ai".
+   */
+  section: Section;
   url: string;
   /**
    * Cap on in-window items kept per run, applied after the recency filter,
@@ -40,24 +46,24 @@ export interface SourceDef {
 
 /** Spec §3. arXiv cs.AI is deliberately absent — 268 items/day would drown the feed. */
 export const SOURCES: SourceDef[] = [
-  { id: "techcrunch", name: "TechCrunch", kind: "rss", category: "news",
+  { id: "techcrunch", name: "TechCrunch", kind: "rss", category: "news", section: "ai",
     url: "https://techcrunch.com/category/artificial-intelligence/feed/" },
-  { id: "verge", name: "The Verge", kind: "rss", category: "news",
+  { id: "verge", name: "The Verge", kind: "rss", category: "news", section: "ai",
     url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml" },
-  { id: "arstechnica", name: "Ars Technica", kind: "rss", category: "news",
+  { id: "arstechnica", name: "Ars Technica", kind: "rss", category: "news", section: "ai",
     url: "https://arstechnica.com/ai/feed/" },
-  { id: "venturebeat", name: "VentureBeat", kind: "rss", category: "news",
+  { id: "venturebeat", name: "VentureBeat", kind: "rss", category: "news", section: "ai",
     url: "https://venturebeat.com/category/ai/feed/" },
-  { id: "mittr", name: "MIT Technology Review", kind: "rss", category: "news",
+  { id: "mittr", name: "MIT Technology Review", kind: "rss", category: "news", section: "ai",
     url: "https://www.technologyreview.com/feed/" },
-  { id: "openai", name: "OpenAI", kind: "rss", category: "lab",
+  { id: "openai", name: "OpenAI", kind: "rss", category: "lab", section: "ai",
     url: "https://openai.com/news/rss.xml" },
-  { id: "deepmind", name: "Google DeepMind", kind: "rss", category: "lab",
+  { id: "deepmind", name: "Google DeepMind", kind: "rss", category: "lab", section: "ai",
     url: "https://deepmind.google/blog/rss.xml" },
-  { id: "huggingface", name: "Hugging Face", kind: "rss", category: "lab",
+  { id: "huggingface", name: "Hugging Face", kind: "rss", category: "lab", section: "ai",
     url: "https://huggingface.co/blog/feed.xml" },
   // Anthropic publishes no RSS feed; Google News is the only keyless route.
-  { id: "anthropic", name: "Anthropic", kind: "rss", category: "lab",
+  { id: "anthropic", name: "Anthropic", kind: "rss", category: "lab", section: "ai",
     hashStrategy: "title", publisherSuffix: true,
     url: "https://news.google.com/rss/search?q=site:anthropic.com&hl=en-US&gl=US&ceid=US:en" },
   // Algolia's /search endpoint is relevance-sorted, not date-sorted, so its
@@ -66,13 +72,13 @@ export const SOURCES: SourceDef[] = [
   // quality up while our own window/cap do the recency work. Also: Algolia's
   // query param does not support boolean OR, so the old "AI OR LLM OR
   // OpenAI OR Anthropic" was always treated as a literal phrase.
-  { id: "hn", name: "Hacker News", kind: "hn", category: "community",
+  { id: "hn", name: "Hacker News", kind: "hn", category: "community", section: "ai",
     url: "https://hn.algolia.com/api/v1/search_by_date?query=AI&tags=story&numericFilters=points%3E20&hitsPerPage=50" },
   // Reddit's JSON endpoints 403 without OAuth; the .rss route needs no key.
-  { id: "reddit-localllama", name: "r/LocalLLaMA", kind: "rss", category: "community",
+  { id: "reddit-localllama", name: "r/LocalLLaMA", kind: "rss", category: "community", section: "ai",
     url: "https://www.reddit.com/r/LocalLLaMA/hot.rss" },
-  { id: "reddit-ml", name: "r/MachineLearning", kind: "rss", category: "community",
+  { id: "reddit-ml", name: "r/MachineLearning", kind: "rss", category: "community", section: "ai",
     url: "https://www.reddit.com/r/MachineLearning/hot.rss" },
-  { id: "hfpapers", name: "HF Daily Papers", kind: "hfPapers", category: "research",
+  { id: "hfpapers", name: "HF Daily Papers", kind: "hfPapers", category: "research", section: "ai",
     url: "https://huggingface.co/api/daily_papers?limit=20" },
 ];

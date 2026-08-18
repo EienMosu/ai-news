@@ -73,6 +73,7 @@ function toArticle(
     source: src.id,
     sourceName: src.name,
     category: src.category,
+    section: src.section,
     // Never leave a key attribute undefined — DynamoDB would silently drop the
     // item from the index rather than erroring.
     publishedAt: item.publishedAt ?? now.toISOString(),
