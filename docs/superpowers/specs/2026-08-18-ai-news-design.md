@@ -24,7 +24,7 @@ draft are marked **[revised]** with the reason, so the rationale is not lost.
 - AWS account is on the post-July-2025 **Free Plan**: ~$176 credit remaining of $200 max.
   The plan ends at 6 months **or** credit exhaustion, whichever comes first. After that,
   the account is closed 90 days later and its data deleted unless upgraded to a Paid Plan.
-  **This is the single largest risk to the product and drives the off-AWS backup (§7).**
+  **This is the single largest risk to the product and drives the off-AWS backup (§8).**
 - Bedrock model access on this account is limited to Sonnet 4.6, Sonnet 4.5, and
   Haiku 4.5. Other models require a support ticket that a free-tier account will not get.
 
@@ -244,7 +244,7 @@ One shared helper, unit-tested at the 23:59 and 00:01 boundaries.
 | Specific day | GSI1 `DAY#<date>` desc | 1 |
 | Category filter | client-side over the fetched day | 0 |
 | Cluster expansion | client-side over the fetched day | 0 |
-| Search | see §7 | 1 |
+| Search | see §8 | 1 |
 
 The `META#DAY` item is written **last**, after all articles. Readers therefore never
 observe a partially-written day, and a run that dies mid-way leaves a day marked
@@ -401,7 +401,67 @@ every call draws credit from day one, unlike Lambda, DynamoDB, and EventBridge.
 
 ---
 
-## 7. Durability, search, and monitoring
+## 7. User interface
+
+### Pages
+
+```
+/                    day sections, newest first
+/article/[urlHash]   story detail
+/day/[date]          a single day, deep-linkable
+/search              search
+/api/ingest          trigger (POST)
+```
+
+### The feed
+
+The home page is a vertical list of **day sections**, newest first. Each section header
+carries the date and that day's article count, read straight from `META#DAY.articleCount`
+— the count is already stored, so the header costs nothing extra.
+
+Within a section, cards are ordered by score descending, which is GSI1's sort order. The
+most important story of each day sits at the top of its section.
+
+Cards render from the GSI1 `INCLUDE` projection alone — `title`, `summary`, `imageUrl`,
+`sourceName`, `category`, `publishedAt`, `corroborationToday`, `whyItMatters` — so a day
+section costs exactly one Query with no per-card lookups. The initial load renders seven
+day sections; older days load on demand, one Query each.
+
+### Story detail
+
+**We never fetch article bodies.** Feeds and APIs give a title, a summary or excerpt, and
+a link. Fetching and storing publishers' full text is a different product on different
+legal footing and is out of scope (§11).
+
+The detail page is therefore a *story page*, not a reader view. It shows what we actually
+know and then sends the reader to the source:
+
+- Title, hero image, source, published time.
+- The feed's own summary.
+- `whyItMatters` — the model's one-line rationale. This is the thing the app adds that
+  the reader cannot get from the feed itself, so it is given prominence, not a footnote.
+- The signals behind the score — source weight, corroboration today, engagement where it
+  exists — shown plainly, so the ranking is inspectable rather than magic. A reader who
+  disagrees with the order should be able to see why the order is what it is.
+- Other articles in the same cluster: "also covered by The Verge, Ars Technica", each
+  linking to its own story page.
+- A prominent link to the original article.
+
+### Design direction
+
+Visual design is left to implementation, with two constraints that come from the data
+rather than from taste:
+
+- **Cards must degrade gracefully.** `imageUrl` is absent on a large share of items (HN,
+  research papers, several RSS feeds) and `whyItMatters` is absent on any degraded-mode
+  day (§5). A card that only looks right with a hero image and a rationale will look
+  broken on an ordinary day, so the imageless, rationale-less card is the layout to
+  design first and the decorated one is the enhancement.
+- **The run-status line from §8 belongs in the header**, not on a settings page. It is
+  the only thing standing between the user and a pipeline that has been quietly broken
+  for a week.
+
+## 8. Durability, search, and monitoring
 
 ### Off-AWS backup
 
@@ -452,7 +512,7 @@ Three things, all free, sized for a single-user project:
 
 ---
 
-## 8. Security and IAM
+## 9. Security and IAM
 
 **Lambda execution roles** (capture and rank, separately scoped):
 - `dynamodb:UpdateItem`, `Query`, `GetItem` on the **table ARN only** — writes propagate
@@ -492,7 +552,7 @@ a NAT Gateway at roughly $32/month, instantly the largest line item on the accou
 
 ---
 
-## 9. Testing
+## 10. Testing
 
 Vitest. No network in tests — feeds are replayed from saved fixtures.
 
@@ -514,8 +574,16 @@ Also covered:
 
 ---
 
-## 10. Explicitly out of scope for v1
+## 11. Explicitly out of scope for v1
 
-Read/unread state, favourites, trend statistics, cross-run semantic clustering,
-arXiv ingestion, multi-user support, and OpenSearch (its floor is roughly $700/month —
-it would consume the entire credit balance in under a week).
+- **Full article text.** We store what feeds and APIs hand us: title, summary, link.
+  Fetching and storing publishers' article bodies is scraping — a different product with
+  different legal footing. The story page (§7) links out instead.
+- Read/unread state and favourites.
+- Trend statistics and topic-over-time views.
+- Cross-run semantic clustering (see §5 — `corroborationToday` is deliberately a
+  within-day signal at a weight that reflects that).
+- arXiv `cs.AI` ingestion (§3).
+- Multi-user support and authentication.
+- OpenSearch — its floor is roughly $700/month, which would consume the entire credit
+  balance in under a week.
