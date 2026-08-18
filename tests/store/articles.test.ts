@@ -163,4 +163,14 @@ describe("buildRankUpdate", () => {
     expect(a.llmImportance).toBeDefined();
     expect(a.llmImportance!.value).toBe(0);
   });
+
+  it("refuses to persist a NaN score rather than writing it silently", () => {
+    // Reachable, not theoretical: computeScore falls back to Date.parse(ingestedAt) when
+    // publishedAt is unparseable, and the rank handler passes the stored firstSeenAt as
+    // ingestedAt. A corrupted stored timestamp makes that NaN all the way through to score.
+    // buildSortKey clamps separately, so a silent drop here would leave gsi1sk written as
+    // "0000#<hash>" while score itself vanished -- two attributes disagreeing about the same
+    // number. Throwing here, where the attribute name is known, keeps the failure loud.
+    expect(() => buildRankUpdate("t", { ...rank, score: NaN })).toThrow(/score/);
+  });
 });

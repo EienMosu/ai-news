@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildDayMetaPut, buildLastRunPut } from "../../src/lib/store/meta.js";
+import type { DayMeta } from "../../src/lib/store/meta.js";
 
 describe("buildDayMetaPut", () => {
   it("sorts days lexicographically by using the ISO date as the sort key", () => {
@@ -26,6 +27,18 @@ describe("buildDayMetaPut", () => {
     expect(item.llmRanked).toBe(200);
     expect(item.truncated).toBe(450);
     expect(item.status).toBe("partial");
+  });
+
+  it("requires the fields that make a partly-ranked day visible", () => {
+    // @ts-expect-error — llmRanked, truncated and llmStatus are REQUIRED. A day where most
+    // articles never reached the model must not be constructible as though it were fully
+    // ranked. If someone makes them optional, this @ts-expect-error has nothing to suppress
+    // and `tsc` fails — which is the point.
+    const incomplete: DayMeta = {
+      day: "2026-08-18", status: "complete", articleCount: 97,
+      runId: "r1", completedAt: "2026-08-18T03:05:00.000Z",
+    };
+    expect(incomplete.day).toBe("2026-08-18");
   });
 });
 
