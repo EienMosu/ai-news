@@ -16,7 +16,10 @@ async function fetchText(url: string): Promise<string> {
 }
 
 const now = new Date();
-const { articles, perSourceCounts, quarantined, errors } = await captureAll({ fetchText, now });
+const { articles, perSourceCounts, quarantined, filtered, errors } = await captureAll({
+  fetchText,
+  now,
+});
 
 // No Bedrock in this plan: every article scores in degraded mode, which is
 // exactly the path worth eyeballing — it is what a Bedrock outage produces.
@@ -37,19 +40,24 @@ const ranked = articles
 
 console.log(`\ningestDay: ${istanbulDay(now)}   articles: ${ranked.length}\n`);
 
-// perSourceCounts and quarantined answer different questions about the same
-// "0" — a dead/rate-limited feed vs. items that arrived but failed schema
-// validation. Printed side by side so the two failure modes are never
-// confused for each other; a non-zero quarantine count gets a "!!" marker
-// since a silently dropped article is otherwise invisible.
-console.log("per-source counts:  (produced / quarantined)");
+// perSourceCounts, quarantined and filtered answer three different questions
+// about the same "0" — a dead/rate-limited feed, an item that arrived but
+// failed schema validation, and an item that was valid but out of scope for
+// this run (too old, or beyond the per-source cap). Printed side by side so
+// none of the three is ever mistaken for another; a non-zero quarantine
+// count gets a "!!" marker since a silently dropped article is otherwise
+// invisible, and a source that filtered out its *entire* feed (produced=0
+// but filtered>0) gets its own callout, since that's alive-but-stale, not dead.
+console.log("per-source counts:  (produced / filtered / quarantined)");
 for (const src of Object.keys(perSourceCounts)) {
   const n = perSourceCounts[src] ?? 0;
+  const f = filtered[src] ?? 0;
   const q = quarantined[src] ?? 0;
   const deadMark = n === 0 ? "!" : " ";
   const quarantineMark = q > 0 ? "!!" : "  ";
+  const allFilteredNote = n === 0 && f > 0 ? "  <-- entire feed filtered (recency/cap), not dead" : "";
   console.log(
-    `  ${deadMark} ${src.padEnd(18)} produced=${String(n).padStart(3)}   quarantined=${String(q).padStart(3)} ${quarantineMark}`,
+    `  ${deadMark} ${src.padEnd(18)} produced=${String(n).padStart(4)}   filtered=${String(f).padStart(4)}   quarantined=${String(q).padStart(3)} ${quarantineMark}${allFilteredNote}`,
   );
 }
 
@@ -59,9 +67,11 @@ if (errors.length) {
 }
 
 const totalQuarantined = Object.values(quarantined).reduce((sum, n) => sum + n, 0);
+const totalFiltered = Object.values(filtered).reduce((sum, n) => sum + n, 0);
 console.log(
   `\ntotal quarantined across all sources: ${totalQuarantined}${totalQuarantined > 0 ? "  <-- check these sources' fixtures/schema" : ""}`,
 );
+console.log(`total filtered (out-of-window or over the per-source cap): ${totalFiltered}`);
 
 console.log("\ntop 20:");
 for (const a of ranked.slice(0, 20)) {

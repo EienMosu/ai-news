@@ -20,6 +20,24 @@ function rssFor(id: string, link?: string) {
 </channel></rss>`;
 }
 
+/**
+ * Builds an RSS body from an arbitrary list of items, each with its own
+ * title/link and an optional pubDate. Omitting pubDate produces a
+ * fallback-dated article, exactly like a real feed entry with no date —
+ * used by the recency-window tests below.
+ */
+function rssItems(items: { title: string; link: string; pubDate?: string }[]) {
+  const body = items
+    .map(
+      (it) =>
+        `<item><title>${it.title}</title><link>${it.link}</link><description>desc</description>${
+          it.pubDate ? `<pubDate>${it.pubDate}</pubDate>` : ""
+        }</item>`,
+    )
+    .join("\n");
+  return `<?xml version="1.0"?><rss version="2.0"><channel><title>test</title>\n${body}\n</channel></rss>`;
+}
+
 function stubFetch(overrides: Record<string, string> = {}) {
   return async (url: string) => {
     if (overrides[url] !== undefined) return overrides[url];
@@ -205,5 +223,89 @@ describe("captureAll", () => {
     // Other sources are unaffected.
     expect(r.articles.length).toBeGreaterThan(0);
     expect(r.perSourceCounts["techcrunch"]).toBeGreaterThan(0);
+  });
+
+  // Guard against a feed shipping its entire history rather than recent
+  // items (observed live: OpenAI 1132 items back to 2015, Hugging Face 843
+  // back to 2020) — both a cost problem (23x the budgeted Bedrock prompt
+  // size) and a correctness problem (years-old posts in a "today" ingest).
+  describe("recency window and per-source cap", () => {
+    it("excludes an article older than the recency window (30 days) and keeps one within it (2 days)", async () => {
+      const tc = SOURCES.find((s) => s.id === "techcrunch")!;
+      const oldDate = new Date(NOW.getTime() - 30 * 24 * 60 * 60 * 1000).toUTCString();
+      const recentDate = new Date(NOW.getTime() - 2 * 24 * 60 * 60 * 1000).toUTCString();
+      const body = rssItems([
+        { title: "Old story", link: "https://example.com/old-story", pubDate: oldDate },
+        { title: "Recent story", link: "https://example.com/recent-story", pubDate: recentDate },
+      ]);
+
+      const r = await captureAll({ fetchText: stubFetch({ [tc.url]: body }), now: NOW });
+      const titles = r.articles.filter((a) => a.source === "techcrunch").map((a) => a.title);
+
+      expect(titles).toContain("Recent story");
+      expect(titles).not.toContain("Old story");
+      expect(r.filtered["techcrunch"]).toBe(1);
+      expect(r.quarantined["techcrunch"]).toBe(0); // excluded, not invalid
+    });
+
+    it("keeps a fallback-dated article regardless of age, unlike an old dated article from the same source", async () => {
+      const tc = SOURCES.find((s) => s.id === "techcrunch")!;
+      const oldDate = new Date(NOW.getTime() - 30 * 24 * 60 * 60 * 1000).toUTCString();
+      const body = rssItems([
+        { title: "Old dated story", link: "https://example.com/old-dated", pubDate: oldDate },
+        { title: "Undated story", link: "https://example.com/undated" }, // no pubDate -> fallback
+      ]);
+
+      const r = await captureAll({ fetchText: stubFetch({ [tc.url]: body }), now: NOW });
+      const tcArticles = r.articles.filter((a) => a.source === "techcrunch");
+      const undated = tcArticles.find((a) => a.title === "Undated story");
+
+      expect(undated).toBeDefined();
+      expect(undated?.publishedAtSource).toBe("fallback");
+      expect(tcArticles.some((a) => a.title === "Old dated story")).toBe(false);
+      // Only the old dated article is counted as filtered; the fallback one
+      // was never a candidate for exclusion.
+      expect(r.filtered["techcrunch"]).toBe(1);
+    });
+
+    it("caps a source at 50 items, keeping the 50 newest, even when the feed is not date-ordered", async () => {
+      const tc = SOURCES.find((s) => s.id === "techcrunch")!;
+      const total = 200;
+      // Deterministic shuffle of 0..199 (131 is coprime with 200) so the feed
+      // body is neither ascending nor descending by date — a naive "keep the
+      // first 50 encountered" (or "last 50 encountered") implementation would
+      // fail this test even though it might pass on an already-sorted fixture.
+      const order = Array.from({ length: total }, (_, i) => i).sort(
+        (a, b) => ((a * 131) % total) - ((b * 131) % total),
+      );
+      const items = order.map((i) => ({
+        title: `story-${i}`,
+        link: `https://example.com/story-${i}`,
+        // i=0 is newest (0 minutes old); i=199 is oldest (~6.9 days old) —
+        // every item is within the 7-day window, so only the cap applies.
+        pubDate: new Date(NOW.getTime() - i * 50 * 60 * 1000).toUTCString(),
+      }));
+
+      const r = await captureAll({
+        fetchText: stubFetch({ [tc.url]: rssItems(items) }),
+        now: NOW,
+      });
+      const tcArticles = r.articles.filter((a) => a.source === "techcrunch");
+
+      expect(tcArticles).toHaveLength(50);
+      expect(r.perSourceCounts["techcrunch"]).toBe(50);
+      expect(r.filtered["techcrunch"]).toBe(150);
+      expect(r.quarantined["techcrunch"]).toBe(0);
+
+      const keptTitles = new Set(tcArticles.map((a) => a.title));
+      for (let i = 0; i < 50; i++) expect(keptTitles.has(`story-${i}`)).toBe(true);
+      for (let i = 50; i < total; i++) expect(keptTitles.has(`story-${i}`)).toBe(false);
+    });
+
+    it("keeps filtered at 0 and does not touch quarantined for a source with nothing to filter", async () => {
+      const r = await captureAll({ fetchText: stubFetch(), now: NOW });
+      expect(r.filtered["techcrunch"]).toBe(0);
+      expect(r.quarantined["techcrunch"]).toBe(0);
+    });
   });
 });

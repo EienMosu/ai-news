@@ -10,6 +10,14 @@ export interface SourceDef {
   kind: SourceKind;
   category: Category;
   url: string;
+  /**
+   * Cap on in-window items kept per run, applied after the recency filter,
+   * newest-first. Defaults to 50 in captureAll — most feeds never need this,
+   * but a source that ships its entire history (observed: OpenAI 1132 items
+   * back to 2015, Hugging Face 843 back to 2020) must be tunable here without
+   * touching the orchestrator.
+   */
+  maxItems?: number;
 }
 
 /** Spec §3. arXiv cs.AI is deliberately absent — 268 items/day would drown the feed. */

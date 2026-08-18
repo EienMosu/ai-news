@@ -17,12 +17,18 @@ export interface CaptureDeps {
  * distinguishable from a genuinely quiet news day; quarantined exists so a
  * source whose items all fail schema validation is distinguishable from
  * both — that failure mode also reports perSourceCounts 0, and without a
- * separate counter it is indistinguishable from a dead feed.
+ * separate counter it is indistinguishable from a dead feed. filtered is a
+ * third, disjoint reason perSourceCounts can undercount a source's raw feed:
+ * items that passed validation fine but were excluded by the recency window
+ * or the per-source cap (see filterToRecentWindow) — nothing wrong with
+ * them, just out of scope for this run, which must not be confused with
+ * quarantine (a real defect) or a dead feed (nothing at all).
  */
 export interface CaptureResult {
   articles: NormalizedArticle[];
   perSourceCounts: Record<string, number>;
   quarantined: Record<string, number>;
+  filtered: Record<string, number>;
   errors: { source: string; message: string }[];
 }
 
@@ -69,6 +75,57 @@ function toArticle(
   return parsed.success ? parsed.data : null;
 }
 
+const RECENCY_WINDOW_DAYS = 7;
+const DEFAULT_MAX_ITEMS = 50;
+
+/**
+ * Guards against a feed publishing its entire history rather than recent
+ * items — observed live: OpenAI's RSS shipped 1132 items back to 2015,
+ * Hugging Face's 843 back to 2020. Unchecked, that inflates the Bedrock
+ * prompt ~23x past its budgeted size, can overflow the response token cap
+ * outright, and floods the ingest day's corroboration window with
+ * years-old posts.
+ *
+ * Two passes, in order:
+ *  1. Drop anything older than the recency window, measured from the run
+ *     clock. Seven days rather than one so a few missed runs in a row don't
+ *     leave a permanent hole. Fallback-dated items (no date in the feed at
+ *     all) are exempt from this check — they are new to us by definition,
+ *     and a missing date must never be the reason an article is excluded.
+ *  2. Cap what's left to maxItems, keeping the newest first. Feeds are
+ *     conventionally reverse-chronological, but that's not relied on here —
+ *     the survivors are explicitly sorted by publishedAt descending before
+ *     slicing, so a feed in arbitrary order still yields its newest items.
+ *
+ * Both passes only ever remove articles that already passed schema
+ * validation, so nothing here touches `quarantined` — it feeds the
+ * separate `filtered` counter instead.
+ */
+function filterToRecentWindow(
+  src: SourceDef,
+  articles: NormalizedArticle[],
+  now: Date,
+): { kept: NormalizedArticle[]; filteredCount: number } {
+  const cutoffMs = now.getTime() - RECENCY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+  const inWindow = articles.filter((a) => {
+    if (a.publishedAtSource === "fallback") return true;
+    const ms = a.publishedAt ? Date.parse(a.publishedAt) : NaN;
+    return Number.isFinite(ms) && ms >= cutoffMs;
+  });
+
+  const sorted = [...inWindow].sort((a, b) => {
+    const tb = b.publishedAt ? Date.parse(b.publishedAt) : -Infinity;
+    const ta = a.publishedAt ? Date.parse(a.publishedAt) : -Infinity;
+    return tb - ta;
+  });
+
+  const maxItems = src.maxItems ?? DEFAULT_MAX_ITEMS;
+  const kept = sorted.slice(0, maxItems);
+
+  return { kept, filteredCount: articles.length - kept.length };
+}
+
 /**
  * Merges a newly-seen article into the dedup map. Content fields are
  * first-writer-wins in registry order (the primary publisher/lab has the
@@ -102,7 +159,11 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
   // Initialised for every source up front so a healthy source reads 0 rather
   // than being absent from the map.
   const quarantined: Record<string, number> = {};
-  for (const src of SOURCES) quarantined[src.id] = 0;
+  const filtered: Record<string, number> = {};
+  for (const src of SOURCES) {
+    quarantined[src.id] = 0;
+    filtered[src.id] = 0;
+  }
   const errors: { source: string; message: string }[] = [];
   const bySeenHash = new Map<string, NormalizedArticle>();
 
@@ -114,7 +175,7 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
       return;
     }
 
-    let produced = 0;
+    const validArticles: NormalizedArticle[] = [];
     try {
       for (const item of itemsFor(src, outcome.value.body)) {
         const article = toArticle(src, item, deps.now);
@@ -125,14 +186,17 @@ export async function captureAll(deps: CaptureDeps): Promise<CaptureResult> {
           quarantined[src.id]!++;
           continue;
         }
-        produced++;
-        mergeIntoSeen(bySeenHash, article);
+        validArticles.push(article);
       }
     } catch (e) {
       errors.push({ source: src.id, message: String((e as Error).message) });
     }
-    perSourceCounts[src.id] = produced;
+
+    const { kept, filteredCount } = filterToRecentWindow(src, validArticles, deps.now);
+    filtered[src.id] = filteredCount;
+    for (const article of kept) mergeIntoSeen(bySeenHash, article);
+    perSourceCounts[src.id] = kept.length;
   });
 
-  return { articles: [...bySeenHash.values()], perSourceCounts, quarantined, errors };
+  return { articles: [...bySeenHash.values()], perSourceCounts, quarantined, filtered, errors };
 }
