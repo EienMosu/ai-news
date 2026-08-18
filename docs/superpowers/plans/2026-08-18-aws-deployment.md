@@ -501,9 +501,19 @@ describe("buildCaptureUpdate", () => {
 
   it("does NOT guard the fields that must stay fresh", () => {
     const a = attrs(buildCaptureUpdate("t", base));
-    for (const field of ["title", "summary", "url", "points", "score", "gsi1sk"]) {
+    for (const field of ["title", "summary", "url", "points"]) {
       expect(a[field], `${field} must be present`).toBeDefined();
       expect(a[field]!.guarded, `${field} must be overwritten every run`).toBe(false);
+    }
+  });
+
+  it("never reverts an already-ranked article's score back to the degraded one", () => {
+    // Capture runs hourly and always scores in degraded mode. Overwriting score/gsi1sk would
+    // move a ranked article back down the feed an hour after it was ranked.
+    const a = attrs(buildCaptureUpdate("t", base));
+    for (const field of ["score", "scoreVersion", "gsi1sk"]) {
+      expect(a[field], `${field} must be present`).toBeDefined();
+      expect(a[field]!.guarded, `${field} must use if_not_exists`).toBe(true);
     }
   });
 
@@ -683,10 +693,20 @@ export function buildCaptureUpdate(tableName: string, input: CaptureWriteInput):
   b.set("category", a.category);
   b.set("publishedAtSource", a.publishedAtSource);
   b.set("points", a.points);
-  b.set("score", score);
-  b.set("scoreVersion", scoreVersion);
-  b.set("gsi1sk", buildSortKey(score, a.urlHash));
   b.set("v", SCHEMA_VERSION);
+
+  // setIfAbsent, NOT set. Capture runs hourly and its score is always the DEGRADED one, so
+  // overwriting here reverts the rank position of every article ranked earlier that day --
+  // enrichment survives (it is omitted-when-null) but the ORDERING does not, which is the
+  // half of the archive invariant that is visible to the reader. Feeds carry items for days;
+  // this is routine, not an edge case.
+  //
+  // The tradeoff: an unranked article's recency term stops decaying between captures. That is
+  // acceptable because rank recomputes every score daily even when Bedrock is down, so no
+  // score stays frozen longer than 24 hours.
+  b.setIfAbsent("score", score);
+  b.setIfAbsent("scoreVersion", scoreVersion);
+  b.setIfAbsent("gsi1sk", buildSortKey(score, a.urlHash));
 
   return { TableName: tableName, Key: articleKey(a.urlHash), ...b.build() };
 }
@@ -741,6 +761,12 @@ export interface DayMeta {
   day: string;
   status: "complete" | "partial";
   articleCount: number;
+  /** How many of the day's articles the model actually scored. */
+  llmRanked: number;
+  /** How many were cut by RANK_INPUT_CAP and never reached the model. Persisted, not logged:
+   *  a day where 450 of 650 articles were never ranked must be visible in the data. */
+  truncated: number;
+  llmStatus: "ok" | "failed" | "truncated";
   runId: string;
   completedAt: string;
 }
@@ -888,12 +914,20 @@ export async function listDays(
   return (out.Items ?? []) as DayMeta[];
 }
 
-/** The feed's entry point. Readers never compute a date — they follow this pointer. Spec §4. */
+/**
+ * The feed's entry point. Readers never compute a date — they follow this pointer. Spec §4.
+ *
+ * Falls back to the newest day of ANY status when no complete day is in the window. A single
+ * transient write failure marks a day `partial` and nothing retries it, so preferring
+ * "complete" without a fallback means a run of unlucky days makes the site show NOTHING —
+ * a worse outcome than showing a day that is 199 articles out of 200. The caller gets the
+ * status and can say so in the UI.
+ */
 export async function getLatestCompleteDay(
   client: DynamoDBDocumentClient, tableName: string,
 ): Promise<DayMeta | null> {
-  const days = await listDays(client, tableName, 10);
-  return days.find((d) => d.status === "complete") ?? null;
+  const days = await listDays(client, tableName, 30);
+  return days.find((d) => d.status === "complete") ?? days[0] ?? null;
 }
 ```
 
@@ -1039,17 +1073,24 @@ describe("article table", () => {
   });
 
   it("declares exactly one GSI, named feed-by-day, keyed for a descending score read", () => {
+    // NOTE the path. `AWS::DynamoDB::GlobalTable` puts KeySchema and Projection ONLY at
+    // top-level Properties.GlobalSecondaryIndexes[i]; the Replicas[0] entry carries just
+    // IndexName. Asserting through Replicas[0] does not fail — it THROWS on undefined.
     const gsis = Object.values(template().findResources("AWS::DynamoDB::GlobalTable"))[0]!
-      .Properties.Replicas[0].GlobalSecondaryIndexes;
+      .Properties.GlobalSecondaryIndexes;
     expect(gsis).toHaveLength(1);
     expect(gsis[0].IndexName).toBe("feed-by-day");
   });
 
-  it("projects exactly the attributes the feed card needs, and no more", () => {
+  it("projects every attribute the feed card and cluster list need", () => {
     // INCLUDE not ALL: ALL duplicates every attribute into the index and doubles write cost.
-    // This list is frozen — the projection cannot be changed without recreating the index.
+    // The list is deliberately a little wider than spec §7's card fields. The asymmetry
+    // decides it: over-projecting costs fractions of a cent per month, under-projecting costs
+    // recreating the index and backfilling the archive, and a projection is IMMUTABLE after
+    // creation. `url` in particular is load-bearing for the detail page's "also covered by…"
+    // cluster list, and `scoreVersion` for spec §2's "new since last ranking" marker.
     const table = Object.values(template().findResources("AWS::DynamoDB::GlobalTable"))[0]!;
-    const proj = table.Properties.Replicas[0].GlobalSecondaryIndexes[0].Projection;
+    const proj = table.Properties.GlobalSecondaryIndexes[0].Projection;
     expect(proj.ProjectionType).toBe("INCLUDE");
     expect([...proj.NonKeyAttributes].sort()).toEqual([
       "category", "clusterId", "corroborationToday", "imageUrl", "publishedAt",
@@ -1095,6 +1136,11 @@ import { Construct } from "constructs";
  *
  * Deliberately NOT projected: points, publishedAtSource, llmImportance, firstSeenAt,
  * hashVersion, v. The detail page reads the base item anyway.
+ *
+ * Erring wide is deliberate. A projection cannot be altered after the index is created --
+ * changing it means deleting and recreating the index, and recreating it on a table that
+ * already holds the archive means a full backfill. Over-projecting costs fractions of a cent
+ * a month at this volume. The costs are not symmetric, so this list is not minimal.
  */
 export const FEED_CARD_ATTRIBUTES = [
   "title", "summary", "imageUrl", "url", "source", "sourceName", "category",
@@ -1116,7 +1162,8 @@ export class ArticleTable extends Construct {
 
       // This table is the archive. A stack delete must not take it.
       removalPolicy: RemovalPolicy.RETAIN,
-      pointInTimeRecovery: true,
+      // `pointInTimeRecovery` is deprecated in current aws-cdk-lib (checked at 2.265.0).
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
 
       globalSecondaryIndexes: [
         {
@@ -1132,9 +1179,7 @@ export class ArticleTable extends Construct {
 }
 ```
 
-If `pointInTimeRecovery` is deprecated in the installed `aws-cdk-lib` in favour of
-`pointInTimeRecoverySpecification`, use the current property and note the change. PITR on a
-table this size costs roughly $0.02/month — it is cheap insurance on top of the spec's
+PITR on a table this size costs roughly $0.02/month — it is cheap insurance on top of the spec's
 off-AWS backup, not a replacement for it.
 
 - [ ] **Step 6: Write `infra/lib/ai-news-stack.ts` and `infra/bin/ai-news.ts`**
@@ -1198,15 +1243,29 @@ shape is a design decision, not an implementation detail.
 **Cost arithmetic — read before changing anything here.** Sonnet 4.6 on Bedrock is $3/1M
 input, $15/1M output, and thinking tokens bill as output.
 
-| Choice | Tokens/run | $/run | $/month |
-|---|---|---|---|
-| Naive: 200 articles, full summaries, 64-char hashes echoed back | ~25k in / ~14.4k out | ~$0.29 + thinking | $11–16 |
-| **This plan:** short ordinal ids, summaries truncated to 300 chars | ~21k in / ~9.6k out | ~$0.21 + ~$0.12 thinking | **~$10** |
+| Choice | Tokens/run | $/month |
+|---|---|---|
+| Naive: 200 articles, full summaries, 64-char hashes echoed back | ~25k in / ~14.4k out | $11–16 |
+| **This plan:** short ordinal ids, summaries truncated to 300 chars | ~21k in / ~9.6k out | **$10.50–16.50** |
 
 The saving is almost entirely output: a 64-hex-character `urlHash` costs ~32 tokens **per
 article, echoed back in full**. Sending `a0`…`a199` instead and translating locally costs
-nothing and removes about a third of the output bill. If cost ever needs cutting further, the
-first lever is `thinking` (~$0.12/run), not the article count.
+nothing and removes about a third of the output bill.
+
+**The thinking-token component is an estimate, not a measurement.** `thinking: { type:
+"adaptive" }` bills as output and its volume is not knowable in advance, which is why the
+range above is wide and why spec §6 requires validating against a real batch with
+`countTokens()` before deploying. Treat the low end as optimistic. If cost needs cutting, the
+first lever is `thinking`, then `RANK_INPUT_CAP`, then `SUMMARY_CHARS_FOR_RANKING` — in that
+order, because the first is pure overhead and the last two lose information.
+
+**Three settings here are cost controls, not tuning knobs**, and all three come from spec §6:
+`effort: "medium"` (its `high` default measured 150–500s on a 100-item clustering task, which
+straddles any sane timeout); the `stop_reason === "max_tokens"` branch (a truncated run burns
+the full 32k cap and returns near-worthless JSON — without the branch it is billed in full and
+still reports success); and the abort/retry configuration in Task 8 (a hard Lambda kill leaves
+the invocation eligible for Lambda's default **2× async retry**, re-billing the same ~$0.50
+call up to three times with no record of the day at all).
 
 **Files:**
 - Create: `src/lib/rank/prompt.ts`, `src/lib/rank/bedrock.ts`
@@ -1233,7 +1292,7 @@ pnpm add @anthropic-ai/bedrock-sdk
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { RANK_TOOL, buildRankPrompt, translateIds } from "../../src/lib/rank/prompt.js";
+import { RANKING_SCHEMA, buildRankPrompt, translateIds } from "../../src/lib/rank/prompt.js";
 
 const candidate = (n: number) => ({
   urlHash: String(n).padStart(64, "0"),
@@ -1259,9 +1318,11 @@ describe("buildRankPrompt", () => {
     expect(text).not.toContain("x".repeat(400));
   });
 
-  it("names the tool the same thing the tool schema does", () => {
-    expect(RANK_TOOL.name).toBe("rank_articles");
-    expect(RANK_TOOL.input_schema.required).toContain("items");
+  it("pins the response shape reconcile() reads", () => {
+    // reconcile() looks for `items`. A rename here silently reconciles every article as
+    // `missing`, which is indistinguishable from the model failing.
+    expect(RANKING_SCHEMA.required).toContain("items");
+    expect(RANKING_SCHEMA.properties.items.items.required).toContain("id");
   });
 });
 
@@ -1307,21 +1368,25 @@ export interface RankCandidate {
 }
 
 /**
- * Forced tool call rather than a structured-output response format.
+ * Structured output schema, per spec §6.
  *
- * Deliberate: a forced tool call is supported identically on the Anthropic API, Bedrock and
- * Vertex, and depends on no beta. The response shape is pinned to what reconcile() already
- * parses — `{ items: [...] }` — so a change here without a matching change there produces
- * a run where every article reconciles as `missing`, which looks like a model failure.
+ * Spec §6 verified that the legacy `bedrock-runtime` path carries BOTH Sonnet 4.6 and
+ * structured outputs (the Mantle endpoint carries neither), so `output_config.format` is the
+ * documented path for this model and this client. The shape is pinned to what reconcile()
+ * already parses — `{ items: [...] }` — so a change here without a matching change there
+ * produces a run where every article reconciles as `missing`, which reads as a model failure.
+ *
+ * Fallback, if `output_config.format` is rejected by the installed SDK at implementation time:
+ * a forced tool call (`tools: [{name, input_schema}]` + `tool_choice: {type:"tool", name}`)
+ * carries the same schema and is supported on every Anthropic surface. Use it only if the
+ * spec's path does not work, and record that in the task report — do not silently substitute.
+ *
+ * Note `maxItems` is deliberately absent: structured-output schemas do not support it, so the
+ * model cannot be forced to return all 200 entries. That is exactly why reconcile() exists.
  */
-export const RANK_TOOL = {
-  name: "rank_articles",
-  description:
-    "Return one entry for every article you were given, scoring its importance and grouping " +
-    "articles that cover the same underlying story into a shared cluster.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
+export const RANKING_SCHEMA = {
+  type: "object" as const,
+  properties: {
       items: {
         type: "array",
         items: {
@@ -1350,9 +1415,8 @@ export const RANK_TOOL = {
           required: ["id", "importance", "clusterId", "whyItMatters"],
         },
       },
-    },
-    required: ["items"],
   },
+  required: ["items"],
 };
 
 /** Ordinal ids keep 64-char hashes out of the token bill — see the cost table in the plan. */
@@ -1408,27 +1472,49 @@ Expected: PASS, all 7.
 
 ```ts
 import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
-import { RANK_TOOL, buildRankPrompt, translateIds, type RankCandidate } from "./prompt.js";
+import { RANKING_SCHEMA, buildRankPrompt, translateIds, type RankCandidate } from "./prompt.js";
 
 /**
- * The `global.` prefix is mandatory. `eu.anthropic.claude-sonnet-4-6` is a different
- * inference profile and costs about 10% more for identical output. Verified ACTIVE and
- * invokable in eu-central-1 on 2026-08-18.
+ * The `global.` prefix is mandatory, not an EU-residency option. Spec §6: Sonnet 4.6 has no
+ * in-region on-demand availability outside eu-west-2 and a bare id returns HTTP 400, while
+ * regional prefixes such as `eu.` carry a 10% pricing premium. Verified ACTIVE and invokable
+ * in eu-central-1 on 2026-08-18.
  */
 export const RANK_MODEL = "global.anthropic.claude-sonnet-4-6";
 
 /**
  * Ranked in one call so clustering is globally consistent — an article can only be grouped
  * with another the model saw at the same time. Spec §4 bounds a day at ~650 articles, so this
- * cap can bite; everything beyond it keeps the degraded score capture already assigned, which
- * is exactly what an unranked article is supposed to have.
+ * cap can bite; everything beyond it keeps the degraded score capture assigned, and Task 7
+ * persists how many were left out.
  */
 export const RANK_INPUT_CAP = 200;
 
+/** Caps thinking PLUS response text, not response text alone. Spec §6. */
 export const MAX_TOKENS = 32_000;
 
+/** ~600s, leaving margin inside Task 8's 900s Lambda timeout. See TruncationError below. */
+export const BEDROCK_ABORT_MS = 600_000;
+
+/**
+ * Truncation is NOT an outage, and conflating them is the failure spec §6 calls out by name:
+ * a `max_tokens` stop yields invalid or partial JSON which, caught as a generic Bedrock
+ * failure, silently degrades the whole day while `llmStatus` still reports "ok". It also
+ * means the full 32k cap was billed. It gets its own type so the caller can log it as its
+ * own thing and so an alarm can distinguish "we asked for too much" from "Bedrock was down".
+ */
+export class TruncationError extends Error {
+  constructor() {
+    super("ranking response hit max_tokens; output is truncated and unusable");
+    this.name = "TruncationError";
+  }
+}
+
 export interface RankDeps {
-  client?: { messages: { create: (args: unknown) => Promise<unknown> } };
+  client?: {
+    messages: { stream: (args: unknown) => { finalMessage: () => Promise<unknown> } };
+  };
+  signal?: AbortSignal;
 }
 
 export interface RankOutcome {
@@ -1448,21 +1534,45 @@ export async function rankArticles(
   const { text, idToHash } = buildRankPrompt(selected);
   const client = deps.client ?? new AnthropicBedrock({ awsRegion: process.env.AWS_REGION });
 
-  const message = (await client.messages.create({
+  // Streamed, per spec §6. A multi-minute non-streaming request is what request timeouts
+  // are for; streaming also lets the abort signal take effect mid-response.
+  const stream = client.messages.stream({
     model: RANK_MODEL,
     max_tokens: MAX_TOKENS,
     thinking: { type: "adaptive" },
-    tools: [RANK_TOOL],
-    tool_choice: { type: "tool", name: RANK_TOOL.name },
+    output_config: {
+      // NOT the `high` default: spec §6 measured `high` at 150-500s on a 100-item clustering
+      // task, which straddles the Lambda timeout and multiplies the thinking-token bill.
+      effort: "medium",
+      format: { type: "json_schema", schema: RANKING_SCHEMA },
+    },
     messages: [{ role: "user", content: text }],
-  })) as { content?: { type: string; name?: string; input?: unknown }[] };
+    ...(deps.signal ? { signal: deps.signal } : {}),
+  });
 
-  const block = message.content?.find(
-    (b) => b.type === "tool_use" && b.name === RANK_TOOL.name,
-  );
+  const msg = (await stream.finalMessage()) as {
+    stop_reason?: string;
+    content?: { type: string; text?: string }[];
+  };
+
+  if (msg.stop_reason === "max_tokens") throw new TruncationError();
+
+  // content[0] is a thinking block, not text — `thinking.display` defaults to "summarized"
+  // on Sonnet 4.6, so indexing content[0] returns the wrong block. Spec §6.
+  const raw = msg.content?.find((b) => b.type === "text")?.text;
+  if (!raw) return { response: { items: [] }, inputHashes: selected.map((c) => c.urlHash), truncated };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Well-formed-but-unparseable is distinct from truncated: structured outputs should make
+    // this unreachable, so if it happens the schema and the model have diverged.
+    return { response: { items: [] }, inputHashes: selected.map((c) => c.urlHash), truncated };
+  }
 
   return {
-    response: translateIds(block?.input, idToHash),
+    response: translateIds(parsed, idToHash),
     inputHashes: selected.map((c) => c.urlHash),
     truncated,
   };
@@ -1476,7 +1586,7 @@ values that cost money or silently break reconciliation if they drift:
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
-import { MAX_TOKENS, RANK_INPUT_CAP, RANK_MODEL, rankArticles } from "../../src/lib/rank/bedrock.js";
+import { MAX_TOKENS, RANK_INPUT_CAP, RANK_MODEL, TruncationError, rankArticles } from "../../src/lib/rank/bedrock.js";
 
 const candidate = (n: number) => ({
   urlHash: String(n).padStart(64, "0"),
@@ -1484,29 +1594,51 @@ const candidate = (n: number) => ({
   category: "news", publishedAt: null, points: null,
 });
 
-const stub = (input: unknown) => ({
-  messages: {
-    create: vi.fn().mockResolvedValue({
-      content: [{ type: "tool_use", name: "rank_articles", input }],
-    }),
-  },
-});
+/** Shaped like the streaming client: content[0] is a thinking block, exactly as spec §6 warns. */
+const stub = (payload: unknown, stopReason = "end_turn") => {
+  const finalMessage = vi.fn().mockResolvedValue({
+    stop_reason: stopReason,
+    content: [
+      { type: "thinking", thinking: "..." },
+      { type: "text", text: JSON.stringify(payload) },
+    ],
+  });
+  return { messages: { stream: vi.fn().mockReturnValue({ finalMessage }) } };
+};
 
 describe("rankArticles", () => {
   it("uses the global inference profile, not the regional one", async () => {
     const client = stub({ items: [] });
     await rankArticles([candidate(1)], { client });
-    const args = client.messages.create.mock.calls[0]![0] as Record<string, unknown>;
+    const args = client.messages.stream.mock.calls[0]![0] as Record<string, unknown>;
     expect(args.model).toBe(RANK_MODEL);
     expect(RANK_MODEL.startsWith("global.")).toBe(true);
     expect(args.max_tokens).toBe(MAX_TOKENS);
   });
 
-  it("forces the tool so the model cannot answer in prose", async () => {
+  it("constrains the response with a schema and keeps effort off the high default", async () => {
     const client = stub({ items: [] });
     await rankArticles([candidate(1)], { client });
-    const args = client.messages.create.mock.calls[0]![0] as any;
-    expect(args.tool_choice).toEqual({ type: "tool", name: "rank_articles" });
+    const args = client.messages.stream.mock.calls[0]![0] as any;
+    expect(args.output_config.format.type).toBe("json_schema");
+    // `high` measured 150-500s on this task shape and multiplies the thinking-token bill.
+    expect(args.output_config.effort).toBe("medium");
+  });
+
+  it("throws TruncationError on max_tokens instead of degrading silently", async () => {
+    // The single most important assertion in this file. Without the branch, a truncated run
+    // is billed for the full 32k cap, returns unusable JSON, and still reports llmStatus ok —
+    // indistinguishable from a Bedrock outage, which is what spec §6 forbids.
+    const client = stub({ items: [] }, "max_tokens");
+    await expect(rankArticles([candidate(1)], { client })).rejects.toThrow(TruncationError);
+  });
+
+  it("reads the text block by type, never by position", async () => {
+    // content[0] is a thinking block: `thinking.display` defaults to "summarized" on
+    // Sonnet 4.6, so content[0].text is undefined.
+    const client = stub({ items: [{ id: "a0", importance: 90, clusterId: "c", whyItMatters: "w" }] });
+    const out = await rankArticles([candidate(1)], { client });
+    expect((out.response as any).items[0].urlHash).toBe(candidate(1).urlHash);
   });
 
   it("caps the input and reports how many it left out", async () => {
@@ -1520,12 +1652,13 @@ describe("rankArticles", () => {
   it("makes no call at all when there is nothing to rank", async () => {
     const client = stub({ items: [] });
     const out = await rankArticles([], { client });
-    expect(client.messages.create).not.toHaveBeenCalled();
+    expect(client.messages.stream).not.toHaveBeenCalled();
     expect(out.response).toEqual({ items: [] });
   });
 
-  it("returns an empty reconcilable shape when the model returns no tool block", async () => {
-    const client = { messages: { create: vi.fn().mockResolvedValue({ content: [{ type: "text" }] }) } };
+  it("returns an empty reconcilable shape when the model returns no text block", async () => {
+    const finalMessage = vi.fn().mockResolvedValue({ stop_reason: "end_turn", content: [{ type: "thinking" }] });
+    const client = { messages: { stream: vi.fn().mockReturnValue({ finalMessage }) } };
     const out = await rankArticles([candidate(1)], { client });
     expect(out.response).toEqual({ items: [] });
   });
@@ -1925,26 +2058,37 @@ import { describe, expect, it } from "vitest";
 import { countCorroboration } from "../../src/lib/rank/corroboration.js";
 
 describe("countCorroboration", () => {
+  const item = (h: string, clusterId?: string) => ({ pk: `ART#${h}`, clusterId });
+
   it("counts how many articles share each article's cluster", () => {
-    const counts = countCorroboration(new Map([
-      ["h1", { clusterId: "gpt6", importance: 90, whyItMatters: null }],
-      ["h2", { clusterId: "gpt6", importance: 80, whyItMatters: null }],
-      ["h3", { clusterId: "other", importance: 50, whyItMatters: null }],
-    ]));
+    const counts = countCorroboration([
+      item("h1", "2026-08-18#gpt6"),
+      item("h2", "2026-08-18#gpt6"),
+      item("h3", "2026-08-18#other"),
+    ]);
     expect(counts.get("h1")).toBe(2);
     expect(counts.get("h2")).toBe(2);
     expect(counts.get("h3")).toBe(1);
   });
 
   it("gives a __self__ singleton a corroboration of exactly 1", () => {
-    // Spec §4: __self__: is a reserved non-cluster. Treating it as a real cluster would
-    // merge every unclustered article into one and fabricate corroboration.
-    const counts = countCorroboration(new Map([
-      ["h1", { clusterId: "__self__:h1", importance: 40, whyItMatters: null }],
-      ["h2", { clusterId: "__self__:h2", importance: 40, whyItMatters: null }],
-    ]));
+    // Spec §4: __self__: is a reserved non-cluster. Treating it as a real cluster would merge
+    // every unclustered article into one and fabricate corroboration.
+    const counts = countCorroboration([item("h1", "__self__:h1"), item("h2", "__self__:h2")]);
     expect(counts.get("h1")).toBe(1);
     expect(counts.get("h2")).toBe(1);
+  });
+
+  it("gives an article with no cluster at all a corroboration of 1, not 0", () => {
+    // A degraded run writes no clusterId. 0 would be a corroboration the scoring formula
+    // never expects to see; 1 means "only this article covers it", which is the truth.
+    expect(countCorroboration([item("h1")]).get("h1")).toBe(1);
+  });
+
+  it("is idempotent: recomputing from stored state gives the same answer twice", () => {
+    // Spec §5 requires this. It is what makes a repeated manual trigger safe.
+    const day = [item("h1", "2026-08-18#gpt6"), item("h2", "2026-08-18#gpt6")];
+    expect([...countCorroboration(day)]).toEqual([...countCorroboration(day)]);
   });
 });
 ```
@@ -1952,24 +2096,32 @@ describe("countCorroboration", () => {
 `src/lib/rank/corroboration.ts`:
 
 ```ts
-import type { RankingEntry } from "./reconcile.js";
-
 /**
  * How many of today's articles cover the same story as each article.
+ *
+ * Takes the day's STORED items, not the current run's reconcile map. Spec §5: "At the end of
+ * each run the day partition is re-read once and corroborationToday recomputed for the whole
+ * day, making it consistent and idempotent under repeated manual triggers." Deriving it from
+ * the run's own map instead would give a second run a different answer than the first, and
+ * would miss articles ranked on an earlier run of the same day.
  *
  * `__self__:`-prefixed ids are singletons by construction (spec §4) and each already contains
  * its own hash, so they never collide — but this counts them explicitly as 1 rather than
  * relying on that, because the invariant is what matters and a future change to the prefix
  * scheme should not silently inflate the signal.
  */
-export function countCorroboration(byHash: Map<string, RankingEntry>): Map<string, number> {
+export function countCorroboration(items: Record<string, unknown>[]): Map<string, number> {
   const sizes = new Map<string, number>();
-  for (const { clusterId } of byHash.values()) {
-    sizes.set(clusterId, (sizes.get(clusterId) ?? 0) + 1);
+  for (const item of items) {
+    const clusterId = typeof item.clusterId === "string" ? item.clusterId : "";
+    if (clusterId) sizes.set(clusterId, (sizes.get(clusterId) ?? 0) + 1);
   }
   const out = new Map<string, number>();
-  for (const [hash, entry] of byHash) {
-    out.set(hash, entry.clusterId.startsWith("__self__:") ? 1 : (sizes.get(entry.clusterId) ?? 1));
+  for (const item of items) {
+    const hash = String(item.pk ?? "").slice("ART#".length);
+    const clusterId = typeof item.clusterId === "string" ? item.clusterId : "";
+    if (!clusterId || clusterId.startsWith("__self__:")) out.set(hash, 1);
+    else out.set(hash, sizes.get(clusterId) ?? 1);
   }
   return out;
 }
@@ -1994,9 +2146,29 @@ import { docClient } from "../lib/store/client.js";
 export interface RankSummary {
   day: string;
   ranked: number;
+  /** How many articles the model actually returned an entry for. */
+  llmRanked: number;
+  /** How many were cut by RANK_INPUT_CAP and never reached the model at all. */
+  truncated: number;
   status: "complete" | "partial";
-  llmStatus: "ok" | "failed";
+  llmStatus: "ok" | "failed" | "truncated";
   backedUp: boolean;
+}
+
+/**
+ * The ordering score used to choose which articles reach the model.
+ *
+ * Deliberately recomputed rather than read from the item: stored scores mix a degraded score
+ * frozen at first capture with a real score from an earlier ranking, so sorting by them
+ * selects on write history instead of on importance.
+ */
+function degradedScore(c: { category: string; points: number | null; publishedAt: string | null },
+                       now: Date): number {
+  return computeScore({
+    llmImportance: null, category: c.category as never, corroborationToday: null,
+    points: c.points, publishedAt: c.publishedAt,
+    ingestedAt: now.toISOString(), now,
+  }).score;
 }
 
 /**
@@ -2025,7 +2197,7 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
   if (stored.length === 0) {
     // Nothing captured. Recording a complete day with zero articles is wrong — it would make
     // the feed show an empty day as authoritative. Leave no META#DAY at all.
-    return { day, ranked: 0, status: "partial", llmStatus: "ok", backedUp: false };
+    return { day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok", backedUp: false };
   }
 
   const candidates = stored.map((a) => ({
@@ -2038,69 +2210,126 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
     points: (a.points as number | null) ?? null,
   }));
 
-  let byHash = new Map<string, ReturnType<typeof reconcile>["byHash"] extends Map<string, infer V> ? V : never>();
-  let llmStatus: "ok" | "failed" = "ok";
+  // ---- Acquire the day lock (spec §9) ----------------------------------------------
+  // Reserved concurrency of 1 stops two SCHEDULED runs overlapping, but a manual
+  // `{ day }` invocation from the console bypasses nothing and would interleave two
+  // different clusterings into one day partition, each reporting "complete". The lock is
+  // the second half of that requirement. It expires so a killed run cannot wedge the day
+  // permanently.
+  const runId = now.toISOString();
+  const lockExpiry = new Date(now.getTime() + 20 * 60 * 1000).toISOString();
   try {
-    const outcome = await rankArticles(candidates);
+    await client.send(new PutCommand({
+      TableName: table,
+      Item: { pk: "META#lock", sk: day, runId, expiresAt: lockExpiry },
+      ConditionExpression: "attribute_not_exists(pk) OR expiresAt < :now",
+      ExpressionAttributeValues: { ":now": runId },
+    }));
+  } catch {
+    console.warn("another rank run holds this day", { day });
+    return { day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok", backedUp: false };
+  }
+
+  // ---- Phase 1: ask the model, write enrichment only -----------------------------------
+  let byHash = new Map<string, RankingEntry>();
+  let llmStatus: "ok" | "failed" | "truncated" = "ok";
+  let truncated = 0;
+
+  // Rank the top N by a score recomputed NOW, not by the stored score. Stored scores mix two
+  // scales — a degraded score frozen at first capture for unranked articles, a real score for
+  // articles ranked on an earlier day — so slicing by them selects on write history rather
+  // than on importance.
+  const ordered = [...candidates].sort((a, b) =>
+    degradedScore(b, now) - degradedScore(a, now));
+
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), BEDROCK_ABORT_MS);
+  try {
+    const outcome = await rankArticles(ordered, { signal: controller.signal });
+    truncated = outcome.truncated;
     const r = reconcile(outcome.inputHashes, outcome.response);
     byHash = r.byHash;
     console.log("reconciled", {
       matched: r.matched, missing: r.missing, unknown: r.unknown,
-      withoutCluster: r.withoutCluster, withoutRationale: r.withoutRationale,
-      truncated: outcome.truncated,
+      withoutCluster: r.withoutCluster, withoutRationale: r.withoutRationale, truncated,
     });
   } catch (e) {
-    // Degraded mode. Every article keeps the score capture gave it; nothing is destroyed
-    // because buildRankUpdate omits null fields rather than writing them.
-    llmStatus = "failed";
-    console.error("ranking failed, falling back to degraded scores", {
-      message: e instanceof Error ? e.message : "unknown",
+    // Truncation is NOT an outage. It means we were billed for the full 32k cap and got
+    // unusable output; folding it into the generic failure branch is what spec §6 forbids,
+    // because the two need different responses (shrink the batch vs wait for Bedrock).
+    llmStatus = e instanceof TruncationError ? "truncated" : "failed";
+    console.error("ranking did not produce a usable result", {
+      reason: llmStatus, message: e instanceof Error ? e.message : "unknown",
     });
+  } finally {
+    clearTimeout(abortTimer);
   }
 
-  const corroboration = countCorroboration(byHash);
-  let ranked = 0;
-
-  for (const c of candidates) {
-    const entry = byHash.get(c.urlHash) ?? null;
-    const corr = corroboration.get(c.urlHash) ?? null;
-    const { score, scoreVersion } = computeScore({
-      llmImportance: entry?.importance ?? null,
-      category: c.category as never,
-      corroborationToday: corr,
-      points: c.points,
-      publishedAt: c.publishedAt,
-      ingestedAt: (stored.find((s) => String(s.pk).endsWith(c.urlHash))?.firstSeenAt as string) ?? now.toISOString(),
-      now,
-    });
-
+  for (const [hash, entry] of byHash) {
     try {
       await client.send(new UpdateCommand(buildRankUpdate(table, {
-        urlHash: c.urlHash,
-        llmImportance: entry?.importance ?? null,
-        whyItMatters: entry?.whyItMatters ?? null,
-        clusterId: entry?.clusterId ?? null,
-        corroborationToday: corr,
-        score,
-        scoreVersion,
+        urlHash: hash,
+        llmImportance: entry.importance,
+        whyItMatters: entry.whyItMatters,
+        // Namespaced per spec §5 so a slug reused on a later day cannot merge two days'
+        // stories. `__self__:` ids already carry their own hash and are left alone.
+        clusterId: entry.clusterId.startsWith("__self__:")
+          ? entry.clusterId
+          : `${day}#${entry.clusterId}`,
+        corroborationToday: null,   // computed in phase 2, from stored state
+        score: null,
+        scoreVersion: null,
       })));
-      ranked += 1;
     } catch {
-      console.error("rank write failed", { urlHash: c.urlHash });
+      console.error("enrichment write failed", { urlHash: hash });
     }
   }
 
+  // ---- Phase 2: re-read the day, then score the WHOLE day ------------------------------
+  // Spec §5: "At the end of each run the day partition is re-read once and corroborationToday
+  // recomputed for the whole day, making it consistent and idempotent under repeated manual
+  // triggers." Deriving corroboration from stored state rather than from this run's map is
+  // what makes a second run produce the same answer as the first.
+  const afterEnrichment = await queryDay(client, table, day);
+  const corroboration = countCorroboration(afterEnrichment);
+
+  let ranked = 0;
+  for (const item of afterEnrichment) {
+    const hash = String(item.pk).slice("ART#".length);
+    const { score, scoreVersion } = computeScore({
+      llmImportance: (item.llmImportance as number | null) ?? null,
+      category: item.category as never,
+      corroborationToday: corroboration.get(hash) ?? null,
+      points: (item.points as number | null) ?? null,
+      publishedAt: (item.publishedAt as string | null) ?? null,
+      ingestedAt: (item.firstSeenAt as string) ?? runId,
+      now,
+    });
+    try {
+      await client.send(new UpdateCommand(buildRankUpdate(table, {
+        urlHash: hash,
+        llmImportance: null, whyItMatters: null, clusterId: null,
+        corroborationToday: corroboration.get(hash) ?? null,
+        score, scoreVersion,
+      })));
+      ranked += 1;
+    } catch {
+      console.error("score write failed", { urlHash: hash });
+    }
+  }
+
+  // ---- Phase 3: back up, then publish the day -------------------------------------------
   let backedUp = false;
   if (tokenParam && repo) {
     const ssm = new SSMClient({});
-    const result = await backupDay(day, stored, {
+    const result = await backupDay(day, afterEnrichment, {
       fetch,
       repo,
       getToken: async () => {
-        const p = await ssm.send(new GetParameterCommand({
+        const parameter = await ssm.send(new GetParameterCommand({
           Name: tokenParam, WithDecryption: true,
         }));
-        const v = p.Parameter?.Value;
+        const v = parameter.Parameter?.Value;
         if (!v) throw new Error("github token parameter is empty");
         return v;
       },
@@ -2109,16 +2338,25 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
     if (!result.ok) console.error("backup failed", { error: result.error });
   }
 
+  // `complete` means every article in the day was scored AND every one of them was seen by
+  // the model. Reporting `complete` for a day where 450 of 650 articles never reached Bedrock
+  // would make the cap invisible in the data model — `truncated` is persisted for the same
+  // reason, so the gap is inspectable without reading a log.
+  const llmRanked = byHash.size;
+  const status: "complete" | "partial" =
+    ranked === afterEnrichment.length && truncated === 0 && llmStatus === "ok"
+      ? "complete"
+      : "partial";
+
   // Written LAST, after every article. A run that dies before this leaves the day without a
   // META#DAY pointer, so readers never observe a partially-written day. Spec §4.
-  const status: "complete" | "partial" = ranked === candidates.length ? "complete" : "partial";
   await client.send(new PutCommand(buildDayMetaPut(table, {
-    day, status, articleCount: ranked,
-    runId: now.toISOString(),
+    day, status, articleCount: ranked, llmRanked, truncated, llmStatus,
+    runId,
     completedAt: new Date().toISOString(),
   })));
 
-  return { day, ranked, status, llmStatus, backedUp };
+  return { day, ranked, llmRanked, truncated, status, llmStatus, backedUp };
 }
 ```
 
@@ -2324,17 +2562,20 @@ it("runs capture hourly", () => {
 - [ ] **Step 2: Write `infra/lib/functions.ts`**
 
 ```ts
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { NodejsFunction, OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as scheduler from "aws-cdk-lib/aws-scheduler";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import type * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+// Imported, never re-typed. Two independent string literals for the same model drift apart
+// on the next model bump and the drift shows up as an IAM denial, not a compile error.
+import { RANK_MODEL } from "../../src/lib/rank/bedrock.js";
 
-const MODEL_ID = "global.anthropic.claude-sonnet-4-6";
+const BARE_MODEL = RANK_MODEL.replace(/^global\./, "");
 
 export interface FunctionsProps {
   table: dynamodb.TableV2;
@@ -2345,18 +2586,31 @@ export interface FunctionsProps {
 export class Functions extends Construct {
   readonly capture: NodejsFunction;
   readonly rank: NodejsFunction;
+  readonly vercel: iam.User;
 
   constructor(scope: Construct, id: string, props: FunctionsProps) {
     super(scope, id);
-    const region = Stack.of(this).region;
-    const account = Stack.of(this).account;
+    const { region, account } = Stack.of(this);
+
+    // An explicit log group per function. CDK's default execution role attaches
+    // AWSLambdaBasicExecutionRole, which grants logs on `arn:aws:logs:*:*:*`; spec §9 asks for
+    // "the function's own log group". Declaring the group also makes retention a property of
+    // the group rather than of the deprecated `logRetention` custom resource.
+    const logGroup = (name: string) =>
+      new logs.LogGroup(this, `${name}Logs`, {
+        retention: logs.RetentionDays.TWO_WEEKS,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
 
     const common = {
       runtime: lambda.Runtime.NODEJS_22_X,
-      architecture: lambda.Architecture.ARM_64,   // cheaper per ms, same code
-      logRetention: logs.RetentionDays.TWO_WEEKS,
+      architecture: lambda.Architecture.ARM_64,   // cheaper per ms, identical code
       environment: { TABLE_NAME: props.table.tableName },
-      bundling: { format: "esm" as never, target: "node22" },
+      bundling: { format: OutputFormat.ESM, target: "node22" },
+      // Left at the default (externalize @aws-sdk/*, use the runtime-provided SDK). Note the
+      // consequence: production runs whatever SDK version nodejs22.x ships, not the version
+      // pinned in package.json and exercised by the tests. Set `bundleAwsSDK: true` if that
+      // divergence ever matters more than the ~10 MB of bundle it costs.
     };
 
     this.capture = new NodejsFunction(this, "CaptureFunction", {
@@ -2364,16 +2618,29 @@ export class Functions extends Construct {
       entry: "src/lambda/capture.ts",
       timeout: Duration.minutes(3),
       memorySize: 512,
+      logGroup: logGroup("Capture"),
+      // Capture is reachable from a public route. Retrying a failed fetch pass costs nothing
+      // and helps; it is set explicitly so it is a decision rather than a default.
+      retryAttempts: 1,
     });
 
     this.rank = new NodejsFunction(this, "RankFunction", {
       ...common,
       entry: "src/lambda/rank.ts",
-      // One Bedrock call over ~200 articles with adaptive thinking. Well under the 15-minute
-      // Lambda ceiling, but far above the 60s Vercel cap — which is why ranking is here and
-      // not behind /api/ingest.
-      timeout: Duration.minutes(10),
+      // 900s, with the Bedrock call aborted at ~600s from inside the handler. Spec §6: a
+      // Lambda timeout kills the execution environment with NO catchable signal, so a timeout
+      // set equal to the abort point means the degraded-mode fallback can never run. The
+      // margin between 600s and 900s is what lets the handler finish writing degraded scores.
+      timeout: Duration.minutes(15),
       memorySize: 1024,
+      logGroup: logGroup("Rank"),
+      // Spec §9: reserved concurrency of 1, so a manual trigger and the schedule cannot
+      // interleave and write two incompatible clusterings into one day partition.
+      reservedConcurrentExecutions: 1,
+      // ZERO, deliberately. Lambda's default of 2 async retries means a hard kill re-bills the
+      // same ~$0.50 Bedrock call up to three times, with no META#DAY written for the day at
+      // all. Ranking is safe to re-run manually; it is not safe to re-run invisibly.
+      retryAttempts: 0,
       environment: {
         ...common.environment,
         BACKUP_REPO: props.backupRepo,
@@ -2381,27 +2648,61 @@ export class Functions extends Construct {
       },
     });
 
-    // Capture writes articles and the run record. No read of the index, no delete, no scan.
+    // --- DynamoDB, key-scoped ---
+    // Without a LeadingKeys condition, `PutItem` on the table ARN lets a compromised function
+    // overwrite ANY article wholesale — precisely the damage spec §4's "UpdateItem, never
+    // PutItem" rule exists to prevent — and forge META#DAY. The condition binds each role to
+    // the key prefixes its own code actually writes.
+    //
+    // VERIFY AT IMPLEMENTATION TIME: run capture once and confirm it writes. A LeadingKeys
+    // condition that matches nothing denies silently, and a policy that denies everything
+    // looks exactly like a policy that is working until you check the table.
     this.capture.addToRolePolicy(new iam.PolicyStatement({
-      actions: ["dynamodb:UpdateItem", "dynamodb:PutItem"],
+      actions: ["dynamodb:UpdateItem"],
       resources: [props.table.tableArn],
+      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["ART#*"] } },
+    }));
+    this.capture.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["dynamodb:PutItem"],
+      resources: [props.table.tableArn],
+      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#lastRun"] } },
     }));
 
-    // Rank additionally reads the day partition through the index.
     this.rank.addToRolePolicy(new iam.PolicyStatement({
-      actions: ["dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:Query"],
-      resources: [props.table.tableArn, `${props.table.tableArn}/index/feed-by-day`],
+      actions: ["dynamodb:UpdateItem"],
+      resources: [props.table.tableArn],
+      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["ART#*"] } },
+    }));
+    this.rank.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["dynamodb:PutItem"],
+      resources: [props.table.tableArn],
+      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#DAY", "META#lock"] } },
+    }));
+    this.rank.addToRolePolicy(new iam.PolicyStatement({
+      // Query against the index needs the index ARN — spec §9 says "table ARN only", which is
+      // true for WRITES (they propagate to GSIs automatically) but not for an index Query.
+      actions: ["dynamodb:Query"],
+      resources: [`${props.table.tableArn}/index/feed-by-day`],
+      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DAY#*"] } },
     }));
 
-    // A `global.` inference profile routes across regions, so the underlying foundation-model
-    // ARN must be allowed in every region it may land in — hence the `*` in the region
-    // position of the second ARN. The model id itself stays pinned.
+    // --- Bedrock, profile-scoped ---
+    // The InferenceProfileArn condition is NOT optional. Without it the foundation-model ARN
+    // in the resource list also authorises DIRECT on-demand invocation of the bare model,
+    // bypassing the `global.` profile entirely — the permission fails OPEN, not closed. AWS's
+    // own documentation uses this condition for exactly this global-profile scenario.
+    const profileArn = `arn:aws:bedrock:${region}:${account}:inference-profile/${RANK_MODEL}`;
     this.rank.addToRolePolicy(new iam.PolicyStatement({
       actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       resources: [
-        `arn:aws:bedrock:${region}:${account}:inference-profile/${MODEL_ID}`,
-        `arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6`,
+        profileArn,
+        // Every region the profile can route to. Omitting them produces INTERMITTENT
+        // AccessDeniedException that fails only when a request happens to route to an
+        // unlisted region — the non-determinism is what pushes people to attach
+        // AmazonBedrockFullAccess. Spec §9.
+        `arn:aws:bedrock:*::foundation-model/${BARE_MODEL}`,
       ],
+      conditions: { StringEquals: { "bedrock:InferenceProfileArn": profileArn } },
     }));
 
     ssm.StringParameter.fromSecureStringParameterAttributes(this, "GithubToken", {
@@ -2420,6 +2721,8 @@ export class Functions extends Construct {
       scheduleExpressionTimezone: "Europe/Istanbul",
       target: { arn: this.rank.functionArn, roleArn: this.schedulerRole(this.rank).roleArn },
     });
+
+    this.vercel = this.vercelReader(props.table);
   }
 
   private schedulerRole(fn: lambda.IFunction): iam.Role {
@@ -2429,41 +2732,80 @@ export class Functions extends Construct {
     fn.grantInvoke(role);
     return role;
   }
+
+  private vercelReader(table: dynamodb.TableV2): iam.User {
+    const user = new iam.User(this, "VercelReader");
+    user.addToPolicy(new iam.PolicyStatement({
+      actions: ["dynamodb:Query", "dynamodb:GetItem"],
+      resources: [table.tableArn, `${table.tableArn}/index/*`],
+    }));
+    // Capture only, never rank. Spec §2: a refresh path that reaches ranking lets a stuck
+    // finger — or a leaked secret — spend the credit balance.
+    user.addToPolicy(new iam.PolicyStatement({
+      actions: ["lambda:InvokeFunction"],
+      resources: [this.capture.functionArn],
+    }));
+    return user;
+  }
 }
 ```
 
-- [ ] **Step 3: Add the Vercel reader user**
+**No access key is created here, deliberately.** A `CfnAccessKey`'s secret is surfaced as a
+stack Output, readable by anyone holding `cloudformation:DescribeStacks` — and it persists in
+stack state long after the credential should have been rotated. (`GetTemplate` is *not* the
+vector: it returns declarations, not resolved Output values.) The runbook has a human mint the
+key in the console and paste it straight into Vercel.
 
-Spec §9. The Next.js app reads the feed directly and triggers capture; it must be incapable
-of anything else. Append to `infra/lib/functions.ts`:
+**Consequence to carry into the runbook:** because the key is minted outside CDK, it is
+invisible to `cdk diff`. Anything that forces replacement of the `VercelReader` user construct
+silently destroys the key with no warning, and the site starts returning errors.
 
-```ts
-const vercel = new iam.User(this, "VercelReader");
-
-vercel.addToPolicy(new iam.PolicyStatement({
-  actions: ["dynamodb:Query", "dynamodb:GetItem"],
-  resources: [props.table.tableArn, `${props.table.tableArn}/index/*`],
-}));
-
-// Capture only. Never rank. Spec §2: a refresh button that can reach the ranking path lets
-// a stuck finger — or a leaked secret — spend the credit balance.
-vercel.addToPolicy(new iam.PolicyStatement({
-  actions: ["lambda:InvokeFunction"],
-  resources: [this.capture.functionArn],
-}));
-```
-
-**No access key is created here, deliberately.** A `CfnAccessKey` puts the secret into the
-CloudFormation template and its outputs, where it is readable by anyone with
-`cloudformation:GetTemplate` and lands in state that outlives the credential. The runbook has
-a human mint it in the console and paste it straight into Vercel.
-
-Tests to add:
+- [ ] **Step 3: Add the tests for the conditions and the Vercel user**
 
 ```ts
+it("scopes each role to the key prefixes its own code writes", () => {
+  // Without this, PutItem on the table ARN lets a compromised role overwrite any article
+  // wholesale and forge META#DAY.
+  const doc = capturePolicyDocument();
+  const put = doc.Statement.find((s: any) => String(s.Action).includes("PutItem"))!;
+  expect(JSON.stringify(put.Condition)).toContain("META#lastRun");
+  const upd = doc.Statement.find((s: any) => String(s.Action).includes("UpdateItem"))!;
+  expect(JSON.stringify(upd.Condition)).toContain("ART#");
+});
+
+it("binds the bedrock grant to the inference profile, so it cannot fail open", () => {
+  // Without the condition the foundation-model ARN also authorises direct on-demand
+  // invocation of the bare model, bypassing the global profile.
+  const stmt = rankPolicyDocument().Statement.find((s: any) => String(s.Action).includes("bedrock"))!;
+  expect(JSON.stringify(stmt.Condition)).toContain("bedrock:InferenceProfileArn");
+});
+
+it("gives each function its own log group rather than logs on every log group", () => {
+  const template_ = template();
+  expect(Object.keys(template_.findResources("AWS::Logs::LogGroup"))).toHaveLength(2);
+});
+
+it("caps rank at one concurrent execution and zero async retries", () => {
+  // Concurrency: spec §9 — two interleaved runs write two incompatible clusterings into one
+  // day. Retries: a hard kill would otherwise re-bill the same ~$0.50 Bedrock call 3x.
+  template().hasResourceProperties("AWS::Lambda::Function", {
+    ReservedConcurrentExecutions: 1,
+  });
+  template().hasResourceProperties("AWS::Lambda::EventInvokeConfig", {
+    MaximumRetryAttempts: 0,
+  });
+});
+
+it("leaves the rank timeout well above the in-handler abort point", () => {
+  // 900s Lambda vs 600s abort. Equal values mean the degraded fallback never runs, because a
+  // Lambda timeout kills the environment with no catchable signal.
+  const fns = Object.values(template().findResources("AWS::Lambda::Function"));
+  const rank = fns.find((f) => JSON.stringify(f).includes("rank"))!;
+  expect(rank.Properties.Timeout).toBeGreaterThan(600);
+});
+
 it("gives the Vercel user no write and no bedrock permission", () => {
-  const doc = vercelPolicyDocument();
-  const json = JSON.stringify(doc);
+  const json = JSON.stringify(vercelPolicyDocument());
   for (const forbidden of ["bedrock", "dynamodb:PutItem", "dynamodb:UpdateItem",
                            "dynamodb:DeleteItem", "dynamodb:Scan"]) {
     expect(json, forbidden).not.toContain(forbidden);
@@ -2479,18 +2821,97 @@ it("lets the Vercel user invoke capture but not rank", () => {
 it("creates no access key in the template", () => {
   expect(Object.keys(template().findResources("AWS::IAM::AccessKey"))).toHaveLength(0);
 });
+
+it("gives neither function permission to delete table items", () => {
+  for (const doc of [capturePolicyDocument(), rankPolicyDocument()]) {
+    expect(JSON.stringify(doc)).not.toContain("dynamodb:DeleteItem");
+    expect(JSON.stringify(doc)).not.toContain("dynamodb:Scan");
+  }
+});
 ```
 
-- [ ] **Step 4: Wire it into the stack, run the tests, and synth**
+- [ ] **Step 4: Wire everything into the stack**
+
+The stack composition was previously left implicit. Write it out — and note that
+`backupRepo` and `githubTokenParam` are required with no defaults, so they must be sourced
+explicitly like `alertEmail` is:
+
+```ts
+// infra/lib/ai-news-stack.ts
+import { Stack, type StackProps } from "aws-cdk-lib";
+import type { Construct } from "constructs";
+import { ArticleTable } from "./table.js";
+import { Functions } from "./functions.js";
+import { Monitoring } from "./monitoring.js";
+
+export interface AiNewsStackProps extends StackProps {
+  alertEmail: string;
+  backupRepo: string;
+  githubTokenParam: string;
+}
+
+export class AiNewsStack extends Stack {
+  readonly articleTable: ArticleTable;
+
+  constructor(scope: Construct, id: string, props: AiNewsStackProps) {
+    super(scope, id, props);
+
+    this.articleTable = new ArticleTable(this, "Articles");
+
+    const functions = new Functions(this, "Functions", {
+      table: this.articleTable.table,
+      backupRepo: props.backupRepo,
+      githubTokenParam: props.githubTokenParam,
+    });
+
+    new Monitoring(this, "Monitoring", {
+      capture: functions.capture,
+      rank: functions.rank,
+      alertEmail: props.alertEmail,
+    });
+  }
+}
+```
+
+```ts
+// infra/bin/ai-news.ts
+import { App } from "aws-cdk-lib";
+import { AiNewsStack } from "../lib/ai-news-stack.js";
+
+const app = new App();
+
+/** Fails loudly rather than deploying a stack with no alert subscriber or no backup target. */
+function required(key: string): string {
+  const v = app.node.tryGetContext(key);
+  if (typeof v !== "string" || v.length === 0) {
+    throw new Error(`missing required context: -c ${key}=<value>`);
+  }
+  return v;
+}
+
+new AiNewsStack(app, "AiNewsStack", {
+  // Account and region come from the environment so moving accounts is a profile change,
+  // not a code change. Spec §2, portability.
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: process.env.CDK_DEFAULT_REGION ?? "eu-central-1",
+  },
+  alertEmail: required("alertEmail"),
+  backupRepo: app.node.tryGetContext("backupRepo") ?? "EienMosu/ai-news",
+  githubTokenParam: app.node.tryGetContext("githubTokenParam") ?? "/ai-news/github-token",
+});
+```
+
+The `AiNewsStack` in Task 3's tests must be updated to pass the three new props.
+
+- [ ] **Step 5: Run the tests and synth**
 
 ```bash
-pnpm vitest run tests/infra && pnpm synth
+pnpm vitest run tests/infra
+pnpm synth -c alertEmail=someone@example.com
 ```
 
-`cdk synth` must succeed with **no deploy**. If `NodejsFunction` bundling fails because
-esbuild is missing, `pnpm add -D esbuild`.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add infra tests/infra package.json pnpm-lock.yaml
@@ -2541,7 +2962,7 @@ it("sets budget thresholds above expected spend, not at zero", () => {
 - [ ] **Step 2: Write `infra/lib/monitoring.ts`**
 
 ```ts
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import * as budgets from "aws-cdk-lib/aws-budgets";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 import * as actions from "aws-cdk-lib/aws-cloudwatch-actions";
@@ -2588,10 +3009,21 @@ export class Monitoring extends Construct {
 
     // Thresholds sit above expected spend (~$10/month, essentially all Bedrock). A $5 budget
     // would fire during normal operation. Spec §8.
-    for (const [name, amount] of [["ai-news-warning", 15], ["ai-news-investigate", 30]] as const) {
-      new budgets.CfnBudget(this, name, {
+    // Budget names are unique per ACCOUNT, not per stack, so a hardcoded name makes a second
+    // deploy of this template into the same account fail. Derived from the stack name instead.
+    const stackName = Stack.of(this).stackName;
+    for (const [suffix, amount] of [["warning", 15], ["investigate", 30]] as const) {
+      new budgets.CfnBudget(this, `Budget${suffix}`, {
         budget: {
-          budgetName: name,
+          budgetName: `${stackName}-${suffix}`,
+          // Deliberately NOT tag-scoped. A cost-allocation tag filter is more precise, but the
+          // tag must first be activated by hand in the Billing console and takes up to 24h to
+          // take effect — until then the filter matches nothing and the budget is silently
+          // dead. A budget that does not fire is worse than one that is slightly broad, which
+          // is the same principle that set these thresholds at $15/$30 instead of $5.
+          // This account holds one unrelated resource (a HelloWorld Lambda costing ~$0), so
+          // account-wide and stack-scoped are equivalent here in practice. Revisit if the
+          // account ever runs a second real workload.
           budgetType: "COST",
           timeUnit: "MONTHLY",
           budgetLimit: { amount, unit: "USD" },
@@ -2762,13 +3194,28 @@ Must contain, in order:
     access key → paste directly into Vercel's environment variables. Do not write it to a
     file, and do not echo it. The CDK stack deliberately does not create it (see Task 8).
 
-**Known conflicts to resolve on first deploy**
-- The account already has `My Zero-Spend Budget` ($1). Bedrock has no always-free tier, so
-  **it will fire on the first ranked day.** Decide whether to delete it or raise it — this plan
-  deliberately does not touch budgets it did not create.
-- `My Monthly Cost Budget 10USD` sits below this system's expected ~$10/month and will also
-  fire. Same decision.
-- An unrelated `HelloWorld` Lambda exists. The alarms here are per-function and ignore it.
+    ⚠️ **The key is invisible to CDK.** Because it is minted outside the stack, `cdk diff`
+    will never mention it. Any change that forces replacement of the `VercelReader` user
+    construct destroys the key silently, and the site begins returning errors with no
+    deployment warning. If you ever rename or move that construct, re-mint the key and update
+    Vercel in the same change.
+
+**GO / NO-GO before step 4 — resolve the two pre-existing budgets**
+
+This is a gate, not a footnote. Both will misfire *every month under normal operation*, and a
+budget alert that cries wolf monthly is ignored within a week — which is exactly the state in
+which a real overspend goes unnoticed.
+
+- `My Zero-Spend Budget` ($1). Bedrock has **no always-free tier**, so this fires on the first
+  ranked day, permanently.
+- `My Monthly Cost Budget 10USD` ($10). This system is expected to cost **$12–18/month**, so
+  this fires most months.
+
+Decide for each: delete, raise, or knowingly accept the monthly noise. This plan deliberately
+does not touch budgets it did not create — they are yours. Record the decision, then deploy.
+
+An unrelated `HelloWorld` Lambda also exists. The CloudWatch alarms here are per-function and
+ignore it; the budgets are account-wide and will include it (it costs ~$0).
 
 **Rollback**
 - `pnpm cdk destroy` removes the functions, schedules, alarms and budgets.
@@ -2819,3 +3266,57 @@ git commit -m "feat: add the smoke script and the deployment runbook"
    to be marked "new since last ranking" rather than mixed silently into the ranking.
 3. `clusterId` starting with `__self__:` is not a cluster — show no cluster affordance.
 4. The feed reads `META#DAY` → `queryDay`. It must never compute a date itself (spec §4).
+5. `getLatestCompleteDay` may return a `partial` day when no complete one exists in the last
+   30. Read `status`, `llmRanked` and `truncated` off the `META#DAY` item and say so in the UI
+   rather than presenting a partial day as final.
+6. **Spec §9's per-day run counter for `/api/ingest` cannot live in the Vercel layer.**
+   `VercelReader` has no write permission at all, by design. The counter must be implemented
+   inside the capture Lambda, which is the only thing on that path that can write.
+
+---
+
+## Revision 2 — what four independent reviews and one re-reading changed
+
+Plan 2 was reviewed by four subagents on separate axes (CDK correctness, IAM/security,
+operational correctness, cost) and re-read by its author against spec §6 line by line. Every
+finding below was verified before it was accepted; several were verified by running something.
+
+**Reverted to the spec.** Task 4 had drifted from spec §6 because it was written partly from
+memory of the architecture rather than from the spec text: a forced tool call instead of
+`output_config.format`, `.create()` instead of `.stream()`, no `stop_reason === "max_tokens"`
+branch, and no `effort: "medium"`. The truncation branch is the serious one — without it a
+truncated run is billed for the full 32k cap, returns unusable JSON, and still reports success,
+which is precisely the "looks identical to an outage" failure spec §6 names. Two of these four
+were found independently by the cost reviewer, from a different direction.
+
+**The score-reversion defect.** `buildCaptureUpdate` wrote `score`/`gsi1sk` unconditionally, so
+hourly capture reverted every already-ranked article's position back to its degraded score an
+hour after ranking. Enrichment survived; the ordering did not. Task 2 had the `if_not_exists`
+rules written correctly and then defeated them by putting score in the always-write group.
+
+**Spec requirements that had been dropped entirely.** §9's reserved-concurrency-plus-lock;
+§9's scoped log group; §5's `<ingestDay>#` cluster namespace; and §5's end-of-run re-read that
+recomputes `corroborationToday` for the whole day — the last is the spec's actual idempotency
+mechanism, and without it a second rank run on the same day silently produces different
+corroboration for every article.
+
+**IAM that failed open.** The Bedrock statement lacked a `bedrock:InferenceProfileArn`
+condition, so the foundation-model ARN also authorised direct on-demand invocation of the bare
+model, bypassing the `global.` profile. DynamoDB grants had no `LeadingKeys` condition, so a
+compromised role could overwrite any article wholesale or forge `META#DAY`.
+
+**Money.** `retryAttempts: 0` on rank, because Lambda's default 2× async retry re-bills the
+same ~$0.50 Bedrock call up to three times after a hard kill. The Lambda timeout moved from
+600s to 900s so it no longer equals the in-handler abort point — equal values mean the
+degraded fallback can never run. And the cost table is now a range with the thinking-token
+component labelled as the estimate it always was: **$12–18/month**, not the ~$10 first claimed.
+
+**Two things verified and deliberately left alone.** The ESM/type-stripping toolchain was run
+end to end and works. The spec's own "conditional put (`attribute_not_exists(pk)`)" line was
+checked against AWS's documented billing behaviour and **would not save money even if
+implemented** — so it should be deleted from the spec rather than built.
+
+**Corrected in this document.** The `CfnAccessKey` rationale cited `cloudformation:GetTemplate`
+as the exposure vector. That is wrong: `GetTemplate` returns declarations, not resolved Output
+values, and `DescribeStacks` is the actual vector. The conclusion is unchanged; a plan that
+argues from a false mechanism teaches the reader something untrue.
