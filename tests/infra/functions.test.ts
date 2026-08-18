@@ -64,6 +64,18 @@ describe("Functions", () => {
     });
   });
 
+  it("sets the rank schedule's own retry policy to zero, separate from the Lambda-side setting", () => {
+    // EventBridge Scheduler has ITS OWN retry policy, independent of the Lambda `retryAttempts:
+    // 0` asserted below -- a schedule redelivery after the day lock's 20-minute expiry would
+    // otherwise re-invoke (and re-bill Bedrock for) a day. Mutation: deleting `retryPolicy`
+    // from RankSchedule's target leaves this property absent (undefined, not 0).
+    const schedules = Object.values(template().findResources("AWS::Scheduler::Schedule"));
+    const rankSchedule = schedules.find(
+      (s: any) => s.Properties.ScheduleExpression === "cron(0 6 * * ? *)",
+    )!;
+    expect((rankSchedule as any).Properties.Target.RetryPolicy?.MaximumRetryAttempts).toBe(0);
+  });
+
   it("scopes each role to the key prefixes its own code writes", () => {
     // Without this, PutItem on the table ARN lets a compromised role overwrite any article
     // wholesale and forge META#DAY.
@@ -155,6 +167,18 @@ describe("Functions", () => {
     const json = JSON.stringify(vercelPolicyDocument());
     expect(json).toContain("CaptureFunction");
     expect(json).not.toContain("RankFunction");
+  });
+
+  it("scopes the vercel reader's GetItem to the base table only, since GetItem cannot target a GSI", () => {
+    // Fix 11 (final review, axis 1): GetItem paired with `${table.tableArn}/index/*` was
+    // inert (there is no such thing as GetItem against a GSI) but misleading to the next
+    // reader. Mutation: reverting to one statement granting both actions against both
+    // resources makes the GetItem statement's Resource include "index" again.
+    const doc = vercelPolicyDocument();
+    const getItem = doc.Statement.find((s: any) => String(s.Action).includes("GetItem"))!;
+    expect(JSON.stringify(getItem.Resource)).not.toContain("index");
+    const query = doc.Statement.find((s: any) => String(s.Action).includes("Query"))!;
+    expect(JSON.stringify(query.Resource)).toContain("index");
   });
 
   it("creates no access key in the template", () => {

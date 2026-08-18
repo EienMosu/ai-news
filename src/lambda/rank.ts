@@ -20,6 +20,13 @@ export interface RankSummary {
   llmRanked: number;
   /** How many were cut by RANK_INPUT_CAP and never reached the model at all. */
   truncated: number;
+  /**
+   * Phase-1 enrichment writes (model output -> DynamoDB) that failed. Unlike capture's
+   * `itemsFailed` or phase 2's own `ranked` undercount, this used to be logged and nothing
+   * else -- so a DynamoDB failure here silently discarded Bedrock output already paid for
+   * while the day still reported "complete". Nonzero forces `status: "partial"` below.
+   */
+  enrichmentFailed: number;
   status: "complete" | "partial";
   llmStatus: "ok" | "failed" | "truncated";
   backedUp: boolean;
@@ -71,7 +78,7 @@ function daysBefore(day: string, n: number): string {
   return istanbulDay(new Date(anchor.getTime() - n * 24 * 60 * 60 * 1000));
 }
 
-export async function handler(event?: { day?: string }): Promise<RankSummary> {
+export async function handler(event?: { day?: string; force?: boolean }): Promise<RankSummary> {
   const table = process.env.TABLE_NAME;
   const tokenParam = process.env.GITHUB_TOKEN_PARAM;
   const repo = process.env.BACKUP_REPO;
@@ -81,13 +88,34 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
   const day = event?.day ?? targetDay(now);
   const client = docClient();
 
+  // ---- Already-complete guard (final review, axis 5) ------------------------------------
+  // EventBridge Scheduler has its OWN retry policy (see infra/lib/functions.ts), separate from
+  // the Lambda-side `retryAttempts: 0`. This guard is the half of that fix that matters most:
+  // it is idempotent protection that does not depend on getting retry configuration right in
+  // two different places. Without it, a redelivery after the day lock's 20-minute expiry (or
+  // any other unexpected repeat invocation) would re-rank -- and re-bill Bedrock for -- a day
+  // that already finished successfully. `event.force` is the explicit human override, for
+  // someone who really does want to redo a day (e.g. after a data correction).
+  if (!event?.force) {
+    const recentMetas = await listDays(client, table, 30);
+    const already = recentMetas.find((m) => m.day === day);
+    if (already?.status === "complete") {
+      console.log("day already complete; skipping without calling Bedrock", { day });
+      return {
+        day, ranked: already.articleCount, llmRanked: already.llmRanked,
+        truncated: already.truncated, enrichmentFailed: 0, status: "complete",
+        llmStatus: already.llmStatus, backedUp: false, unrankedRecentDays: 0,
+      };
+    }
+  }
+
   const stored = await queryDay(client, table, day);
   if (stored.length === 0) {
     // Nothing captured. Recording a complete day with zero articles is wrong — it would make
     // the feed show an empty day as authoritative. Leave no META#DAY at all.
     return {
-      day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok",
-      backedUp: false, unrankedRecentDays: 0,
+      day, ranked: 0, llmRanked: 0, truncated: 0, enrichmentFailed: 0, status: "partial",
+      llmStatus: "ok", backedUp: false, unrankedRecentDays: 0,
     };
   }
 
@@ -130,16 +158,16 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
     if (name === "ConditionalCheckFailedException") {
       console.warn("another rank run holds this day", { day });
       return {
-        day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok",
-        backedUp: false, unrankedRecentDays: 0,
+        day, ranked: 0, llmRanked: 0, truncated: 0, enrichmentFailed: 0, status: "partial",
+        llmStatus: "ok", backedUp: false, unrankedRecentDays: 0,
       };
     }
     console.error("day lock write failed; not proceeding without knowing if we hold it", {
       day, error: name,
     });
     return {
-      day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "failed",
-      backedUp: false, unrankedRecentDays: 0,
+      day, ranked: 0, llmRanked: 0, truncated: 0, enrichmentFailed: 0, status: "partial",
+      llmStatus: "failed", backedUp: false, unrankedRecentDays: 0,
     };
   }
 
@@ -178,6 +206,13 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
       matched: r.matched, missing: r.missing, unknown: r.unknown,
       withoutCluster: r.withoutCluster, withoutRationale: r.withoutRationale, truncated,
     });
+    // Logged together with the day, not just left in the SDK's own types: thinking tokens are
+    // the entire difference between the $6 floor and the $16 ceiling for one call, so this is
+    // the one line that says which month we're having.
+    console.log("bedrock usage", {
+      day, inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens,
+      thinkingTokens: outcome.usage.thinkingTokens,
+    });
   } catch (e) {
     // Truncation is NOT an outage. It means we were billed for the full 32k cap and got
     // unusable output; folding it into the generic failure branch is what spec §6 forbids,
@@ -185,11 +220,19 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
     llmStatus = e instanceof TruncationError ? "truncated" : "failed";
     console.error("ranking did not produce a usable result", {
       reason: llmStatus, message: e instanceof Error ? e.message : "unknown",
+      // A TruncationError is the one failure that still carries a real cost -- the full 32k
+      // cap was billed even though the output was unusable, so its usage is worth logging too.
+      ...(e instanceof TruncationError ? { usage: e.usage } : {}),
     });
   } finally {
     clearTimeout(abortTimer);
   }
 
+  // Counted, not just logged: capture's `itemsFailed` and phase 2's own `ranked` undercount
+  // both surface a write failure in the run's returned summary; this loop used to be the one
+  // exception, so a DynamoDB failure here could silently discard Bedrock output already paid
+  // for while the day still reported "complete" (final review, axis 5).
+  let enrichmentFailed = 0;
   for (const [hash, entry] of byHash) {
     try {
       await client.send(new UpdateCommand(buildRankUpdate(table, {
@@ -206,6 +249,7 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
         scoreVersion: null,
       })));
     } catch {
+      enrichmentFailed += 1;
       console.error("enrichment write failed", { urlHash: hash });
     }
   }
@@ -268,8 +312,12 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
   // would make the cap invisible in the data model — `truncated` is persisted for the same
   // reason, so the gap is inspectable without reading a log.
   const llmRanked = byHash.size;
+  // `enrichmentFailed === 0` is its own condition, not folded into `llmStatus`: the model call
+  // can succeed outright (`llmStatus: "ok"`) while a handful of its writes still fail, and a
+  // day is not honestly "complete" while Bedrock output we already paid for was discarded.
   const status: "complete" | "partial" =
-    ranked === afterEnrichment.length && truncated === 0 && llmStatus === "ok"
+    ranked === afterEnrichment.length && truncated === 0 && llmStatus === "ok" &&
+    enrichmentFailed === 0
       ? "complete"
       : "partial";
 
@@ -308,5 +356,8 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
     console.error("gap check failed", { message: e instanceof Error ? e.message : "unknown" });
   }
 
-  return { day, ranked, llmRanked, truncated, status, llmStatus, backedUp, unrankedRecentDays };
+  return {
+    day, ranked, llmRanked, truncated, enrichmentFailed, status, llmStatus, backedUp,
+    unrankedRecentDays,
+  };
 }

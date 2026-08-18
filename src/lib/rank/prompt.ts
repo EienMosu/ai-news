@@ -75,6 +75,18 @@ export const RANKING_SCHEMA = {
   required: ["items"],
 };
 
+/**
+ * Names the sections actually present, generically -- the allocator in `allocate.ts` is
+ * already N-section generic and well tested; this used to be the one place in the pipeline
+ * that still assumed exactly two ("ai" and "design"), so a third section would have shipped
+ * with a prompt lying to the model about how many verticals it was scoring across.
+ */
+function describeSections(sections: string[]): string {
+  if (sections.length === 0) return "no sections";
+  if (sections.length === 1) return `one section: ${sections[0]}`;
+  return `${sections.length} sections: ${sections.join(", ")}`;
+}
+
 /** Ordinal ids keep 64-char hashes out of the token bill — see the cost table in the plan. */
 export function buildRankPrompt(candidates: RankCandidate[]): {
   text: string;
@@ -89,9 +101,10 @@ export function buildRankPrompt(candidates: RankCandidate[]): {
     return `${id} | ${c.section} | ${c.sourceName} (${c.category})${points}\n  ${c.title}\n  ${summary}`;
   });
 
+  const sections = [...new Set(candidates.map((c) => c.section))];
   const text =
-    `Here are ${candidates.length} articles captured today, spanning two sections: ai and ` +
-    `design. Score each one's importance within its OWN section, never against the other, ` +
+    `Here are ${candidates.length} articles captured today, spanning ${describeSections(sections)}. ` +
+    `Score each one's importance within its OWN section, never against the other, ` +
     `and group articles covering the same underlying story.\n\n` +
     `Return an entry for EVERY id below. Use the id exactly as written.\n\n` +
     lines.join("\n\n");

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel>
+        <title>Articles on Smashing Magazine — For Web Designers And Developers</title>
+        <link>https://www.smashingmagazine.com/</link>
+        <description>Recent content in Articles on Smashing Magazine — For Web Designers And Developers</description>
+        <lastBuildDate>Tue, 18 Aug 2026 14:43:39 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>manual</generator>
+        <language>en</language>
+        <image>
+            <title>Articles on Smashing Magazine — For Web Designers And Developers</title>
+            <url>https://www.smashingmagazine.com/images/favicon/app-icon-512x512.png</url>
+            <link>https://www.smashingmagazine.com/</link>
+        </image>
+        <copyright>All rights reserved 2026, Smashing Media AG</copyright>
+        <category>Development</category>
+        <category>Design</category>
+        <category>UX</category>
+        <category>Mobile</category>
+        <category>Front-end</category>
+        <atom:link href="https://www.smashingmagazine.com/feed/" rel="self" type="application/rss+xml"/>
+        <item>
+            <title><![CDATA[New EU Guidelines For AI Labelling]]></title>
+            <link>https://smashingmagazine.com/2026/08/eu-guidelines-ai-labelling/</link>
+            <guid>https://smashingmagazine.com/2026/08/eu-guidelines-ai-labelling/</guid>
+            <pubDate>Thu, 13 Aug 2026 10:00:00 GMT</pubDate>
+            <description><![CDATA[New EU guidelines, why AI sparkles aren’t enough, when AI labels are required, and what the rules mean for AI-powered features and products.]]></description>
+            <content:encoded><![CDATA[<p>There’s been a lot of confusion and panic this week about “huge fines”, “drastic measures” and <a href="https://commission.europa.eu/news-and-media/news/safer-and-more-transparent-ai-2026-08-02_en">“sweeping new AI rules” in the EU</a>. In reality, it’s a lot more narrow — and a lot more sensible. And mostly it’s about making AI more obvious when it actually needs to be obvious — especially for AI-generated content.</p>
+<p>Starting from <strong>Aug 2, 2026</strong>, AI labelling is a legal re]]></content:encoded>
+            <author>hello@smashingmagazine.com (Vitaly Friedman)</author>
+            <enclosure url="http://files.smashing.media/articles/eu-guidelines-ai-labelling/eu-guidelines-ai-labelling.jpg" length="0" type="image/jpg"/>
+        </item>
+<item>
+            <title><![CDATA[Building Tactile UX: Honoring Intentional Design With Lottie]]></title>
+            <link>https://smashingmagazine.com/2026/08/building-tactile-ux-honoring-intentional-design-lottie/</link>
+            <guid>https://smashingmagazine.com/2026/08/building-tactile-ux-honoring-intentional-design-lottie/</guid>
+            <pubDate>Tue, 11 Aug 2026 10:00:00 GMT</pubDate>
+            <description><![CDATA[When tasked with building a highly interactive, tactile web experience, the architecture must serve the art direction. In this article, Alexey Kopytin explains their architectural rationale for building a digital stress-relief squeeze toy game using Lottie animations, DOM events, and distance-based math to maintain absolute control over their designers’ intentional motion.]]></description>
+            <content:encoded><![CDATA[<p>This article is a sponsored by <a href="https://isadoradigitalagency.com/">Isadora Agency</a></p>
+<p>When front-end developers and UX engineers are tasked with building a web interface that feels tactile, bouncy, or destructive, the industry instinct is almost always the same: reach for a physics engine. Frameworks like Matter.js, Cannon.js, or custom WebGL solutions have become the gold standard for creating immersive, gamified websites.</p>
+<p>When our team at <a href="https://isadoradigita]]></content:encoded>
+            <author>hello@smashingmagazine.com (Alexey Kopytin)</author>
+            <enclosure url="http://files.smashing.media/articles/building-tactile-ux-honoring-intentional-design-lottie/building-tactile-ux-honoring-intentional-design-lottie.jpg" length="0" type="image/jpg"/>
+        </item>
+</channel></rss>

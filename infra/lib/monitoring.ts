@@ -62,6 +62,25 @@ export class Monitoring extends Construct {
       treatMissingData: cloudwatch.TreatMissingData.BREACHING,
     }).addAlarmAction(notify);
 
+    // Mirrors CaptureStopped above, for the same reason: a total ranking outage today costs
+    // nothing and pages no one, and the feed would simply stay degraded forever, looking like
+    // a quiet news period rather than a broken one.
+    //
+    // The period is NOT copied verbatim from CaptureStopped, and that is deliberate rather
+    // than an oversight: rank fires once a DAY (cron), not once an HOUR (rate). Reusing 25
+    // hours here would alarm after a single missed day, since a normal rolling 25-hour window
+    // around a daily schedule contains at most one invocation to begin with. 49 hours (two
+    // daily cycles plus a 1-hour buffer) is the daily-schedule analogue of CaptureStopped's
+    // 25-hour margin: it tolerates one missed run without paging, and still catches a genuine
+    // multi-day outage once two consecutive scheduled runs are both missing.
+    new cloudwatch.Alarm(this, "RankStopped", {
+      metric: props.rank.metricInvocations({ period: Duration.hours(49) }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.BREACHING,
+    }).addAlarmAction(notify);
+
     // Thresholds sit above expected spend (~$10/month, essentially all Bedrock). A $5 budget
     // would fire during normal operation. Spec §8.
     // Budget names are unique per ACCOUNT, not per stack, so a hardcoded name makes a second

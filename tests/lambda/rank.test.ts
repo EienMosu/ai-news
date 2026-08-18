@@ -52,6 +52,7 @@ beforeEach(() => {
     ] },
     inputHashes: [HASH(1), HASH(2)],
     truncated: 0,
+    usage: { inputTokens: 1000, outputTokens: 500, thinkingTokens: 100 },
   });
   vi.mocked(backupDay).mockResolvedValue({ ok: true, path: "p", bytes: 10 });
 });
@@ -103,6 +104,45 @@ describe("rank handler", () => {
     expect(metaPut.status).toBe("partial");
   });
 
+  it("counts phase-1 enrichment write failures and reports the day partial even when phase 2 fully succeeds", async () => {
+    // Fix 5 (final review, axis 5): a phase-1 write failure used to be logged and nothing
+    // else -- capture counts `itemsFailed` and phase 2 undercounts `ranked`, but phase 1 did
+    // neither, so a DynamoDB failure here silently discarded Bedrock output already paid for
+    // while the day still reported "complete". The first UpdateCommand call is phase 1's
+    // enrichment write for hash1; making only it fail, while every phase-2 score write (and
+    // hash2's own phase-1 write) succeeds, isolates this from the pre-existing "marks the day
+    // partial" test above, which fails a PHASE-2 write instead.
+    ddb.on(UpdateCommand).rejectsOnce(new Error("throttled")).resolves({});
+    const out = await handler();
+
+    // Mutation: removing the `enrichmentFailed += 1` increment from the phase-1 loop's catch
+    // block (leaving only the `console.error`) makes this read 0 instead of 1.
+    expect(out.enrichmentFailed).toBe(1);
+    // Mutation: dropping `enrichmentFailed === 0` from the status expression makes this stay
+    // "complete" -- phase 2 alone (ranked === afterEnrichment.length, truncated 0, llmStatus
+    // "ok") is satisfied here, so only the enrichmentFailed term can be forcing "partial".
+    expect(out.status).toBe("partial");
+    expect(out.ranked).toBe(2);
+  });
+
+  it("acquires the day lock with a condition, so two concurrent runs cannot both succeed", async () => {
+    // Fix 3 (final review, axis 3): the condition IS the lock. Every other test here only
+    // exercises what happens when the condition FAILS (Conditional check vs. a throttle) --
+    // nothing asked whether the condition is even PRESENT, and the day lock's Put would stay
+    // "correct" by every one of those tests even with an unconditional write.
+    await handler();
+    const lockPut = ddb.commandCalls(PutCommand)[0]!;
+    expect(lockPut.args[0].input.Item?.pk).toBe("META#lock");
+    // Mutation: deleting the `ConditionExpression`/`ExpressionAttributeValues` lines from the
+    // lock's PutCommand in rank.ts makes this fail (undefined instead of the condition string)
+    // while all 13 pre-existing rank-handler tests stay green -- the lock write still
+    // "succeeds", it just no longer excludes anyone.
+    expect(lockPut.args[0].input.ConditionExpression).toBe(
+      "attribute_not_exists(pk) OR expiresAt < :now",
+    );
+    expect(lockPut.args[0].input.ExpressionAttributeValues).toHaveProperty(":now");
+  });
+
   it("refuses to run when another rank run already holds the day lock", async () => {
     // Genuine contention: the condition was evaluated and lost. Nothing is wrong -- this is
     // the lock doing its job, so no article write of either kind should happen.
@@ -114,6 +154,41 @@ describe("rank handler", () => {
     expect(out.status).toBe("partial");
     expect(out.llmStatus).toBe("ok");
     expect(ddb.commandCalls(UpdateCommand)).toHaveLength(0);
+  });
+
+  it("skips a day already marked complete without calling Bedrock, as protection independent of retry config", async () => {
+    // Fix 4 (final review, axis 5): EventBridge Scheduler has its own retry policy, separate
+    // from the Lambda-side retryAttempts:0. A redelivery after the day lock's 20-minute expiry
+    // would otherwise re-rank (and re-bill) an already-complete day. This guard does not
+    // depend on the Scheduler-side fix (also applied, in infra/lib/functions.ts) being right.
+    vi.mocked(listDays).mockResolvedValue([
+      { day: "2026-08-18", status: "complete", articleCount: 5, llmRanked: 5, truncated: 0,
+        llmStatus: "ok", runId: "r", completedAt: "2026-08-18T06:00:00.000Z" } as never,
+    ]);
+
+    const out = await handler({ day: "2026-08-18" });
+
+    // Mutation: deleting the `if (!event?.force) { ... }` guard block in rank.ts makes this
+    // fail on all three -- rankArticles gets called, the lock Put fires, and the returned
+    // articleCount comes from the mocked stored articles rather than the existing meta record.
+    expect(rankArticles).not.toHaveBeenCalled();
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(0);
+    expect(out.status).toBe("complete");
+    expect(out.ranked).toBe(5);
+  });
+
+  it("re-ranks an already-complete day when force is set explicitly", async () => {
+    vi.mocked(listDays).mockResolvedValue([
+      { day: "2026-08-18", status: "complete", articleCount: 5, llmRanked: 5, truncated: 0,
+        llmStatus: "ok", runId: "r", completedAt: "2026-08-18T06:00:00.000Z" } as never,
+    ]);
+
+    const out = await handler({ day: "2026-08-18", force: true });
+
+    // Mutation: hardcoding the guard's condition to ignore `event?.force` (always skip when
+    // complete) makes this fail -- Bedrock is never called and `ranked` stays 5 instead of 2.
+    expect(rankArticles).toHaveBeenCalledTimes(1);
+    expect(out.ranked).toBe(2);
   });
 
   it("does not proceed when the lock write itself fails, since it cannot tell if it holds the lock", async () => {
@@ -201,6 +276,7 @@ describe("rank handler", () => {
       ] },
       inputHashes: [HASH(1), HASH(2)],
       truncated: 0,
+      usage: { inputTokens: 1000, outputTokens: 500, thinkingTokens: 100 },
     });
     await handler();
     const corrs = ddb.commandCalls(UpdateCommand).map((c) =>
@@ -214,7 +290,16 @@ describe("rank handler", () => {
     // Fix 3 (Task 7 review): no automatic catch-up -- freshness beats completeness, and every
     // make-up day would be another Bedrock call. This only verifies the gap is COUNTED and
     // LOGGED, never that anything gets ranked for it.
-    vi.mocked(listDays).mockResolvedValue([{ day: "2026-08-18", status: "complete" } as never]);
+    //
+    // Two sequenced listDays results, not one: the Fix 4 already-complete guard now calls
+    // listDays FIRST, before ranking anything, and must see this day as NOT complete yet (an
+    // empty list) or it would skip ranking "2026-08-18" entirely and this test's premise (it
+    // gets ranked, and the OLDER days are the gaps) would break. The gap check's own listDays
+    // call happens LAST, after this run's own ranking work, and is what needs "2026-08-18"
+    // marked complete so the loop below excludes it from the count via `completed.has(d)`.
+    vi.mocked(listDays)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ day: "2026-08-18", status: "complete" } as never]);
     vi.mocked(dayHasArticles).mockResolvedValue(true);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 

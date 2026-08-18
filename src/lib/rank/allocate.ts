@@ -41,7 +41,14 @@ export function allocateRankingCap<T>(scored: ScoredCandidate<T>[], cap: number)
   const takes = new Map<ScoredCandidate<T>[], number>();
   for (const group of groups) {
     const share = Math.floor(remainingCap / remainingGroups);
-    const take = Math.min(group.length, share);
+    // Guard against `cap < sectionCount`: plain integer division can floor a nonempty group's
+    // share to 0 purely from rounding (e.g. cap=1 split three ways), silently squeezing that
+    // section out of the ranked set entirely even though cap has not run out. Unreachable
+    // today at cap 200 against 2 sections, but a guard belongs in the code, not in a comment
+    // that stops being true the day a cap this small (or a section count this large) actually
+    // occurs. As long as any cap remains, a nonempty group is guaranteed at least 1 of it.
+    const guaranteed = group.length > 0 && remainingCap > 0 ? 1 : 0;
+    const take = Math.min(group.length, remainingCap, Math.max(share, guaranteed));
     takes.set(group, take);
     remainingCap -= take;
     remainingGroups -= 1;

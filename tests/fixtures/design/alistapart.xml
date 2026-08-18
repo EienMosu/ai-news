@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:sy="http://purl.org/rss/1.0/modules/syndication/" xmlns:admin="http://webns.net/mvcb/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
+	<channel>
+		<title>
+			<![CDATA[A List Apart: The Full Feed]]>		</title>
+
+		<link>
+			https://alistapart.com		</link>
+
+		<description>Articles for people who make web sites.</description>
+
+		<dc:language>
+			en-US		</dc:language>
+
+		<dc:creator>The fine folks at A List Apart</dc:creator>
+
+		<dc:rights>Copyright 2026</dc:rights>
+
+		<dc:date>
+			2026-08-18T14:39:59+00:00		</dc:date>
+
+		
+			<item>
+				<title>
+					<![CDATA[Designed for a Dead Language]]>				</title>
+
+				<author>
+				by <a itemprop="url" class="author" rel="author" href="https://alistapart.com/author/shrey-shah/">Shrey Shah</a>					</author>
+
+				<link>
+					https://alistapart.com/article/designed-for-a-dead-language/				</link>
+
+				<guid>
+					https://alistapart.com/article/designed-for-a-dead-language/				</guid>
+
+				<description>
+					<![CDATA[<!-- wp:paragraph -->
+<p>Every language app in your pocket inherited a teaching method built for Latin. Understanding why that happened is a more useful design lesson than anything the apps themselves will teach you.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>In 1788, Prussia introduced the Abitur, a standardized national examination required for entry into universities and the civil service. To pass it, students needed to demonstrate measurable, gradable knowledge. The system needed t]]>				</description>
+
+				<dc:subject>
+					<![CDATA[]]>				</dc:subject>
+
+				<dc:date>
+					2026-06-30T16:22:27+00:00				</dc:date>
+			</item>
+<item>
+				<title>
+					<![CDATA[Good designers, bad websites: a proposal]]>				</title>
+
+				<author>
+				by <a itemprop="url" class="author" rel="author" href="https://alistapart.com/author/alan-dalton/">Alan Dalton</a>					</author>
+
+				<link>
+					https://alistapart.com/article/good-designers-bad-websites-a-proposal/				</link>
+
+				<guid>
+					https://alistapart.com/article/good-designers-bad-websites-a-proposal/				</guid>
+
+				<description>
+					<![CDATA[<!-- wp:paragraph -->
+<p>I want to discuss <a href="https://www.w3.org/WAI/fundamentals/accessibility-intro/#what">accessibility</a> because it is the most important thing for making websites. Other <a href="https://alistapart.com/articles/"><em>A List Apart </em>articles</a> give you innovation and insight. This article will give you homework. These are just my personal views, but they’re pretty good.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>I want to start off with a couple of stat]]>				</description>
+
+				<dc:subject>
+					<![CDATA[Accessibility, Community, User Experience, User Research, Workflow &amp; Tools]]>				</dc:subject>
+
+				<dc:date>
+					2026-04-23T12:57:21+00:00				</dc:date>
+			</item>
+</channel></rss>

@@ -34,7 +34,25 @@ import { Construct } from "constructs";
  * it -- because a GSI projection is exactly the irreversible-without-backfill piece described
  * below.
  *
- * Deliberately NOT projected: publishedAtSource, llmImportance, firstSeenAt, hashVersion, v.
+ * `llmImportance` and `firstSeenAt` are here for a reason that has NOTHING to do with what a
+ * UI card renders: `src/lambda/rank.ts`'s phase 2 re-reads the day through THIS SAME index
+ * (`queryDay`, which queries `feed-by-day`) and computes each article's score from that
+ * re-read result, not from a fresh base-table GetItem. Whatever isn't projected here comes
+ * back as `undefined` in phase 2, indistinguishable from "the model never scored this" --
+ * `computeScore` reads that as `llmImportance: null`, which is its OWN definition of a
+ * degraded score. Omitting either attribute does not fail loudly: `whyItMatters` IS projected,
+ * so cards still show the model's rationale and the feed looks like it's working, while every
+ * score is silently frozen at `scoreVersion: "v1-degraded"` forever and the 30%
+ * `llmImportance` term -- the entire reason the Bedrock call exists -- never reaches the
+ * feed's sort order. (`firstSeenAt` is lower-stakes but the same shape: dropped, phase 2's
+ * recency term is computed from the run clock instead of the article's real ingest time.)
+ * If you are looking at this list wondering whether either of these two is safe to remove
+ * because a UI card doesn't need it: a UI card doesn't need it, and that is the wrong
+ * question. Ask instead whether `src/lambda/rank.ts`'s phase 2 still reads it through
+ * `queryDay` -- as of this writing it does, for both.
+ *
+ * Deliberately NOT projected: publishedAtSource, hashVersion, v. None of these three is read
+ * back through `queryDay` by anything -- see the check above before adding to this list.
  *
  * Erring wide is deliberate. A projection cannot be altered after the index is created --
  * changing it means deleting and recreating the index, and recreating it on a table that
@@ -44,7 +62,7 @@ import { Construct } from "constructs";
 export const FEED_CARD_ATTRIBUTES = [
   "title", "summary", "imageUrl", "url", "source", "sourceName", "category", "section",
   "publishedAt", "clusterId", "corroborationToday", "whyItMatters", "score", "scoreVersion",
-  "points", "pointsImputed",
+  "points", "pointsImputed", "llmImportance", "firstSeenAt",
 ];
 
 export class ArticleTable extends Construct {

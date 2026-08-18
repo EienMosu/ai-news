@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>CSS-Tricks</title>
+	<atom:link href="https://css-tricks.com/feed/" rel="self" type="application/rss+xml" />
+	<link>https://css-tricks.com</link>
+	<description>A learning community for front-end designers and developers</description>
+	<lastBuildDate>Mon, 17 Aug 2026 14:30:56 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	
+
+<image>
+	<url>https://i0.wp.com/css-tricks.com/wp-content/uploads/2021/07/star.png?fit=32%2C32&#038;ssl=1</url>
+	<title>CSS-Tricks</title>
+	<link>https://css-tricks.com</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+<site xmlns="com-wordpress:feed-additions:1">45537868</site>	<item>
+		<title>Dark mode toggles: two states are enough</title>
+		<link>https://css-tricks.com/dark-mode-toggles-two-states-are-enough/</link>
+					<comments>https://css-tricks.com/dark-mode-toggles-two-states-are-enough/#comments</comments>
+		
+		<dc:creator><![CDATA[Geoff Graham]]></dc:creator>
+		<pubDate>Mon, 17 Aug 2026 14:15:50 +0000</pubDate>
+				<category><![CDATA[Links]]></category>
+		<category><![CDATA[dark mode]]></category>
+		<category><![CDATA[UI/UX Design]]></category>
+		<guid isPermaLink="false">https://css-tricks.com/?p=396545</guid>
+
+					<description><![CDATA[<p>Lea's pushing back on light/dark mode implementations that display three state options for visitors: light, dark, and system.</p>
+<hr />
+<p><small><a rel="nofollow" href="https://css-tricks.com/dark-mode-toggles-two-states-are-enough/">Dark mode toggles: two states are enough</a> originally handwritten and published with love on <a rel="nofollow" href="https://css-tricks.com">CSS-Tricks</a>. You should really <a href="https://css-tricks.com/newsletters/">get the newsletter</a> as well.</p>
+]]></description>
+		
+					<wfw:commentRss>https://css-tricks.com/dark-mode-toggles-two-states-are-enough/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+		<post-id xmlns="com-wordpress:feed-additions:1">396545</post-id>	</item>
+<item>
+		<title>What’s !important #17: Custom Highlight API, CSS Navigation Matching, Fixing text-stroke, and More</title>
+		<link>https://css-tricks.com/whats-important-17/</link>
+					<comments>https://css-tricks.com/whats-important-17/#comments</comments>
+		
+		<dc:creator><![CDATA[Daniel Schwarz]]></dc:creator>
+		<pubDate>Fri, 14 Aug 2026 14:01:51 +0000</pubDate>
+				<category><![CDATA[Articles]]></category>
+		<category><![CDATA[news]]></category>
+		<guid isPermaLink="false">https://css-tricks.com/?p=396557</guid>
+
+					<description><![CDATA[<p>Plus, how to style skeleton UIs, how to enable diagonal scrolling, how images can overflow themselves, and yet, still more. Basically, how to do a lot of really cool (CSS) stuff.</p>
+<hr />
+<p><small><a rel="nofollow" href="https://css-tricks.com/whats-important-17/">What’s !important #17: Custom Highlight API, CSS Navigation Matching, Fixing text-stroke, and More</a> originally handwritten and published with love on <a rel="nofollow" href="https://css-tricks.com">CSS-Tricks</a>. You should r]]></description>
+		
+					<wfw:commentRss>https://css-tricks.com/whats-important-17/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+		<post-id xmlns="com-wordpress:feed-additions:1">396557</post-id>	</item>
+</channel></rss>

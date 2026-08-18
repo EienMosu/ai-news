@@ -63,6 +63,24 @@ describe("buildRankPrompt", () => {
     expect(text).toContain("a1 | design |");
   });
 
+  it("derives the section count and names from what's actually present, not a hardcoded pair", () => {
+    // Fix 9 (final review, axis 2): the cap allocator (allocate.ts) is correctly N-section
+    // generic and well tested; the prompt's wording was the one place still assuming exactly
+    // two ("ai" and "design"). Mutation: reverting to the literal "spanning two sections: ai
+    // and design" makes this fail the moment a third section is present.
+    const a = { ...candidate(1), section: "ai" };
+    const d = { ...candidate(2), section: "design" };
+    const v = { ...candidate(3), section: "video" };
+    const { text } = buildRankPrompt([a, d, v]);
+    expect(text).toContain("3 sections: ai, design, video");
+    expect(text).not.toContain("spanning two sections: ai and design");
+  });
+
+  it("still reads naturally with only one section present", () => {
+    const { text } = buildRankPrompt([candidate(1)]);
+    expect(text).toContain("one section: ai");
+  });
+
   it("tells the model to score importance within an article's own section, not across sections", () => {
     // Mutation: reverting the `importance` description to a single AI-only rubric (dropping
     // "within the article's own section") makes this fail -- a significant CSS release and a

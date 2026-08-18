@@ -79,6 +79,24 @@ describe("backupDay", () => {
     expect(calls.some(([, init]) => init?.method === "PUT")).toBe(false);
   });
 
+  it("reports failure without throwing when the PUT itself returns a non-2xx status", async () => {
+    // Distinct from the two failure tests above: the "401" test returns 401 for EVERY call
+    // including the GET, so it actually fails on the GET-failure branch, never on the PUT.
+    // The "500" test's GET fails too, and asserts no PUT is even attempted. This is the first
+    // test where the GET succeeds (404, no existing file -- so a PUT is attempted with no
+    // sha) and the PUT itself is what comes back non-2xx.
+    const f = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "PUT" ? ok({ message: "Unprocessable Entity" }, 422) : ok({}, 404),
+    ) as unknown as typeof fetch;
+
+    const result = await backupDay("2026-08-18", [{ a: 1 }], deps(f));
+    // Mutation: deleting the `if (!put.ok) return { ok: false, ... };` branch in backup.ts
+    // makes this fail -- backupDay falls through to `return { ok: true, ... }` regardless of
+    // the PUT's actual status.
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("422");
+  });
+
   it("redacts the token from a thrown fetch error, not just from the 401 message we build ourselves", async () => {
     // A synchronous throw, not a rejected promise: some fetch implementations throw before
     // ever returning a promise, and the earlier 401 test only exercises a message backupDay

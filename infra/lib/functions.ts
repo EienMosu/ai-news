@@ -66,11 +66,34 @@ export class Functions extends Construct {
       runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,   // cheaper per ms, identical code
       environment: { TABLE_NAME: props.table.tableName },
-      bundling: { format: OutputFormat.ESM, target: "node22" },
-      // Left at the default (externalize @aws-sdk/*, use the runtime-provided SDK). Note the
-      // consequence: production runs whatever SDK version nodejs22.x ships, not the version
-      // pinned in package.json and exercised by the tests. Set `bundleAwsSDK: true` if that
-      // divergence ever matters more than the ~10 MB of bundle it costs.
+      bundling: {
+        format: OutputFormat.ESM,
+        target: "node22",
+        // Explicit, per spec line 120: "Set bundling.externalModules explicitly rather than
+        // relying on the CDK default, which has changed across versions." `[]` means bundle
+        // EVERYTHING -- no @aws-sdk/* package is externalised, unlike the CDK default, which
+        // externalises @aws-sdk/* and relies on the runtime-provided SDK instead.
+        //
+        // Why the default is not safe here: the runtime-provided SDK is a CURATED snapshot,
+        // not the full SDK, and has repeatedly shipped without newer or less common clients
+        // (aws-cdk#24090, aws-sdk-js-v3#4401). The rank function pulls in
+        // @aws-sdk/client-bedrock-runtime only TRANSITIVELY -- through
+        // @anthropic-ai/bedrock-sdk, which nothing here declares directly -- so there is no
+        // guarantee the runtime's snapshot carries it at all. If it does not, the rank
+        // function dies with Runtime.ImportModuleError on its very first invocation: the one
+        // Bedrock call this whole system exists to make. Nothing catches this in advance --
+        // every test mocks the client, and neither `pnpm typecheck` nor `pnpm synth` looks
+        // inside the emitted bundle; only reading `cdk.out/asset.*/index.mjs` itself proves it.
+        //
+        // It also makes the `@smithy/types` pnpm override (package.json) meaningful in
+        // production. Left externalised, production would run whatever SDK version the
+        // runtime ships -- not the version pinned and exercised by every test -- so the test
+        // suite and the deployed code would silently be running different dependency graphs.
+        //
+        // Costs ~10-15 MB of asset on functions that run hourly and daily, where cold-start
+        // size is not the constraint.
+        externalModules: [],
+      },
     };
 
     const captureLogGroup = logGroup("Capture");
@@ -206,7 +229,19 @@ export class Functions extends Construct {
       flexibleTimeWindow: { mode: "OFF" },
       scheduleExpression: "cron(0 6 * * ? *)",
       scheduleExpressionTimezone: "Europe/Istanbul",
-      target: { arn: this.rank.functionArn, roleArn: this.schedulerRole(this.rank).roleArn },
+      target: {
+        arn: this.rank.functionArn,
+        roleArn: this.schedulerRole(this.rank).roleArn,
+        // EventBridge Scheduler has its OWN retry policy -- entirely separate from the
+        // Lambda-side `retryAttempts: 0` set above, and left at CloudFormation's default
+        // (185 attempts) if not stated here. Without this, a redelivery after the day lock's
+        // 20-minute expiry would re-invoke rank -- and re-bill Bedrock -- for a day that may
+        // already be complete. The handler's own "already complete" guard (src/lambda/
+        // rank.ts) is the half of this that actually matters, since it does not depend on
+        // this configuration being right; this is defense in depth, not the only line of
+        // defense.
+        retryPolicy: { maximumRetryAttempts: 0 },
+      },
     });
 
     this.vercel = this.vercelReader(props.table);
@@ -222,8 +257,17 @@ export class Functions extends Construct {
 
   private vercelReader(table: dynamodb.TableV2): iam.User {
     const user = new iam.User(this, "VercelReader");
+    // Split rather than one statement pairing both actions with both resources: there is no
+    // such thing as GetItem against a GSI (it is a base-table-only operation), so a statement
+    // that grants it alongside `${table.tableArn}/index/*` was inert -- harmless, since IAM
+    // simply never has occasion to apply it there -- but it misled the next reader into
+    // thinking that combination means something.
     user.addToPolicy(new iam.PolicyStatement({
-      actions: ["dynamodb:Query", "dynamodb:GetItem"],
+      actions: ["dynamodb:GetItem"],
+      resources: [table.tableArn],
+    }));
+    user.addToPolicy(new iam.PolicyStatement({
+      actions: ["dynamodb:Query"],
       resources: [table.tableArn, `${table.tableArn}/index/*`],
     }));
     // Capture only, never rank. Spec §2: a refresh path that reaches ranking lets a stuck

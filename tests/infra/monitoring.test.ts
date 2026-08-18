@@ -32,6 +32,27 @@ describe("Monitoring", () => {
     });
   });
 
+  it("also alarms when rank stops running, on a window sized for its daily schedule", () => {
+    // Fix 8 (final review, axis 5): today a total ranking outage costs nothing and pages no
+    // one -- the feed just stays degraded forever, looking like a quiet news period. Mirrors
+    // CaptureStopped, but must NOT reuse its 25-hour period: rank's cadence is once a day, so
+    // a bare 25-hour window would alarm after a single missed run instead of tolerating one.
+    const alarms = Object.values(template().findResources("AWS::CloudWatch::Alarm"));
+    const invocationAlarms = alarms.filter((a: any) => a.Properties.MetricName === "Invocations");
+    // Mutation: deleting the new RankStopped alarm drops this to 1.
+    expect(invocationAlarms).toHaveLength(2);
+    for (const alarm of invocationAlarms) {
+      expect((alarm as any).Properties.TreatMissingData).toBe("breaching");
+      expect((alarm as any).Properties.Threshold).toBe(1);
+      expect((alarm as any).Properties.ComparisonOperator).toBe("LessThanThreshold");
+    }
+    // Mutation: setting RankStopped's period to 25 hours (90000s), copied verbatim from
+    // CaptureStopped, makes this fail -- the two periods would be equal instead of RankStopped
+    // being sized up for a schedule 24x less frequent.
+    const periods = invocationAlarms.map((a: any) => Number(a.Properties.Period)).sort((a, b) => a - b);
+    expect(periods).toEqual([90000, 176400]);
+  });
+
   it("sets budget thresholds above expected spend, not at zero", () => {
     const budgets = Object.values(template().findResources("AWS::Budgets::Budget"));
     const limits = budgets.map((b: any) => Number(b.Properties.Budget.BudgetLimit.Amount)).sort((a, b) => a - b);

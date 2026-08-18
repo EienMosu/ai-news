@@ -8,13 +8,16 @@ const candidate = (n: number) => ({
 });
 
 /** Shaped like the streaming client: content[0] is a thinking block, exactly as spec §6 warns. */
-const stub = (payload: unknown, stopReason = "end_turn") => {
+const stub = (payload: unknown, stopReason = "end_turn", usage?: Record<string, unknown>) => {
   const finalMessage = vi.fn().mockResolvedValue({
     stop_reason: stopReason,
     content: [
       { type: "thinking", thinking: "..." },
       { type: "text", text: JSON.stringify(payload) },
     ],
+    usage: usage ?? {
+      input_tokens: 111, output_tokens: 222, output_tokens_details: { thinking_tokens: 33 },
+    },
   });
   return { messages: { stream: vi.fn().mockReturnValue({ finalMessage }) } };
 };
@@ -90,6 +93,37 @@ describe("rankArticles", () => {
     const client = { messages: { stream: vi.fn().mockReturnValue({ finalMessage }) } };
     const out = await rankArticles([candidate(1)], { client });
     expect(out.response).toEqual({ items: [] });
+  });
+
+  it("carries input, output and thinking token usage out of the call, for cost logging", async () => {
+    // Fix 6 (final review, axis 5): thinking tokens are the entire difference between the $6
+    // floor and the $16 ceiling for one call, and `usage.output_tokens_details.thinking_tokens`
+    // was in the installed SDK's own types and never read anywhere in this codebase.
+    const client = stub({ items: [] }, "end_turn", {
+      input_tokens: 15_000, output_tokens: 8_000,
+      output_tokens_details: { thinking_tokens: 5_000 },
+    });
+    const out = await rankArticles([candidate(1)], { client });
+    // Mutation: hardcoding `usage: ZERO_USAGE` on this return path (or dropping the field
+    // entirely, back to what shipped) makes this fail on all three numbers.
+    expect(out.usage).toEqual({ inputTokens: 15_000, outputTokens: 8_000, thinkingTokens: 5_000 });
+  });
+
+  it("reports zero usage when there is nothing to rank, since no call is made", async () => {
+    const client = stub({ items: [] });
+    const out = await rankArticles([], { client });
+    expect(out.usage).toEqual({ inputTokens: 0, outputTokens: 0, thinkingTokens: 0 });
+  });
+
+  it("attaches usage to a TruncationError, since a truncated call is billed the full cap", async () => {
+    const client = stub({ items: [] }, "max_tokens", {
+      input_tokens: 20_000, output_tokens: 32_000,
+      output_tokens_details: { thinking_tokens: 28_000 },
+    });
+    await expect(rankArticles([candidate(1)], { client })).rejects.toMatchObject({
+      name: "TruncationError",
+      usage: { inputTokens: 20_000, outputTokens: 32_000, thinkingTokens: 28_000 },
+    });
   });
 
   it("propagates an aborted call as its own error, not as TruncationError", async () => {

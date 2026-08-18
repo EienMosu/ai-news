@@ -126,6 +126,26 @@ describe("allocateRankingCap", () => {
     expect(bySection(result, "design").map((i) => i.score)).toEqual([9, 8, 7]);
   });
 
+  it("never zeroes a nonempty section purely from rounding, when cap is smaller than the section count", () => {
+    // Fix 12 (final review, axis 2): unreachable at today's cap of 200 against 2 sections, but
+    // plain integer division (`Math.floor(remainingCap / remainingGroups)`) can floor a
+    // nonempty group's share to exactly 0 well before the cap is actually exhausted -- e.g.
+    // cap=2 split three ways: the two smallest groups would each compute floor(2/3)=0 and
+    // floor(2/2)=0, leaving the entire cap to whichever group is processed last.
+    const a = make("a", 1, 100);
+    const b = make("b", 1, 100);
+    const c = make("c", 5, 100);
+    const cap = 2;
+    const result = allocateRankingCap([...a, ...b, ...c], cap);
+    const selected = result.slice(0, cap);
+
+    // Mutation: reverting `Math.max(share, guaranteed)` to plain `share` makes section "a"
+    // (the first, smallest group processed) take 0 instead of 1 -- the entire cap goes to "b"
+    // and "c" purely from processing order, even though "a" has a candidate and cap remains.
+    expect(bySection(selected, "a")).toHaveLength(1);
+    expect(selected).toHaveLength(2);
+  });
+
   it("places every selected candidate before every leftover one, so a slice(0, cap) backstop selects exactly the fair share", () => {
     const design = make("design", 65, 1000);
     const ai = make("ai", 170, 900);
