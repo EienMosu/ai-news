@@ -121,9 +121,23 @@ export class Functions extends Construct {
       memorySize: 1024,
       logGroup: rankLogGroup,
       role: executionRole("RankFunction", rankLogGroup),
-      // Spec §9: reserved concurrency of 1, so a manual trigger and the schedule cannot
-      // interleave and write two incompatible clusterings into one day partition.
-      reservedConcurrentExecutions: 1,
+      // NO `reservedConcurrentExecutions`, and this is an account limit rather than a design
+      // change. This account's Lambda concurrency quota is 10, not the usual 1000, and AWS
+      // refuses any reservation that would leave fewer than 10 unreserved -- so reserving
+      // even 1 is impossible here. The first deploy failed on exactly this.
+      //
+      // Spec §9 asked for reserved concurrency PLUS a conditional-write lock. We keep the
+      // half that is the actual guarantee: the lock is a conditional PutItem on META#lock,
+      // and DynamoDB conditional writes are atomic, so of two simultaneous runs exactly one
+      // acquires it and the other returns early. Reserved concurrency was defence in depth.
+      //
+      // The one risk it covered was a run outliving the lock, and the numbers already
+      // exclude that: the lock expires at 20 minutes, the Bedrock call aborts at 10, and
+      // the Lambda timeout is 15. A run cannot reach the expiry. Task 7's "already
+      // complete" guard is a third layer on top.
+      //
+      // The quota IS adjustable (Service Quotas, lambda L-B99A9384). If it is ever raised,
+      // restoring `reservedConcurrentExecutions: 1` is a one-line change.
       // ZERO, deliberately. Lambda's default of 2 async retries means a hard kill re-bills the
       // same ~$0.50 Bedrock call up to three times, with no META#DAY written for the day at
       // all. Ranking is safe to re-run manually; it is not safe to re-run invisibly.

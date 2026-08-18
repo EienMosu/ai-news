@@ -128,15 +128,19 @@ describe("Functions", () => {
     expect(Object.keys(template_.findResources("AWS::Logs::LogGroup"))).toHaveLength(2);
   });
 
-  it("caps rank at one concurrent execution and zero async retries", () => {
-    // Concurrency: spec §9 — two interleaved runs write two incompatible clusterings into one
-    // day. Retries: a hard kill would otherwise re-bill the same ~$0.50 Bedrock call 3x.
-    template().hasResourceProperties("AWS::Lambda::Function", {
-      ReservedConcurrentExecutions: 1,
-    });
+  it("sets zero async retries on rank, so a hard kill cannot re-bill the Bedrock call", () => {
     template().hasResourceProperties("AWS::Lambda::EventInvokeConfig", {
       MaximumRetryAttempts: 0,
     });
+  });
+
+  it("reserves no concurrency, because this account's quota makes it impossible", () => {
+    // The account's Lambda concurrency limit is 10 and AWS refuses a reservation that leaves
+    // fewer than 10 unreserved, so `reservedConcurrentExecutions: 1` fails at deploy time --
+    // synth accepts it happily. Mutual exclusion comes from the day lock instead.
+    for (const fn of Object.values(template().findResources("AWS::Lambda::Function"))) {
+      expect(fn.Properties.ReservedConcurrentExecutions).toBeUndefined();
+    }
   });
 
   it("leaves the rank timeout well above the in-handler abort point", () => {
