@@ -180,12 +180,39 @@ All keyless and verified reachable on 2026-08-18.
 drown the feed and dominate the Bedrock token budget. HF Daily Papers covers the same
 ground curated, at ~10-20 items/day.
 
-**Anthropic has no official RSS feed** (`/rss.xml`, `/feed.xml`, `/news/rss.xml` all 404).
-The Google News fallback returns `news.google.com/rss/articles/...` wrapper URLs.
-Link stability was tested across two fetches five seconds apart and was identical, but
-the wrapper must still be resolved to the publisher URL before hashing — both to guard
-against multi-day token drift and because the publisher URL is what the user should click.
-If resolution fails, fall back to `sha256(lower(title) + '|' + sourceName)`.
+**Anthropic has no official RSS feed** — re-verified 2026-08-18: `/rss.xml`, `/feed.xml`,
+`/news/rss.xml`, `/atom.xml`, `/news/feed`, `/index.xml` all return 404. The Google News
+fallback returns `news.google.com/rss/articles/...` wrapper URLs.
+
+> **[revised]** The original design required resolving the wrapper to the publisher URL
+> before hashing. **That is not buildable.** Measured 2026-08-18: following the wrapper with
+> redirects enabled ends on `news.google.com` itself (1 redirect, HTTP 200, 579 KB), and the
+> returned body contains **zero occurrences of `anthropic.com`** and no external publisher URL
+> of any kind. The `CBMi…` id base64-decodes to an opaque 83-byte token, not a URL. Google now
+> resolves the target **client-side in JavaScript** (the body carries four `location.href`
+> assignments), so no server-side fetch can recover the publisher link.
+
+Three consequences, each ruled on:
+
+1. **Hashing.** Anthropic items are keyed by `titleHash(title, sourceName)`, not by the wrapper
+   URL. The wrapper token is opaque and its multi-day stability is unproven — hashing it risks
+   the same post being re-keyed onto a later day and **duplicated in the archive**, which is the
+   exact failure `if_not_exists` on `ingestDay` exists to prevent. A title hash is deterministic,
+   and its failure mode (two distinct posts sharing a title) collapses to a dedup, not a
+   duplicate. This requires a per-source `hashStrategy: 'url' | 'title'`, defaulting to `'url'`.
+2. **Outbound link.** The wrapper URL is kept as the article's `url`. It is degraded but not
+   broken: a real browser follows the JavaScript hop and lands on the Anthropic post. The user
+   pays one extra redirect.
+3. **Do not drop the source.** Anthropic is a primary lab; losing it entirely is a worse product
+   than an extra redirect hop.
+
+**Follow-up (not v1):** scraping `anthropic.com/news` directly yields correct publisher URLs —
+14 `/news/<slug>` anchors were extracted from the live page at HTTP 200 without JavaScript.
+It is deferred because the surrounding text is positionally unreliable: on the same page one
+card reads `Introducing Claude Opus 5 · Product · Jul 24, 2026` while the next reads
+`Announcements · Jul 9, 2026 · Inviting hard questions` — title and date swap places between
+adjacent items, so a positional parser would mis-title articles **silently**. That needs its own
+task and its own tests, not a line in this one.
 
 ---
 
@@ -205,7 +232,8 @@ If resolution fails, fall back to `sha256(lower(title) + '|' + sourceName)`.
 
 ```
 pk = ART#<urlHash>        sk = A
-     urlHash = sha256(normalize(resolveRedirect(url)))
+     urlHash = sha256(normalize(url))            <- hashStrategy 'url'  (default)
+             | sha256(lower(title) + '|' + sourceName)   <- hashStrategy 'title' (Anthropic, see 3)
      normalize: lowercase host; strip utm_*, fbclid, gclid, mc_cid, mc_eid, igshid,
                 ref, source, at_*; strip trailing slash; strip #:~:text= fragments
 
@@ -213,7 +241,8 @@ pk = META#DAY             sk = <YYYY-MM-DD>
      status ("complete" | "partial"), articleCount, runId, completedAt
 
 pk = META#lastRun         sk = A
-     startedAt, durationMs, perSourceCounts, llmStatus, itemsWritten, itemsFailed, errors[]
+     startedAt, durationMs, llmStatus, itemsWritten, itemsFailed, errors[]
+     perSourceCounts, filtered, quarantined      <- all three persisted, see below
 ```
 
 **GSI1 — `feed-by-day`** (the only index)
@@ -240,6 +269,7 @@ clusterId, corroborationToday
 llmImportance, whyItMatters
 points, upvotes, pointsImputed
 score, scoreVersion
+hashVersion                  (which urlHash algorithm produced this key)
 v                            (schema version, for future backfills)
 ```
 
@@ -277,6 +307,32 @@ One shared helper, unit-tested at the 23:59 and 00:01 boundaries.
 > constant UTC+3, so `new Date().toISOString().slice(0,10)` at 00:00 local stamps
 > **the previous day**. The reader would query a partition that never exists. Not an edge
 > case — it would have been wrong every single day.
+
+### Key and cluster invariants
+
+**`hashVersion` is mandatory on every item.** `urlHash` is a normalization pipeline — strip this
+query parameter, lowercase that host — and any change to it silently re-keys every future write.
+The archive would fork: the same article stored twice under two keys, with no way after the fact
+to tell which items came from which algorithm. `hashVersion` starts at `1` and increments with
+any normalization change; a backfill can then find every affected item. This attribute costs one
+number per item and is the only thing that makes the key algorithm revisable at all.
+
+**`clusterId` values beginning with `__self__:` are not clusters.** When the model returns no
+cluster for an article, capture assigns `__self__:<urlHash>` rather than leaving the field blank.
+
+> **[revised]** Blank cluster ids were originally left as empty strings. Every article the model
+> failed to cluster then shared the id `""`, so they merged into one giant cluster — converting a
+> *missing* signal into a *fabricated corroboration* signal that inflated `corroborationToday`
+> and pushed unrelated articles up the ranking. The namespace prefix makes each one a singleton.
+
+Consumers must honour this: `corroborationToday` is `1` for a `__self__:` item, and the UI shows
+no cluster affordance for it. The prefix is reserved — a model-supplied id starting with
+`__self__:` is treated as absent.
+
+**Day partitions are bounded.** With 13 sources, a 7-day recency window and a 50-item per-source
+cap, one day's GSI1 partition holds at most 650 items and in practice ~170. That is far inside
+DynamoDB's 10 GB partition limit and one `Query` page, so the feed read stays a single round trip
+and needs no pagination in v1. If sources are added, re-check this bound before assuming it holds.
 
 ### Access patterns
 
@@ -542,10 +598,34 @@ filtering, and unhandled pagination silently returns partial results.
 Three things, all free, sized for a single-user project:
 
 1. **`META#lastRun` surfaced in the UI header** —
-   `last run 4h ago · 97 items · 9/9 sources · LLM ok`. Turns red when any source
-   returns zero items on two consecutive runs. This is the highest-value item: without
-   it, a feed that starts 404ing or returning an HTML error page with HTTP 200 is
+   `last run 4h ago · 97 items · 13/13 sources · LLM ok`. This is the highest-value item:
+   without it, a feed that starts 404ing or returning an HTML error page with HTTP 200 is
    indistinguishable from a quiet news day, and `Promise.allSettled` swallows it forever.
+
+   > **[revised]** The original rule — "turns red when any source returns zero items on two
+   > consecutive runs" — is wrong, and the 2026-08-18 dry run proved it by producing two
+   > *different* zeroes at once: `venturebeat` produced 0 because all 7 of its items fell
+   > outside the recency window (a healthy but slow feed), and `reddit-ml` produced 0 because
+   > it was rate-limited with HTTP 429 (a transient fetch failure). Under the old rule both
+   > would alarm identically, and so would a genuinely dead feed. An alarm that fires on
+   > normal operation gets ignored within a week.
+
+   Capture therefore persists three counters per source — `perSourceCounts` (produced),
+   `filtered` (fetched, parsed, dropped by the recency window or the cap) and `quarantined`
+   (fetched, parsed, rejected by the schema) — plus `errors[]`. These four separate the states
+   that a single zero conflates:
+
+   | produced | filtered | quarantined | error | state | surfaced as |
+   |---|---|---|---|---|---|
+   | >0 | any | 0 | no | healthy | normal |
+   | 0 | >0 | 0 | no | quiet — nothing recent enough | grey, no alarm |
+   | any | any | >0 | no | **parser or schema drift** | amber, always shown |
+   | 0 | 0 | 0 | yes | fetch failed | amber; red on 2 consecutive runs |
+   | 0 | 0 | 0 | no | **dead — feed returned nothing at all** | red on 2 consecutive runs |
+
+   Only the last two rows can turn the header red, and only on two consecutive runs.
+   `quarantined > 0` is never silent: it is the signature of a feed whose shape changed
+   under us, which is the failure most likely to degrade the archive without anyone noticing.
 2. **Two CloudWatch alarms → SNS → email:** Lambda `Errors >= 1`, and
    `Invocations < 1 over 25 hours` with `treatMissingData: breaching` — the second is
    what catches a silently stopped schedule.
