@@ -292,8 +292,14 @@ Two rules:
   runtime and omit the LLM fields entirely when that stage failed, so a degraded run
   refreshes volatile signals without touching enrichment.
 
-Capture writes use a conditional put (`attribute_not_exists(pk)`) so re-seeing an
-article costs a failed condition rather than a full item write.
+> **[revised]** This section previously ended with "Capture writes use a conditional put
+> (`attribute_not_exists(pk)`) so re-seeing an article costs a failed condition rather than a
+> full item write." **That line is deleted.** It contradicted the rule directly above it — a
+> conditional put that succeeds is still a whole-item replace, and one that fails never
+> refreshes `points` — and, checked against AWS's documented on-demand billing, the
+> optimisation **would not have saved money even if implemented.** It was left over from the
+> pre-UpdateItem design. Hourly capture re-writing unchanged articles costs roughly
+> $0.60-0.90/month in total, which is the real figure this section should have carried.
 
 ### Day derivation
 
@@ -398,8 +404,10 @@ const sk = String(Math.min(9999, Math.max(0, Math.round(score)))).padStart(4, '0
 > 0.35 to 0.15, with the freed 0.20 going to `sourceWeight`. An honest signal at 15%
 > beats a misleading one at 35%.
 
-`clusterId` is namespaced as `<ingestDay>#<llmIndex>` so ids from different runs cannot
-collide. At the end of each run the day partition is re-read once and `corroborationToday`
+`clusterId` is namespaced as `<ingestDay>#<slug>` so ids from different days cannot collide.
+Ids the model did not supply are assigned `__self__:<urlHash>` by `reconcile` **before**
+namespacing and are left un-prefixed — they already carry a unique hash, and the reserved
+prefix is what marks them as non-clusters (§4). At the end of each run the day partition is re-read once and `corroborationToday`
 recomputed for the whole day, making it consistent and idempotent under repeated
 manual triggers.
 
@@ -494,9 +502,18 @@ const text = msg.content.find((b) => b.type === "text")?.text;
   A Lambda timeout kills the execution environment with no catchable signal, so without
   the abort the degraded-mode fallback **cannot run at all**.
 
-**Cost:** $3/MTok input, $15/MTok output on the global endpoint. Realistically
-**$4.50-12.50/month** depending on effort. Bedrock has **no always-free allowance** —
-every call draws credit from day one, unlike Lambda, DynamoDB, and EventBridge.
+**Cost:** $3/MTok input, $15/MTok output on the global endpoint. Bedrock has **no
+always-free allowance** — every call draws credit from day one, unlike Lambda, DynamoDB and
+EventBridge.
+
+> **[revised]** The original estimate of **$4.50-12.50/month** was too low. Recomputed
+> independently against 200 articles at 300 summary characters, with `thinking` billed as
+> output: **$10.50-16.50+/month** for Bedrock alone, plus ~$0.60-0.90 for DynamoDB under
+> *hourly* capture (the original $0.15 figure appears to assume a daily job) and ~$0.50 for
+> everything else. **Total: roughly $12-18/month.** Still inside the $20-30 ceiling, but with
+> materially less headroom than first stated. The thinking-token component remains an
+> estimate — it is the reason the range is wide, and why `countTokens()` validation against a
+> real batch is required before the first scheduled run.
 
 ---
 
@@ -641,8 +658,14 @@ Three things, all free, sized for a single-user project:
 ## 9. Security and IAM
 
 **Lambda execution roles** (capture and rank, separately scoped):
-- `dynamodb:UpdateItem`, `Query`, `GetItem` on the **table ARN only** — writes propagate
-  to GSIs automatically and index ARNs are not needed for writes.
+- `dynamodb:UpdateItem` on the **table ARN only** — writes propagate to GSIs automatically
+  and index ARNs are not needed for writes. A `Query` **against a GSI does need the index
+  ARN**, so the rank role carries `.../index/feed-by-day` as a separate statement. `PutItem`
+  is needed for the `META#*` snapshot items and is constrained by a `dynamodb:LeadingKeys`
+  condition, so a compromised role cannot overwrite an article wholesale or forge `META#DAY`.
+- `bedrock:InvokeModel` must carry a **`bedrock:InferenceProfileArn` condition**. Without it
+  the foundation-model ARN in the resource list also authorises direct on-demand invocation of
+  the bare model, bypassing the `global.` profile — the grant fails **open**, not closed.
 - `bedrock:InvokeModel` (rank only) on the inference-profile ARN **plus the
   foundation-model ARN in every region the profile can route to**. Omitting those
   produces *intermittent* `AccessDeniedException` that fails only when a request happens
