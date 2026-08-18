@@ -20,9 +20,29 @@ describe("buildRankPrompt", () => {
     expect(idToHash.get("a0")).toBe(candidate(1).urlHash);
   });
 
-  it("truncates summaries so one long article cannot dominate the token budget", () => {
+  it("truncates summaries to exactly 300 characters, not fewer and not more", () => {
+    // Hardcoded, not derived from SUMMARY_CHARS_FOR_RANKING: this pins the actual budget, so
+    // a change to the constant (e.g. 300 -> 350, 17% more input tokens on the one call that
+    // costs money) is caught here rather than passing silently.
     const { text } = buildRankPrompt([candidate(1)]);
-    expect(text).not.toContain("x".repeat(400));
+    expect(text).toContain("x".repeat(300));
+    expect(text).not.toContain("x".repeat(301));
+  });
+
+  it("truncates by code point, not UTF-16 code unit, so an emoji at the boundary is never split", () => {
+    const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+    const c = { ...candidate(1), summary: "a".repeat(299) + "\u{1F600}" + "b".repeat(10) };
+    const { text } = buildRankPrompt([c]);
+    expect(LONE_SURROGATE_RE.test(text)).toBe(false);
+  });
+
+  it("treats a missing points attribute the same as an explicit null", () => {
+    // Task 2 drops null attributes on write, so queryDay returns `points` as an absent key
+    // (undefined) for every non-HN article, not as `null`. Both must render as no points.
+    const withNull = buildRankPrompt([{ ...candidate(1), points: null }]).text;
+    const withUndefined = buildRankPrompt([{ ...candidate(1), points: undefined }]).text;
+    expect(withNull).not.toContain("points");
+    expect(withUndefined).not.toContain("points");
   });
 
   it("pins the response shape reconcile() reads", () => {

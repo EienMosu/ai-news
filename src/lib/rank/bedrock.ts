@@ -85,11 +85,15 @@ export async function rankArticles(
   // content[0] is a thinking block, not text — `thinking.display` defaults to "summarized"
   // on Sonnet 4.6, so indexing content[0] returns the wrong block. Spec §6.
   const raw = msg.content?.find((b) => b.type === "text")?.text;
-  if (!raw) return { response: { items: [] }, inputHashes: selected.map((c) => c.urlHash), truncated };
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    // No text block and malformed JSON collapse to the same outcome deliberately: there is
+    // nothing a caller could do differently for one versus the other, so one path handles
+    // both rather than carrying a second branch nothing can tell apart from this one.
+    // `JSON.parse(undefined)` stringifies to "undefined" and throws, landing in the catch
+    // below exactly like a malformed response would.
+    parsed = JSON.parse(raw as string);
   } catch {
     // Well-formed-but-unparseable is distinct from truncated: structured outputs should make
     // this unreachable, so if it happens the schema and the model have diverged.

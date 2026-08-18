@@ -1,3 +1,5 @@
+import { truncate } from "../core/text.js";
+
 export const SUMMARY_CHARS_FOR_RANKING = 300;
 
 export interface RankCandidate {
@@ -7,7 +9,13 @@ export interface RankCandidate {
   sourceName: string;
   category: string;
   publishedAt: string | null;
-  points: number | null;
+  /**
+   * `null` is the value a caller sets deliberately. `undefined` is what actually comes back
+   * from `queryDay` for the majority of the corpus: Task 2 drops null attributes on write
+   * (spec §4), so a non-HN article's absent `points` attribute round-trips as a missing key,
+   * not a `null` value. Both must be treated as "no points" here.
+   */
+  points: number | null | undefined;
 }
 
 /**
@@ -71,8 +79,8 @@ export function buildRankPrompt(candidates: RankCandidate[]): {
   const lines = candidates.map((c, i) => {
     const id = `a${i}`;
     idToHash.set(id, c.urlHash);
-    const summary = c.summary.slice(0, SUMMARY_CHARS_FOR_RANKING);
-    const points = c.points === null ? "" : ` | ${c.points} points`;
+    const summary = truncate(c.summary, SUMMARY_CHARS_FOR_RANKING);
+    const points = c.points == null ? "" : ` | ${c.points} points`;
     return `${id} | ${c.sourceName} (${c.category})${points}\n  ${c.title}\n  ${summary}`;
   });
 

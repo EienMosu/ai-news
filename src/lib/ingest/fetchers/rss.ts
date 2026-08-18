@@ -1,4 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
+import { truncate } from "../../core/text.js";
+
+/** Re-exported because hfPapers.ts already imports `truncate` from here. */
+export { truncate } from "../../core/text.js";
 
 /**
  * The shape every feed adapter normalizes to, before dedup/scoring/category
@@ -161,19 +165,6 @@ function decodeEntities(s: string): string {
 
 function collapseWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
-}
-
-/**
- * Truncates by Unicode code point rather than UTF-16 code unit, so a cut
- * never lands inside a surrogate pair (which would otherwise turn an emoji
- * into a lone high surrogate — rendered as U+FFFD when written as UTF-8).
- * Must run last: truncating before decodeEntities can also cut an entity
- * reference in half (e.g. "...&am"), a second way to produce garbage text.
- * Exported for use by feed adapters that need safe truncation.
- */
-export function truncate(s: string, max: number): string {
-  const codePoints = Array.from(s);
-  return codePoints.length <= max ? s : codePoints.slice(0, max).join("");
 }
 
 /**

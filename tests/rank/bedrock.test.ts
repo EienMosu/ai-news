@@ -75,4 +75,47 @@ describe("rankArticles", () => {
     const out = await rankArticles([candidate(1)], { client });
     expect(out.response).toEqual({ items: [] });
   });
+
+  it("returns an empty reconcilable shape when the text block is not valid JSON", async () => {
+    // Structured outputs should make this unreachable, but if the schema and the model ever
+    // diverge, this must degrade the same way a missing text block does — not throw and take
+    // the whole day's run down with it.
+    const finalMessage = vi.fn().mockResolvedValue({
+      stop_reason: "end_turn",
+      content: [
+        { type: "thinking", thinking: "..." },
+        { type: "text", text: "{not valid json" },
+      ],
+    });
+    const client = { messages: { stream: vi.fn().mockReturnValue({ finalMessage }) } };
+    const out = await rankArticles([candidate(1)], { client });
+    expect(out.response).toEqual({ items: [] });
+  });
+
+  it("propagates an aborted call as its own error, not as TruncationError", async () => {
+    // My brief already got the signal's placement wrong once (body vs. the stream() options
+    // argument) — a regression there would silently defeat Task 8's abort/timeout safety
+    // margin while every other test kept passing. Pinning that the signal actually reaches
+    // the client, and that an abort surfaces as something other than TruncationError, is what
+    // makes that regression visible.
+    const controller = new AbortController();
+    const abortError = Object.assign(new Error("Request was aborted."), {
+      name: "APIUserAbortError",
+    });
+    const finalMessage = vi.fn().mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          controller.signal.addEventListener("abort", () => reject(abortError));
+        }),
+    );
+    const streamFn = vi.fn().mockReturnValue({ finalMessage });
+    const client = { messages: { stream: streamFn } };
+
+    const promise = rankArticles([candidate(1)], { client, signal: controller.signal });
+    controller.abort();
+
+    await expect(promise).rejects.toBe(abortError);
+    await expect(promise).rejects.not.toBeInstanceOf(TruncationError);
+    expect(streamFn.mock.calls[0]![1]).toEqual({ signal: controller.signal });
+  });
 });
