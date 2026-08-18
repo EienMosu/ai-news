@@ -40,34 +40,88 @@ export function toIso(v: unknown): string | null {
 }
 
 /**
- * Tag names actually seen in feed bodies. Anything not on this list — a
- * literal `<model>`, `<think>`, `<tool_use>`, or `x<y` from ordinary prose —
- * is left as text rather than stripped.
+ * Every standard HTML5 element, plus the SVG/MathML roots and the legacy
+ * presentational tags that still turn up in WordPress feeds. Deliberately the
+ * WHOLE element set rather than "tags we happened to see": a name-based
+ * allowlist that is missing `time`, `nav`, `mark` or `svg` leaves those tags —
+ * attributes and all — in the permanently-archived summary text.
+ *
+ * What is intentionally NOT here: `model`, `think`, `tool_use`, and anything
+ * else that is not a real element. Those are prose. See stripTags.
  */
 const ALLOWED_TAGS = [
-  "p", "br", "a", "img", "div", "span", "strong", "b", "em", "i", "u",
-  "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
-  "figure", "figcaption", "iframe", "pre", "code", "table", "thead",
-  "tbody", "tr", "td", "th", "hr", "small", "sub", "sup", "video",
-  "audio", "source", "script", "style",
+  "a", "abbr", "address", "area", "article", "aside", "audio", "b", "base",
+  "bdi", "bdo", "big", "blockquote", "body", "br", "button", "canvas",
+  "caption", "center", "circle", "cite", "code", "col", "colgroup", "data",
+  "datalist", "dd", "defs", "del", "details", "dfn", "dialog", "div", "dl",
+  "dt", "em", "embed", "fieldset", "figcaption", "figure", "font", "footer",
+  "form", "g", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup",
+  "hr", "html", "i", "iframe", "img", "input", "ins", "kbd", "label", "legend",
+  "li", "link", "main", "map", "mark", "marquee", "math", "menu", "meta",
+  "meter", "nav", "noscript", "object", "ol", "optgroup", "option", "output",
+  "p", "param", "path", "picture", "polygon", "pre", "progress", "q", "rect",
+  "rp", "rt", "ruby", "s", "samp", "script", "search", "section", "select",
+  "slot", "small", "source", "span", "strike", "strong", "style", "sub",
+  "summary", "sup", "svg", "table", "tbody", "td", "template", "textarea",
+  "tfoot", "th", "thead", "time", "title", "tr", "track", "tt", "u", "ul",
+  "use", "var", "video", "wbr",
 ];
 
-// `(?![a-zA-Z0-9])` after the tag name stops "th" from matching inside
-// "think", "i" from matching inside "if", etc. — without it, an allowed
+// `(?![a-zA-Z0-9-])` after the tag name stops "th" from matching inside
+// "think", "i" from matching inside "if", etc. -- without it, an allowed
 // tag name that happens to prefix a real word would still eat that word.
-const TAG_RE = new RegExp(`<\\/?(?:${ALLOWED_TAGS.join("|")})(?![a-zA-Z0-9])[^>]*>`, "gi");
+// The tail is `(?:\s+[a-zA-Z][^>]*)?\/?>` rather than `[^>]*>` so an allowed
+// name is only treated as a tag when what follows is really a tag: an
+// immediate close, or whitespace then an attribute name. Without it the
+// one-letter elements (a, b, i, p, q, s, u) turn arithmetic prose like
+// "a <b = c> d" into "a d" -- the exact silent word-deletion this file exists
+// to prevent, just narrowed to shorter tag names.
+const TAG_RE = new RegExp(
+  `<\\/?(?:${ALLOWED_TAGS.join("|")})(?![a-zA-Z0-9-])(?:\\s+[a-zA-Z][^>]*)?\\/?>`,
+  "gi",
+);
 
 /**
- * Removes comments and only recognised HTML tags (see ALLOWED_TAGS), without
- * eating literal `<`/`>` used as less-than/greater-than in ordinary prose
- * (AI coverage is full of "accuracy < 0.5"-shaped sentences) or as
- * pseudo-tags like `<model>`/`<think>` that some feeds quote verbatim. A
- * bare `<[^>]*>` would match from any literal `<` to the next literal `>`
- * regardless of what's between them, silently deleting real words — the
- * allowlist fixes that without needing a full HTML parser.
+ * Any tag whose name contains a hyphen. The HTML spec requires custom element
+ * names to contain one and forbids it in standard element names, so a hyphen is
+ * an unambiguous markup signal -- and unlike ATTRIBUTED_TAG_RE it also catches
+ * the closing `</custom-embed>`, which carries no attributes to detect.
+ * Underscored pseudo-tags (`<tool_use>`) are prose and stay.
+ */
+const HYPHENATED_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9]*-[a-zA-Z0-9-]*(?:\s+[^<>]*)?\/?>/g;
+
+/**
+ * A tag-shaped token carrying at least one real attribute (`<svg onload=...>`,
+ * `<custom-embed data-id="7">`). Prose pseudo-tags never do -- nobody writes
+ * "the &lt;model foo=&quot;bar&quot;&gt; shipped" -- so an attribute is strong
+ * evidence of markup even when the element name is unknown to ALLOWED_TAGS.
+ * Requires whitespace, then an attribute name, then `=`, so an arithmetic
+ * "a<b = c>d" (whitespace then `=`, no name) does not match.
+ */
+const ATTRIBUTED_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9-]*\s+[a-zA-Z-]+\s*=[^>]*>/g;
+
+/**
+ * Removes comments, recognised HTML tags, and unrecognised tags that carry
+ * attributes -- without eating literal `<`/`>` used as less-than/greater-than
+ * in ordinary prose (AI coverage is full of "accuracy < 0.5"-shaped sentences)
+ * or as pseudo-tags like `<model>`/`<think>` that some feeds quote verbatim.
+ *
+ * Why a heuristic rather than a parser: the two cases are genuinely
+ * indistinguishable by the time we see them. fast-xml-parser decodes entities
+ * in non-CDATA text, so a feed's `&lt;model&gt;` and `&lt;p&gt;` both arrive as
+ * literal `<model>` and `<p>` -- the escaping that separated prose from markup
+ * is already gone. (Inside CDATA the distinction survives, but the parser
+ * merges both into one string field.) A bare `<[^>]*>` therefore cannot tell
+ * them apart and silently deletes real words, permanently, into an archive that
+ * cannot be re-fetched. When in doubt this keeps the text: surplus text is
+ * visible and fixable later, a deleted word is not.
  */
 function stripTags(s: string): string {
-  return s.replace(/<!--[\s\S]*?-->/g, "").replace(TAG_RE, "");
+  return s
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(TAG_RE, "")
+    .replace(HYPHENATED_TAG_RE, "")
+    .replace(ATTRIBUTED_TAG_RE, "");
 }
 
 const NAMED_ENTITIES: Record<string, string> = {

@@ -220,4 +220,48 @@ describe("parseFeed", () => {
     expect(withSummary).toBeDefined();
     expect(withSummary!.summary).not.toMatch(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/);
   });
+
+  const feedWith = (description: string) =>
+    `<?xml version="1.0"?><rss version="2.0"><channel><item>` +
+    `<title>T</title><link>https://example.com/a</link>` +
+    `<description>${description}</description></item></channel></rss>`;
+
+  it("strips real HTML elements that a hand-built allowlist would miss", () => {
+    // Regression: an allowlist built from "tags we happened to see" left time,
+    // nav, mark and svg -- attributes included -- in the archived summary.
+    const cases: [string, string][] = [
+      ["<![CDATA[Posted <time datetime='x'>now</time> ok]]>", "Posted now ok"],
+      ["<![CDATA[A <nav class='z'>menu</nav> B]]>", "A menu B"],
+      ["<![CDATA[A <mark>hi</mark> B]]>", "A hi B"],
+      ["<![CDATA[A <picture>x</picture> B]]>", "A x B"],
+    ];
+    for (const [body, expected] of cases) {
+      expect(parseFeed(feedWith(body))[0]!.summary, body).toBe(expected);
+    }
+  });
+
+  it("strips an unrecognised tag that carries attributes, since prose never does", () => {
+    expect(parseFeed(feedWith("<![CDATA[A <svg onload=alert(1)>x</svg> B]]>"))[0]!.summary)
+      .toBe("A x B");
+    expect(parseFeed(feedWith('<![CDATA[A <custom-embed data-id="7">x</custom-embed> B]]>'))[0]!.summary)
+      .toBe("A x B");
+  });
+
+  it("keeps bracketed prose that only looks like markup", () => {
+    // Why stripping stays a heuristic: summary goes to an archive that cannot be
+    // re-fetched, so keeping surplus text beats deleting a real word.
+    const keep: [string, string][] = [
+      ["its new &lt;model&gt; system shipped", "its new <model> system shipped"],
+      ["the &lt;think&gt; block is hidden", "the <think> block is hidden"],
+      ["accuracy &lt; 0.5 and loss &gt; 2", "accuracy < 0.5 and loss > 2"],
+      // One-letter element names are the sharpest edge here: without a guard on
+      // what may follow the name, `<b = c>` reads as a <b> tag and eats " = c".
+      ["a &lt;b = c&gt; d", "a <b = c> d"],
+      ["compare x &lt;y then z&gt; w", "compare x <y then z> w"],
+      ["a &lt;tool_use&gt; block", "a <tool_use> block"],
+    ];
+    for (const [body, expected] of keep) {
+      expect(parseFeed(feedWith(body))[0]!.summary, body).toBe(expected);
+    }
+  });
 });

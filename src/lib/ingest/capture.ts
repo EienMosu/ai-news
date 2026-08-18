@@ -124,7 +124,13 @@ function filterToRecentWindow(
   const sortTime = (a: NormalizedArticle) =>
     a.publishedAtSource === "fallback" ? -Infinity : Date.parse(a.publishedAt!);
 
-  const sorted = [...inWindow].sort((a, b) => sortTime(b) - sortTime(a));
+  // Compared rather than subtracted: when every item is fallback-dated both
+  // sides are -Infinity and the subtraction is NaN, which sort() reads as an
+  // inconsistent comparator rather than "equal".
+  const sorted = [...inWindow].sort((a, b) => {
+    const [x, y] = [sortTime(a), sortTime(b)];
+    return x === y ? 0 : y > x ? 1 : -1;
+  });
 
   const maxItems = src.maxItems ?? DEFAULT_MAX_ITEMS;
   const kept = sorted.slice(0, maxItems);
