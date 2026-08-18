@@ -3025,7 +3025,9 @@ it("treats missing invocations as breaching, which is what catches a stopped sch
 it("sets budget thresholds above expected spend, not at zero", () => {
   const budgets = Object.values(template().findResources("AWS::Budgets::Budget"));
   const limits = budgets.map((b) => Number(b.Properties.Budget.BudgetLimit.Amount)).sort((a, b) => a - b);
-  expect(limits).toEqual([15, 30]);
+  // Above the honest worst case (~$16.30/month at one call a day against the 32k cap), not
+  // inside it. A threshold that fires in a legitimate month trains you to ignore it.
+  expect(limits).toEqual([25, 40]);
 });
 ```
 
