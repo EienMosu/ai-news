@@ -24,6 +24,11 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * the entire entry to be skipped and counted as missing, since a type mismatch
  * is a schema violation. Structured outputs enforce JSON types, so being strict
  * is correct.
+ *
+ * A missing or blank cluster id falls back to a prefixed singleton cluster id
+ * (`__self__:<urlHash>`). The prefix prevents collision with model-supplied ids,
+ * since the model sees every article's hash in the response schema and could
+ * legitimately name a cluster after any hash.
  */
 export function reconcile(inputHashes: string[], response: unknown): ReconcileResult {
   const expected = new Set(inputHashes);
@@ -45,7 +50,7 @@ export function reconcile(inputHashes: string[], response: unknown): ReconcileRe
       if (byHash.has(hash)) continue;
 
       const rawCluster = typeof raw.clusterId === "string" ? raw.clusterId.trim() : "";
-      const clusterId = rawCluster || hash;
+      const clusterId = rawCluster || `__self__:${hash}`;
       if (!rawCluster) withoutCluster++;
 
       const rawRationale = typeof raw.whyItMatters === "string" ? raw.whyItMatters.trim() : "";

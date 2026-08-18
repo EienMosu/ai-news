@@ -57,15 +57,15 @@ describe("reconcile", () => {
     });
     expect(r.matched).toBe(2);
     expect(r.withoutCluster).toBe(2);
-    expect(r.byHash.get(h(1))?.clusterId).toBe(h(1));
-    expect(r.byHash.get(h(2))?.clusterId).toBe(h(2));
+    expect(r.byHash.get(h(1))?.clusterId).toBe(`__self__:${h(1)}`);
+    expect(r.byHash.get(h(2))?.clusterId).toBe(`__self__:${h(2)}`);
   });
 
   it("falls back to urlHash when cluster id is missing and counts it", () => {
     const r = reconcile([h(1)], { items: [item(h(1), { clusterId: undefined })] });
     expect(r.matched).toBe(1);
     expect(r.withoutCluster).toBe(1);
-    expect(r.byHash.get(h(1))?.clusterId).toBe(h(1));
+    expect(r.byHash.get(h(1))?.clusterId).toBe(`__self__:${h(1)}`);
   });
 
   it("counts entries with missing or blank rationale separately", () => {
@@ -141,5 +141,19 @@ describe("reconcile", () => {
     });
     expect(r.byHash.get(h(1))?.clusterId).toBe("cluster-42");
     expect(r.byHash.get(h(1))?.whyItMatters).toBe("Breaking story");
+  });
+
+  it("fallback cluster id is disjoint from model-supplied ids even when model uses article hashes", () => {
+    const r = reconcile([h(1), h(2)], {
+      items: [
+        item(h(1), { clusterId: "" }),
+        item(h(2), { clusterId: h(1) }),
+      ],
+    });
+    expect(r.matched).toBe(2);
+    expect(r.withoutCluster).toBe(1);
+    expect(r.byHash.get(h(1))?.clusterId).toBe(`__self__:${h(1)}`);
+    expect(r.byHash.get(h(2))?.clusterId).toBe(h(1));
+    expect(r.byHash.get(h(1))?.clusterId).not.toBe(r.byHash.get(h(2))?.clusterId);
   });
 });
