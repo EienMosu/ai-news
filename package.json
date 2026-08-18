@@ -9,6 +9,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "dry-run": "node --experimental-strip-types --import ./scripts/register-ts-extension-resolve-hook.mjs scripts/dry-run.ts",
+    "smoke": "node --experimental-strip-types --import ./scripts/register-ts-extension-resolve-hook.mjs scripts/smoke.ts",
     "cdk": "cdk",
     "synth": "cdk synth"
   },
@@ -17,6 +18,9 @@
   "license": "ISC",
   "packageManager": "pnpm@10.34.0",
   "devDependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1112.0",
+    "@aws-sdk/client-scheduler": "^3.1112.0",
+    "@aws-sdk/client-sns": "^3.1112.0",
     "@types/node": "^24.13.3",
     "aws-cdk": "^2.1137.0",
     "aws-cdk-lib": "^2.265.0",

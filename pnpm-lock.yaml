@@ -30,6 +30,15 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@aws-sdk/client-bedrock-runtime':
+        specifier: ^3.1112.0
+        version: 3.1112.0
+      '@aws-sdk/client-scheduler':
+        specifier: ^3.1112.0
+        version: 3.1112.0
+      '@aws-sdk/client-sns':
+        specifier: ^3.1112.0
+        version: 3.1112.0
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
@@ -100,6 +109,14 @@ packages:
 
   '@aws-sdk/client-dynamodb@3.1112.0':
     resolution: {integrity: sha512-Dborj6oKxgV9htN0jpdqGA9mTVOAPtYrrNI9ro67JNojtqIp1qHkdTkz1RkVi5Um2meV0qKVvhxLXRsI/S9RYQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-scheduler@3.1112.0':
+    resolution: {integrity: sha512-Ue6LsRuWqamLacUXUryXyjscenMFwTCF0jLK3fLcV3fEGpHcoMDCbifqhqp9MrsRxjjnkBIfJGhWjxuqCtPDYQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-sns@3.1112.0':
+    resolution: {integrity: sha512-fOmeSMQiWz/vOXp3KP8FJNJcjpvqQcifp1NJL0KFWy9D7u7bmY7suROGqffZAqey1pNfY9TxNIfizluwa7qjNg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-ssm@3.1112.0':
@@ -1160,6 +1177,28 @@ snapshots:
       '@aws-sdk/credential-provider-node': 3.972.80
       '@aws-sdk/dynamodb-codec': 3.973.43
       '@aws-sdk/middleware-endpoint-discovery': 3.972.29
+      '@aws-sdk/types': 3.974.4
+      '@smithy/core': 3.33.2
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.2
+      '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/client-scheduler@3.1112.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.8
+      '@aws-sdk/credential-provider-node': 3.972.80
+      '@aws-sdk/types': 3.974.4
+      '@smithy/core': 3.33.2
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.2
+      '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/client-sns@3.1112.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.8
+      '@aws-sdk/credential-provider-node': 3.972.80
       '@aws-sdk/types': 3.974.4
       '@smithy/core': 3.33.2
       '@smithy/fetch-http-handler': 5.7.2
