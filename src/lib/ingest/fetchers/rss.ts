@@ -27,7 +27,12 @@ function text(v: unknown): string {
   return "";
 }
 
-function toIso(v: unknown): string | null {
+/**
+ * Safely converts an unknown value to an ISO datetime string, guarding against
+ * RangeError from invalid dates. Returns null for unparseable or empty input.
+ * Used by feed adapters to prevent malformed timestamps from crashing batch ingestion.
+ */
+export function toIso(v: unknown): string | null {
   const raw = text(v);
   if (!raw) return null;
   const ms = Date.parse(raw);
@@ -89,8 +94,9 @@ function collapseWhitespace(s: string): string {
  * into a lone high surrogate — rendered as U+FFFD when written as UTF-8).
  * Must run last: truncating before decodeEntities can also cut an entity
  * reference in half (e.g. "...&am"), a second way to produce garbage text.
+ * Exported for use by feed adapters that need safe truncation.
  */
-function truncate(s: string, max: number): string {
+export function truncate(s: string, max: number): string {
   const codePoints = Array.from(s);
   return codePoints.length <= max ? s : codePoints.slice(0, max).join("");
 }
