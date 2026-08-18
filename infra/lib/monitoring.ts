@@ -86,13 +86,13 @@ export class Monitoring extends Construct {
     // Budget names are unique per ACCOUNT, not per stack, so a hardcoded name makes a second
     // deploy of this template into the same account fail. Derived from the stack name instead.
     const stackName = Stack.of(this).stackName;
-    // $25 / $40, NOT $15 / $30. The per-call hard cap is 32k max_tokens billed as output
-    // ($0.48) plus ~21k input ($0.06), so a month of one call a day tops out near $16.30
-    // against an expected $6.20. A $15 warning therefore sits INSIDE the plausible range and
-    // would fire in a legitimate busy month -- the same cry-wolf failure that makes the
-    // account's pre-existing $1 and $10 budgets useless. $25 says "top of the range you asked
-    // for"; $40 says "something is wrong".
-    for (const [suffix, amount] of [["warning", 25], ["investigate", 40]] as const) {
+    // One budget, alarming above $25/month, at the owner's instruction.
+    // The number is above the honest worst case rather than inside it: the per-call hard
+    // cap is 32k max_tokens billed as output ($0.48) plus ~21k input ($0.06), so a month
+    // of one call a day tops out near $16.30 against an expected $6-12. A threshold that
+    // fires during normal operation is ignored within a week, which is the state in which
+    // a real overspend goes unnoticed.
+    for (const [suffix, amount] of [["monthly", 25]] as const) {
       new budgets.CfnBudget(this, `Budget${suffix}`, {
         budget: {
           budgetName: `${stackName}-${suffix}`,
