@@ -120,6 +120,49 @@ ai-news/
 CDK's `NodejsFunction` bundles `src/lib` via esbuild. Set `bundling.externalModules`
 explicitly rather than relying on the CDK default, which has changed across versions.
 
+### Expected cost
+
+| Service | Usage | Always-free allowance | Monthly |
+|---|---|---|---|
+| Lambda | ~750 invocations, ~15,300 GB-s | 1M requests, 400,000 GB-s | $0 |
+| EventBridge Scheduler | ~750 invocations | 14M | $0 |
+| DynamoDB (on-demand) | ~18K write units | none — on-demand has no free tier | ~$0.15 |
+| CloudWatch Logs | 30 runs' logs | 5 GB | ~$0 |
+| GitHub backup, Vercel Hobby | — | — | $0 |
+| **Bedrock** | one call/day | **none** | **$4.50 – $12.50** |
+
+**Total: roughly $5–13/month, essentially all Bedrock**, varying with the `effort`
+setting. Everything else sits well inside always-free allowances. Anything above ~$15
+means something is misbehaving — a runaway loop, a leaked ingest secret, or thinking
+tokens growing unchecked — which is what the budget alarms in §8 are calibrated for.
+
+Note the credit is not the binding constraint: $176 at $10/month is 17 months, but the
+Free Plan expires at **6 months** regardless. Plan against the calendar, not the balance.
+
+### Portability across AWS accounts
+
+The stack is CDK (TypeScript — same language and repo as the application; Terraform would
+add a second toolchain for no gain here). Moving to a different AWS account should be
+`cdk deploy` with different credentials, which requires discipline in the stack code:
+
+- No hardcoded account IDs or ARNs. Use `Stack.of(this).account` / `.region` and CDK's
+  own resource references; never paste an ARN.
+- No globally-unique hardcoded names. Let CDK generate physical names, or suffix them
+  with the account/region.
+- Region is a stack parameter, not a literal.
+
+**Three steps IaC cannot do, required once per new account:**
+
+1. `cdk bootstrap` for the target account and region.
+2. Bedrock **model access** for Sonnet 4.6, plus Anthropic's one-time **First Time Use**
+   form, and AWS Marketplace permission on the billing account. Console only — there is
+   no API for this, and it gates the entire ranking stage.
+3. Write the GitHub PAT into SSM Parameter Store. It is a secret, so it never lives in
+   the repo and cannot be deployed.
+
+Keep this list in the repo README as a bootstrap checklist — it is exactly the knowledge
+that evaporates between the day the stack is written and the day the account changes.
+
 ---
 
 ## 3. Sources
@@ -506,9 +549,12 @@ Three things, all free, sized for a single-user project:
 2. **Two CloudWatch alarms → SNS → email:** Lambda `Errors >= 1`, and
    `Invocations < 1 over 25 hours` with `treatMissingData: breaching` — the second is
    what catches a silently stopped schedule.
-3. **An AWS Budget alarm** at $5/month, plus calendar reminders for the Free Plan expiry
-   and the 90-day closure date. This is the only defense against the failure that
-   destroys the product.
+3. **Two AWS Budget alarms**, plus calendar reminders for the Free Plan expiry and the
+   90-day closure date. Thresholds are set against expected spend (§8, cost) rather than
+   against zero: **$15/month** as the "higher than it should be" warning and **$30/month**
+   as "something is wrong — go look". A $5 alarm would fire during normal operation and
+   be ignored within a week, which is worse than no alarm. This is the only defense
+   against the failure that destroys the product.
 
 ---
 
