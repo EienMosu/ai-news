@@ -11,20 +11,16 @@ export const SOURCE_WEIGHTS: Record<Category, number> = {
   community: 0.5,
 };
 
-const isoString = z
-  .string()
-  .refine((v) => !Number.isNaN(Date.parse(v)), { message: "not an ISO timestamp" });
-
 export const NormalizedArticleSchema = z.object({
   urlHash: z.string().regex(/^[0-9a-f]{64}$/),
-  url: z.string().url(),
+  url: z.httpUrl(),
   title: z.string().trim().min(1),
   summary: z.string(),
-  imageUrl: z.string().url().nullable(),
+  imageUrl: z.httpUrl().nullable(),
   source: z.string().min(1),
   sourceName: z.string().min(1),
   category: z.enum(CATEGORIES),
-  publishedAt: isoString.nullable(),
+  publishedAt: z.string().datetime().nullable(),
   publishedAtSource: z.enum(["feed", "fallback"]),
   points: z.number().int().nonnegative().nullable(),
 });

@@ -44,6 +44,73 @@ describe("NormalizedArticleSchema", () => {
     });
     expect(parsed.publishedAt).toBeNull();
   });
+
+  it("rejects javascript: as a url", () => {
+    expect(() => NormalizedArticleSchema.parse({ ...valid, url: "javascript:alert(1)" })).toThrow();
+  });
+
+  it("rejects mailto: as a url", () => {
+    expect(() => NormalizedArticleSchema.parse({ ...valid, url: "mailto:x@y.z" })).toThrow();
+  });
+
+  it("accepts a normal https:// url", () => {
+    const parsed = NormalizedArticleSchema.parse({
+      ...valid,
+      url: "https://example.com/article",
+    });
+    expect(parsed.url).toBe("https://example.com/article");
+  });
+
+  it("rejects javascript: as an imageUrl", () => {
+    expect(() =>
+      NormalizedArticleSchema.parse({ ...valid, imageUrl: "javascript:alert(1)" })
+    ).toThrow();
+  });
+
+  it("accepts null imageUrl", () => {
+    const parsed = NormalizedArticleSchema.parse({
+      ...valid,
+      imageUrl: null,
+    });
+    expect(parsed.imageUrl).toBeNull();
+  });
+
+  it("rejects empty source", () => {
+    expect(() => NormalizedArticleSchema.parse({ ...valid, source: "" })).toThrow();
+  });
+
+  it("rejects empty sourceName", () => {
+    expect(() => NormalizedArticleSchema.parse({ ...valid, sourceName: "" })).toThrow();
+  });
+
+  it("rejects negative points", () => {
+    expect(() => NormalizedArticleSchema.parse({ ...valid, points: -1 })).toThrow();
+  });
+
+  it("rejects fractional points", () => {
+    expect(() => NormalizedArticleSchema.parse({ ...valid, points: 1.5 })).toThrow();
+  });
+
+  it("accepts null points", () => {
+    const parsed = NormalizedArticleSchema.parse({
+      ...valid,
+      points: null,
+    });
+    expect(parsed.points).toBeNull();
+  });
+
+  it("rejects non-ISO publishedAt formats", () => {
+    expect(() => NormalizedArticleSchema.parse({ ...valid, publishedAt: "08/18/2026" })).toThrow();
+    expect(() => NormalizedArticleSchema.parse({ ...valid, publishedAt: "Aug 18 2026" })).toThrow();
+  });
+
+  it("accepts canonical ISO timestamps", () => {
+    const parsed = NormalizedArticleSchema.parse({
+      ...valid,
+      publishedAt: "2026-08-18T09:00:00.000Z",
+    });
+    expect(parsed.publishedAt).toBe("2026-08-18T09:00:00.000Z");
+  });
 });
 
 describe("SOURCE_WEIGHTS", () => {
@@ -51,5 +118,12 @@ describe("SOURCE_WEIGHTS", () => {
     expect(SOURCE_WEIGHTS.lab).toBeGreaterThan(SOURCE_WEIGHTS.news);
     expect(SOURCE_WEIGHTS.news).toBeGreaterThan(SOURCE_WEIGHTS.research);
     expect(SOURCE_WEIGHTS.research).toBeGreaterThan(SOURCE_WEIGHTS.community);
+  });
+
+  it("pins exact weight values", () => {
+    expect(SOURCE_WEIGHTS.lab).toBe(1.0);
+    expect(SOURCE_WEIGHTS.news).toBe(0.7);
+    expect(SOURCE_WEIGHTS.research).toBe(0.6);
+    expect(SOURCE_WEIGHTS.community).toBe(0.5);
   });
 });
