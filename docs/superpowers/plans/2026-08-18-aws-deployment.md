@@ -3284,10 +3284,23 @@ Must contain, in order:
    `aws ssm put-parameter --name /ai-news/github-token --type SecureString --value '<PAT>' --region eu-central-1`
    Note the shell-history caveat: prefix the command with a space, or use `--value file://`.
 4. `pnpm cdk deploy -c alertEmail=<email>`
-5. **Confirm the SNS subscription email.** Until this is clicked, every alarm is silent.
+5. **Confirm the SNS subscription email.** Until this is clicked, all three alarms and both
+   budgets deliver nothing — and they fail *silently*, so the monitoring looks deployed and
+   healthy while notifying no one. This is the single easiest step to skip and the most
+   expensive to have skipped.
 6. `pnpm smoke --with-bedrock`
 7. `aws lambda invoke --function-name <CaptureFunction> /dev/stdout` — then re-run `pnpm smoke`
    and confirm `itemsWritten > 0`.
+
+   **Do this promptly, and expect one alarm email before you do.** `CaptureStopped` uses
+   `treatMissingData: BREACHING`, which treats *insufficient* data the same as zero — so on a
+   fresh deploy, before capture has ever run, it can fire once. That is expected, not a fault:
+   it is the same property that makes the alarm work at all, since a stopped schedule publishes
+   no datapoints to alarm on. Invoking capture here publishes the first one and clears it.
+
+   Related trade-off worth knowing: after a *real* stoppage this alarm fires roughly 25–50
+   hours later, not within the hour. The 25-hour trailing window is what stops a single missed
+   run from paging you, and the cost of that tolerance is the delay.
 8. `aws lambda invoke --function-name <RankFunction> --payload '{"day":"<today>"}' /dev/stdout`
 9. Confirm `archive/<day>.ndjson` exists in the GitHub repo.
 10. **Mint the Vercel access key** — human only. IAM console → user `VercelReader` → create
