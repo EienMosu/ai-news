@@ -20,7 +20,16 @@ export function normalizeUrl(raw: string): string {
   try {
     u = new URL(raw);
   } catch {
-    return raw;
+    // Fix 3: protocol-relative links like //example.com/post
+    if (raw.startsWith("//")) {
+      try {
+        u = new URL(`https:${raw}`);
+      } catch {
+        return raw;
+      }
+    } else {
+      return raw;
+    }
   }
 
   u.hostname = u.hostname.toLowerCase();
@@ -34,9 +43,11 @@ export function normalizeUrl(raw: string): string {
     }
   }
 
+  // Fix 1: strip trailing slashes from pathname before serializing
+  if (u.pathname !== "/") u.pathname = u.pathname.replace(/\/+$/, "");
+
   let out = u.toString();
   if (out.endsWith("?")) out = out.slice(0, -1);
-  if (out.endsWith("/") && new URL(out).pathname !== "/") out = out.slice(0, -1);
   return out;
 }
 
@@ -44,8 +55,26 @@ function sha256(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
+/**
+ * The identity form of a URL: what we hash to decide "is this the same article".
+ * Deliberately more aggressive than normalizeUrl, because this value is never
+ * shown to anyone — it only has to be stable across spellings of one article.
+ */
+function canonicalize(normalized: string): string {
+  let u: URL;
+  try {
+    u = new URL(normalized);
+  } catch {
+    return normalized;
+  }
+  u.protocol = "https:";
+  u.hostname = u.hostname.replace(/^www\./, "");
+  u.searchParams.sort();
+  return u.toString();
+}
+
 export function urlHash(normalized: string): string {
-  return sha256(normalized);
+  return sha256(canonicalize(normalized));
 }
 
 /**

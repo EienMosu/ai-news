@@ -31,6 +31,25 @@ describe("normalizeUrl", () => {
   it("returns the input unchanged when it cannot be parsed", () => {
     expect(normalizeUrl("not a url")).toBe("not a url");
   });
+
+  it("strips trailing slash with query string (Critical: prevents duplicates)", () => {
+    expect(normalizeUrl("https://x.com/a/?id=7")).toBe(
+      normalizeUrl("https://x.com/a?id=7"),
+    );
+  });
+
+  it("is idempotent: normalizeUrl(normalizeUrl(x)) === normalizeUrl(x)", () => {
+    const url = "https://x.com/a//";
+    expect(normalizeUrl(normalizeUrl(url))).toBe(normalizeUrl(url));
+  });
+
+  it("normalizes protocol-relative URLs", () => {
+    expect(normalizeUrl("//x.com/a")).toBe("https://x.com/a");
+  });
+
+  it("leaves bare relative paths unchanged", () => {
+    expect(normalizeUrl("/blog/post")).toBe("/blog/post");
+  });
 });
 
 describe("urlHash", () => {
@@ -50,6 +69,30 @@ describe("urlHash", () => {
 
   it("separates genuinely different URLs", () => {
     expect(urlHash("https://x.com/a")).not.toBe(urlHash("https://x.com/b"));
+  });
+
+  it("collapses www vs bare host", () => {
+    expect(urlHash("https://www.example.com/post")).toBe(
+      urlHash("https://example.com/post"),
+    );
+  });
+
+  it("collapses http vs https", () => {
+    expect(urlHash("http://example.com/post")).toBe(
+      urlHash("https://example.com/post"),
+    );
+  });
+
+  it("collapses query parameter order", () => {
+    expect(urlHash("https://example.com/post?a=1&b=2")).toBe(
+      urlHash("https://example.com/post?b=2&a=1"),
+    );
+  });
+
+  it("still separates genuinely different URLs after canonicalization", () => {
+    expect(urlHash("https://www.example.com/a")).not.toBe(
+      urlHash("https://example.com/b"),
+    );
   });
 });
 
