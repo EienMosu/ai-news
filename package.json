@@ -31,5 +31,10 @@
     "@aws-sdk/lib-dynamodb": "^3.1112.0",
     "fast-xml-parser": "^5.11.0",
     "zod": "^4.4.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@smithy/types": "4.17.2"
+    }
   }
 }
