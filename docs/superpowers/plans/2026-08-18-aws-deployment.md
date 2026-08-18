@@ -3177,6 +3177,7 @@ one that proves the Bedrock path end to end, so it sits behind `--with-bedrock`.
 import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { DescribeTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { SchedulerClient, ListSchedulesCommand } from "@aws-sdk/client-scheduler";
+import { ListSubscriptionsByTopicCommand, ListTopicsCommand, SNSClient } from "@aws-sdk/client-sns";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { RANK_MODEL } from "../src/lib/rank/model.js";
 import { docClient } from "../src/lib/store/client.js";
@@ -3241,6 +3242,26 @@ await check("github token", async () => {
   ok(`${TOKEN_PARAM} present (value not read)`);
 });
 
+await check("alerts reach someone", async () => {
+  // The failure this catches is invisible from the console at a glance: an email subscription
+  // sits in PendingConfirmation until the link is clicked, and until then all three alarms and
+  // both budgets deliver nothing while the topic looks deployed and healthy. AWS reports it by
+  // putting the literal string "PendingConfirmation" where the ARN belongs.
+  const sns = new SNSClient({});
+  const topics = await sns.send(new ListTopicsCommand({}));
+  const mine = (topics.Topics ?? []).filter((t) => (t.TopicArn ?? "").includes("AiNews"));
+  if (mine.length === 0) return fail("no alerts topic found");
+  for (const t of mine) {
+    const subs = await sns.send(new ListSubscriptionsByTopicCommand({ TopicArn: t.TopicArn }));
+    for (const sub of subs.Subscriptions ?? []) {
+      sub.SubscriptionArn === "PendingConfirmation"
+        ? fail(`${sub.Endpoint} has not confirmed -- every alarm is silent until it does`)
+        : ok(`${sub.Protocol} ${sub.Endpoint} confirmed`);
+    }
+    if ((subs.Subscriptions ?? []).length === 0) fail("alerts topic has no subscribers at all");
+  }
+});
+
 await check("schedules", async () => {
   const out = await new SchedulerClient({}).send(new ListSchedulesCommand({}));
   const mine = (out.Schedules ?? []).filter((s) => (s.Name ?? "").includes("Schedule"));
@@ -3270,7 +3291,7 @@ process.exit(failures === 0 ? 0 : 1);
 ```
 
 Add the script to `package.json` using the same loader hook as `dry-run`, and
-`pnpm add -D @aws-sdk/client-scheduler @aws-sdk/client-bedrock-runtime`.
+`pnpm add -D @aws-sdk/client-scheduler @aws-sdk/client-bedrock-runtime @aws-sdk/client-sns`.
 
 - [ ] **Step 2: Write `docs/RUNBOOK.md`**
 
