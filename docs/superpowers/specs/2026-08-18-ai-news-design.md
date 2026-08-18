@@ -531,12 +531,36 @@ EventBridge.
 ### Pages
 
 ```
-/                    day sections, newest first
+/                    AI news — day sections, newest first
+/design              Design news — the same, for the other vertical
 /article/[urlHash]   story detail
 /day/[date]          a single day, deep-linkable
 /search              search
 /api/ingest          trigger (POST)
 ```
+
+> **[revised]** This section predated the second content vertical. Articles now carry a
+> `section` (`"ai" | "design"`), and the two are **sibling destinations in a nav**, not a
+> filter chip inside one feed. Reasons, in order of weight:
+>
+> 1. **They do not compete.** No design source qualifies as a `lab`, so design articles top
+>    out at a 0.7 source weight while an AI lab announcement reaches 1.0. Interleaved in one
+>    ranked list, design news would sit at the bottom by construction rather than by merit.
+>    Separate destinations remove the question rather than answering it badly.
+> 2. **Ranking already treats them separately.** The daily Bedrock call allocates its input
+>    cap per section and scores importance *within* a section, so the scores were never
+>    comparable across verticals in the first place.
+> 3. **It costs no extra reads.** Both verticals live in the same `DAY#<date>` partition, so
+>    one Query serves both and the nav switches a client-side filter — the same mechanism §4
+>    already specifies for the category filter, at zero additional round trips.
+>
+> **The day-section count is per vertical.** `META#DAY.articleCount` is the total across both,
+> so a header reading "23 stories" under the AI nav must be computed from the filtered list,
+> not read from the meta item. Showing the combined count on a filtered feed would be a number
+> that matches nothing on screen.
+>
+> A story's detail page is reachable from either vertical and does not change with it; the
+> nav is a property of the feed, not of the article.
 
 ### The feed
 
