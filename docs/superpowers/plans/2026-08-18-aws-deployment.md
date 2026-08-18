@@ -683,11 +683,14 @@ export interface CaptureWriteInput {
   ingestDay: string;
   score: number;
   scoreVersion: string;
+  /** From `computeScore`. Spec §4 lists it as an item attribute; without it a projected
+   *  `points` cannot be told apart from an imputed one. */
+  pointsImputed: boolean;
   now: string;
 }
 
 export function buildCaptureUpdate(tableName: string, input: CaptureWriteInput): UpdateCommandInput {
-  const { article: a, ingestDay, score, scoreVersion, now } = input;
+  const { article: a, ingestDay, score, scoreVersion, pointsImputed, now } = input;
   const b = updateBuilder();
 
   // Pinned once, for the life of the item. These four are the archive-integrity guarantee.
@@ -707,6 +710,9 @@ export function buildCaptureUpdate(tableName: string, input: CaptureWriteInput):
   b.set("category", a.category);
   b.set("publishedAtSource", a.publishedAtSource);
   b.set("points", a.points);
+  // Persisted, not just computed. computeScore already returns it and spec §4 lists it as an
+  // item attribute; it is what stops the UI from presenting an imputed 0.5 as a measurement.
+  b.set("pointsImputed", pointsImputed);
   b.set("v", SCHEMA_VERSION);
 
   // setIfAbsent, NOT set. Capture runs hourly and its score is always the DEGRADED one, so
@@ -1168,8 +1174,20 @@ import { Construct } from "constructs";
  *                   refresh pulled in. That is exactly "scoreVersion is the degraded one",
  *                   and it is unimplementable from the index without this attribute.
  *
- * Deliberately NOT projected: points, publishedAtSource, llmImportance, firstSeenAt,
- * hashVersion, v. The detail page reads the base item anyway.
+ * `points` and `pointsImputed` are here because spec §7 requires the detail page to show
+ * "the signals behind the score — source weight, corroboration today, engagement where it
+ * exists — shown plainly, so the ranking is inspectable rather than magic", and the spec
+ * never says whether that page reads the base item or renders from the already-fetched day.
+ * Under the second reading everything it shows must be projected. The question is genuinely
+ * open and the projection is not: project both and the page works either way.
+ *
+ * `pointsImputed` travels with `points` and is not optional decoration. Spec §5 imputes a
+ * neutral 0.5 for the ~9 sources that never carry engagement, so a projected `points` alone
+ * would let the UI show a confident-looking number the system guessed. Showing an imputed
+ * value as though it were measured is the same dishonesty spec §5 corrected when it renamed
+ * `clusterSize` to `corroborationToday`.
+ *
+ * Deliberately NOT projected: publishedAtSource, llmImportance, firstSeenAt, hashVersion, v.
  *
  * Erring wide is deliberate. A projection cannot be altered after the index is created --
  * changing it means deleting and recreating the index, and recreating it on a table that
@@ -1179,6 +1197,7 @@ import { Construct } from "constructs";
 export const FEED_CARD_ATTRIBUTES = [
   "title", "summary", "imageUrl", "url", "source", "sourceName", "category",
   "publishedAt", "clusterId", "corroborationToday", "whyItMatters", "score", "scoreVersion",
+  "points", "pointsImputed",
 ];
 
 export class ArticleTable extends Construct {
@@ -2025,7 +2044,7 @@ export async function handler(): Promise<CaptureSummary> {
     // Degraded on purpose: capture has no LLM signals. computeScore imputes neutral values
     // and keeps the weights fixed (spec §5) rather than renormalising, so a captured article
     // is comparable with a ranked one instead of being pushed to the bottom.
-    const { score, scoreVersion } = computeScore({
+    const { score, scoreVersion, pointsImputed } = computeScore({
       llmImportance: null,
       category: a.category,
       corroborationToday: null,
@@ -2037,7 +2056,9 @@ export async function handler(): Promise<CaptureSummary> {
 
     try {
       await client.send(new UpdateCommand(
-        buildCaptureUpdate(table, { article: a, ingestDay, score, scoreVersion, now: nowIso }),
+        buildCaptureUpdate(table, {
+          article: a, ingestDay, score, scoreVersion, pointsImputed, now: nowIso,
+        }),
       ));
       itemsWritten += 1;
     } catch (e) {
