@@ -19,8 +19,17 @@ export const RANK_MODEL = "global.anthropic.claude-sonnet-4-6";
  * with another the model saw at the same time. Spec §4 bounds a day at ~650 articles, so this
  * cap can bite; everything beyond it keeps the degraded score capture assigned, and Task 7
  * persists how many were left out.
+ *
+ * Raised from 200 to 250 after the first live end-to-end run measured 229 articles for a
+ * single day at 21 sources and truncated 29 of them at the old cap — every one of those 29
+ * kept its degraded capture score and never got a `whyItMatters`. At 21 sources the live dry
+ * run produces ~230/day, so 250 ranks the whole day with headroom, and the per-section
+ * allocator in allocate.ts still splits that 250 fairly across sections exactly as it split
+ * 200. Cost consequence: a run that ranks 250 articles instead of 200 sends ~25% more input
+ * tokens to Bedrock per run — the first live run cost ~$0.25, so this raises that run's cost
+ * to roughly $0.31, still well inside the $25/month budget alarm.
  */
-export const RANK_INPUT_CAP = 200;
+export const RANK_INPUT_CAP = 250;
 
 /** Caps thinking PLUS response text, not response text alone. Spec §6. */
 export const MAX_TOKENS = 32_000;

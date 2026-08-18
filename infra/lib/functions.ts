@@ -248,13 +248,19 @@ export class Functions extends Construct {
       target: { arn: this.capture.functionArn, roleArn: this.schedulerRole(this.capture).roleArn },
     });
 
+    // Shared by both rank schedules below, not called once per schedule: `schedulerRole`
+    // names its Role construct from `fn.node.id` alone, so a second call for the same
+    // function would collide on the same construct id within this scope. One role invoking
+    // `this.rank` is exactly the permission either schedule needs.
+    const rankSchedulerRole = this.schedulerRole(this.rank);
+
     new scheduler.CfnSchedule(this, "RankSchedule", {
       flexibleTimeWindow: { mode: "OFF" },
       scheduleExpression: "cron(0 6 * * ? *)",
       scheduleExpressionTimezone: "Europe/Istanbul",
       target: {
         arn: this.rank.functionArn,
-        roleArn: this.schedulerRole(this.rank).roleArn,
+        roleArn: rankSchedulerRole.roleArn,
         // EventBridge Scheduler has its OWN retry policy -- entirely separate from the
         // Lambda-side `retryAttempts: 0` set above, and left at CloudFormation's default
         // (185 attempts) if not stated here. Without this, a redelivery after the day lock's
@@ -263,6 +269,29 @@ export class Functions extends Construct {
         // rank.ts) is the half of this that actually matters, since it does not depend on
         // this configuration being right; this is defense in depth, not the only line of
         // defense.
+        retryPolicy: { maximumRetryAttempts: 0 },
+      },
+    });
+
+    // The FINAL run above targets yesterday and may mark it "complete". This INTERIM run
+    // targets TODAY -- whatever has been captured between midnight and 18:00 -- so articles
+    // captured after this fires don't sit unranked until tomorrow's 06:00 final run. The
+    // `{"interim":true}` payload is what src/lambda/rank.ts's `resolveDay` reads to pick
+    // today over yesterday AND to force `status: "partial"` no matter how the run goes: the
+    // evening's articles haven't been captured yet, so this run must never mark today
+    // "complete" -- if it did, tomorrow's final run would see "complete" already and skip the
+    // day via the same already-complete guard that protects against double-billing, stranding
+    // everything captured after 18:00 unranked forever.
+    new scheduler.CfnSchedule(this, "RankInterimSchedule", {
+      flexibleTimeWindow: { mode: "OFF" },
+      scheduleExpression: "cron(0 18 * * ? *)",
+      scheduleExpressionTimezone: "Europe/Istanbul",
+      target: {
+        arn: this.rank.functionArn,
+        roleArn: rankSchedulerRole.roleArn,
+        input: JSON.stringify({ interim: true }),
+        // Same reasoning as the final run's schedule above: this is defense in depth around
+        // the handler's own guards, not the only protection against a re-billed Bedrock call.
         retryPolicy: { maximumRetryAttempts: 0 },
       },
     });
