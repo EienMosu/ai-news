@@ -93,6 +93,15 @@ export class Functions extends Construct {
         // Costs ~10-15 MB of asset on functions that run hourly and daily, where cold-start
         // size is not the constraint.
         externalModules: [],
+        // Required BECAUSE of the line above, and we learned it the hard way: the AWS SDK
+        // ships CJS, and esbuild bundling CJS into an ESM output replaces `require` with a
+        // shim that throws on Node builtins --
+        //   Error: Dynamic require of "node:https" is not supported
+        // -- which killed the capture function on its first live invocation. `createRequire`
+        // gives the bundled CJS a working `require`. Externalising and bundling each have a
+        // failure mode; this is the one that comes with bundling, and this is its fix.
+        banner:
+          "import{createRequire}from'node:module';const require=createRequire(import.meta.url);",
       },
     };
 
