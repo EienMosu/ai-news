@@ -1,0 +1,40 @@
+import type { Category } from "../../types/article.js";
+
+/** The three adapter shapes captureAll knows how to dispatch to. */
+export type SourceKind = "rss" | "hn" | "hfPapers";
+
+/** One entry in the registry: everything captureAll needs to fetch and label a source. */
+export interface SourceDef {
+  id: string;
+  name: string;
+  kind: SourceKind;
+  category: Category;
+  url: string;
+}
+
+/** Spec §3. arXiv cs.AI is deliberately absent — 268 items/day would drown the feed. */
+export const SOURCES: SourceDef[] = [
+  { id: "techcrunch", name: "TechCrunch", kind: "rss", category: "news",
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/" },
+  { id: "verge", name: "The Verge", kind: "rss", category: "news",
+    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml" },
+  { id: "arstechnica", name: "Ars Technica", kind: "rss", category: "news",
+    url: "https://arstechnica.com/ai/feed/" },
+  { id: "venturebeat", name: "VentureBeat", kind: "rss", category: "news",
+    url: "https://venturebeat.com/category/ai/feed/" },
+  { id: "mittr", name: "MIT Technology Review", kind: "rss", category: "news",
+    url: "https://www.technologyreview.com/feed/" },
+  { id: "openai", name: "OpenAI", kind: "rss", category: "lab",
+    url: "https://openai.com/news/rss.xml" },
+  { id: "deepmind", name: "Google DeepMind", kind: "rss", category: "lab",
+    url: "https://deepmind.google/blog/rss.xml" },
+  { id: "huggingface", name: "Hugging Face", kind: "rss", category: "lab",
+    url: "https://huggingface.co/blog/feed.xml" },
+  // Anthropic publishes no RSS feed; Google News is the only keyless route.
+  { id: "anthropic", name: "Anthropic", kind: "rss", category: "lab",
+    url: "https://news.google.com/rss/search?q=site:anthropic.com&hl=en-US&gl=US&ceid=US:en" },
+  { id: "hn", name: "Hacker News", kind: "hn", category: "community",
+    url: "https://hn.algolia.com/api/v1/search?query=AI%20OR%20LLM%20OR%20OpenAI%20OR%20Anthropic&tags=story&numericFilters=points%3E50&hitsPerPage=30" },
+  { id: "hfpapers", name: "HF Daily Papers", kind: "hfPapers", category: "research",
+    url: "https://huggingface.co/api/daily_papers?limit=20" },
+];
