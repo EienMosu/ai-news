@@ -18,6 +18,17 @@ describe("WEIGHTS", () => {
     const total = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
     expect(total).toBeCloseTo(1, 10);
   });
+
+  // The sum alone can't catch a redistribution: inflating `engagement` at
+  // `sourceWeight`'s expense keeps the total at 1 while inverting the feed —
+  // the exact failure the inversion tests below exist to prevent.
+  it("pins each weight, not just the total", () => {
+    expect(WEIGHTS.llmImportance).toBe(0.3);
+    expect(WEIGHTS.sourceWeight).toBe(0.3);
+    expect(WEIGHTS.corroborationToday).toBe(0.15);
+    expect(WEIGHTS.engagement).toBe(0.15);
+    expect(WEIGHTS.recency).toBe(0.1);
+  });
 });
 
 describe("computeScore", () => {
@@ -43,9 +54,21 @@ describe("computeScore", () => {
     expect(lab.score).toBeGreaterThan(hn.score);
   });
 
-  it("falls back to ingestedAt when publishedAt is missing", () => {
-    const { score } = computeScore({ ...base, publishedAt: null });
-    expect(Number.isFinite(score)).toBe(true);
+  // A fallback that defaulted age to 0, or used `now` directly instead of
+  // `ingestedAt`, would pass a bare Number.isFinite check unchanged — this
+  // pins that the recency term actually tracks ingestedAt.
+  it("uses ingestedAt for recency when publishedAt is missing", () => {
+    const fresh = computeScore({
+      ...base,
+      publishedAt: null,
+      ingestedAt: NOW.toISOString(),
+    });
+    const stale = computeScore({
+      ...base,
+      publishedAt: null,
+      ingestedAt: new Date(NOW.getTime() - 72 * 3_600_000).toISOString(),
+    });
+    expect(fresh.score).toBeGreaterThan(stale.score);
   });
 
   it("never lets a future publishedAt exceed the recency ceiling", () => {
@@ -98,5 +121,31 @@ describe("computeScore", () => {
     const five = computeScore({ ...base, corroborationToday: 5 });
     const fifty = computeScore({ ...base, corroborationToday: 50 });
     expect(five.score).toBe(fifty.score);
+  });
+
+  // Changing the imputed pnorm from 0.5 to, say, 0.1 or 0.6 would still pass
+  // every other test here — the inversion margin just quietly erodes. Pin the
+  // exact neutral value: log10(1+p)/log10(501) === 0.5 iff 1+p === sqrt(501).
+  it("pins the imputed pnorm at exactly 0.5", () => {
+    const neutralPoints = Math.sqrt(501) - 1;
+    const withoutPoints = computeScore({ ...base, points: null });
+    const withNeutralPoints = computeScore({ ...base, points: neutralPoints });
+    expect(withoutPoints.score).toBe(withNeutralPoints.score);
+  });
+
+  // Mixed degraded cases: only the missing signal should be imputed, the
+  // present one must keep its real value, and scoreVersion still flips.
+  it("imputes only llmImportance when corroboration is present in degraded mode", () => {
+    const mixed = computeScore({ ...base, llmImportance: null, corroborationToday: 3 });
+    const equivalent = computeScore({ ...base, llmImportance: 50, corroborationToday: 3 });
+    expect(mixed.scoreVersion).toBe("v1-degraded");
+    expect(mixed.score).toBe(equivalent.score);
+  });
+
+  it("imputes only corroborationToday when llmImportance is present in degraded mode", () => {
+    const mixed = computeScore({ ...base, llmImportance: 80, corroborationToday: null });
+    const equivalent = computeScore({ ...base, llmImportance: 80, corroborationToday: 1 });
+    expect(mixed.scoreVersion).toBe("v1-degraded");
+    expect(mixed.score).toBe(equivalent.score);
   });
 });
