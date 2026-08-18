@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?><feed
+	xmlns="http://www.w3.org/2005/Atom"
+	xmlns:thr="http://purl.org/syndication/thread/1.0"
+	xml:lang="en-US"
+	>
+	<title type="text">AI | The Verge</title>
+	<subtitle type="text">The Verge is about technology and how it makes us feel. Founded in 2011, we offer our audience everything from breaking news to reviews to award-winning features and investigations, on our site, in video, and in podcasts.</subtitle>
+
+	<updated>2026-08-17T23:40:26+00:00</updated>
+
+	<link rel="alternate" type="text/html" href="https://www.theverge.com/ai-artificial-intelligence" />
+	<id>https://www.theverge.com/rss/ai-artificial-intelligence/index.xml</id>
+	<link rel="self" type="application/atom+xml" href="https://www.theverge.com/rss/ai-artificial-intelligence/index.xml" />
+
+	<icon>https://platform.theverge.com/wp-content/uploads/sites/2/2025/01/verge-rss-large_80b47e.png?w=150&amp;h=150&amp;crop=1</icon>
+		<entry>
+			
+			<author>
+				<name>Jennifer Pattison Tuohy</name>
+			</author>
+			
+			<title type="html"><![CDATA[Whisker’s AI-powered litter robot thinks my cats swapped bodies]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/tech/978323/whisker-litter-robot-5-pro-review" />
+			<id>https://www.theverge.com/?p=978323</id>
+			<updated>2026-08-17T19:40:26-04:00</updated>
+			<published>2026-08-17T07:00:00-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Reviews" /><category scheme="https://www.theverge.com" term="Robot" /><category scheme="https://www.theverge.com" term="Smart Home" /><category scheme="https://www.theverge.com" term="Smart Home Reviews" /><category scheme="https://www.theverge.com" term="Tech" />
+							<summary type="html"><![CDATA[The greatest invention in pet tech in recent years is the litter robot. A machine that scoops your kitties' poop so you don't have to - what else could a cat owner possibly want? How about insights into your kitty's litter box usage that could flag health issues? Sign me up. But I have two [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="Cat standing inside of Whisker’s AI powered litter robot." data-caption="" data-portal-copyright="Image: The Verge, Getty Images " data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2026/08/268628_Pet_week_CVirginia_LITTER_ROBOT.jpg?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="has-drop-cap wp-block-paragraph">The greatest invention in <a href="https://www.theverge.com/tech/765085/pet-gadgets-dog-cat-fish-favorites">pet tech</a> in recent years is the litter robot. A machine that scoops your kitties' poop so you don't have to - what else could a cat owner possibly want? How about insights into your kitty's litter box usage that could flag health issues? Sign me up. But I have two feline friends… No worries, kitty facial recognition can handle that. </p>
+<p class="wp-block-paragraph">At least, that is the idea behind the <a href="https://www.whisker.com/litter-robot-5-pro">Litter-Robot 5 Pro</a>, the highest-end model from the OG robotic pooper scooper company Whisker. Boasting a dual camera system and an array of sensors to literally sniff out your cat's deposits, all wrapped up with AI algorithms and machine learning,  …</p>
+<p><a href="https://www.theverge.com/tech/978323/whisker-litter-robot-5-pro-review">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Jess Weatherbed</name>
+			</author>
+			
+			<title type="html"><![CDATA[Anthropic explains how Claude&#8217;s invisible text watermarks will work]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/ai-artificial-intelligence/980869/anthropic-claude-watermarks-synthid-text-system" />
+			<id>https://www.theverge.com/?p=980869</id>
+			<updated>2026-08-17T07:40:52-04:00</updated>
+			<published>2026-08-17T06:57:13-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Anthropic" /><category scheme="https://www.theverge.com" term="News" /><category scheme="https://www.theverge.com" term="Tech" />
+							<summary type="html"><![CDATA[Anthropic has clarified how it's planning to apply invisible watermarks to Claude-generated text in order to comply with Europe's AI transparency rules. On Friday, Anthropic announced that Claude's text marking system is "a version of the SynthID-Text approach" - an open-source watermarking technology developed by Google DeepMind that creates detectable patterns using wording probabilities. This [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="Claude logo on robot’s face." data-caption="" data-portal-copyright="Image: Cath Virginia / The Verge, Getty Images" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2026/01/STKB364_CLAUDE_2_C_96d15c.jpg?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="wp-block-paragraph">Anthropic has clarified how it's planning to apply invisible watermarks to Claude-generated text in order to comply with Europe's AI transparency rules. On Friday, <a href="https://www.anthropic.com/news/claude-text-watermark">Anthropic announced</a> that Claude's text marking system is "a version of the SynthID-Text approach" - an open-source watermarking technology <a href="https://www.theverge.com/2024/10/23/24277873/google-artificial-intelligence-synthid-watermarking-open-source">developed by Google DeepMind</a> that creates detectable patterns using wording probabilities.</p>
+<p class="wp-block-paragraph">This watermarking feature, <a href="https://www.theverge.com/ai-artificial-intelligence/977823/anthropic-claude-ai-watermarks-c2pa-text-images">alongside C2PA support</a> for Claude-processed images, is being introduced to meet Anthropic's obligations under the <a href="https://www.theverge.com/ai-artificial-intelligence/974571/eu-ai-act-transparency-labels-rules-deepfakes">European Union's AI Act</a>, which requires synthetic audio, image, video, and text to include machine-readable marks …</p>
+<p><a href="https://www.theverge.com/ai-artificial-intelligence/980869/anthropic-claude-watermarks-synthid-text-system">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Terrence O’Brien</name>
+			</author>
+			
+			<title type="html"><![CDATA[OpenAI reportedly disbanded its preparedness team]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/ai-artificial-intelligence/980817/openai-disbands-preparedness-team" />
+			<id>https://www.theverge.com/?p=980817</id>
+			<updated>2026-08-17T05:21:20-04:00</updated>
+			<published>2026-08-16T17:32:56-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="News" /><category scheme="https://www.theverge.com" term="OpenAI" /><category scheme="https://www.theverge.com" term="Security" /><category scheme="https://www.theverge.com" term="Tech" />
+							<summary type="html"><![CDATA[According to the Financial Times, OpenAI disbanded its preparedness team at the end of last month. The job of the preparedness team was to assess if models posed serious risks and develop ways to mitigate those risks. (You know, like the possibility that it could go rogue and hack another company.) According to FT, responsibility [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="Maroon OpenAI logo on yellow background" data-caption="" data-portal-copyright="" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2025/08/STK149_AI_01.jpg?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="wp-block-paragraph">According to the <a href="https://www.ft.com/content/53082739-7714-4aae-9816-e55ab423cbee"><em>Financial Times</em></a>, OpenAI disbanded its preparedness team at the end of last month. The job of the preparedness team was to assess if models posed serious risks and develop ways to mitigate those risks. (You know, like the possibility that it could <a href="https://www.theverge.com/ai-artificial-intelligence/968988/openai-hugging-face-hack-ai">go rogue</a> and hack another company.) According to <em>FT</em>, responsibility has instead been divided up for specific areas like bio and cyber, then moved into existing teams.</p>
+<p class="wp-block-paragraph">This is the latest change at the company, which has been in upheaval as it heads toward what is expected to be a massive IPO. Over the last few years, it's slowly torn down its more reach-led model, dissolving its AGI …</p>
+<p><a href="https://www.theverge.com/ai-artificial-intelligence/980817/openai-disbands-preparedness-team">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Terrence O’Brien</name>
+			</author>
+			
+			<title type="html"><![CDATA[ChatGPT’s Computer History tracks your clicks and keystrokes]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/ai-artificial-intelligence/980742/chatgpts-computer-history-tracks-your-clicks-and-keystrokes" />
+			<id>https://www.theverge.com/?p=980742</id>
+			<updated>2026-08-17T05:48:02-04:00</updated>
+			<published>2026-08-16T10:56:40-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="News" /><category scheme="https://www.theverge.com" term="OpenAI" />
+							<summary type="html"><![CDATA[ChatGPT's desktop app on macOS has a new feature called Computer History that turns your actions into training data, learning how you work, suggesting automations, and even picking up tasks you left half done. It uses your activity to build a timeline that ChatGPT and Codex can reference when you make a request. The feature [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="Chat GPT logo on a graphic green background." data-caption="" data-portal-copyright="Image: The Verge" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2025/08/STK155_OPEN_AI_4_CVirginia_C.png?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="wp-block-paragraph">ChatGPT's desktop app on macOS has a new feature called <a href="https://x.com/AriX/status/2087996577227124775">Computer History</a> that turns your actions into training data, learning how you work, suggesting automations, and even picking up tasks you left half done. It uses your activity to build a timeline that ChatGPT and Codex can reference when you make a request.</p>
+<p class="wp-block-paragraph">The feature is opt in, rather than opt out, and you can exclude certain apps and websites from Computer History, and you can delete entries if you want finer-grained control. Ari Weinstein, Product and Engineering manager at OpenAI, <a href="https://x.com/AriX/status/2088106720157446352?s=20">said on X</a> that Computer History will automatically ignore content in incognito or private browser tab …</p>
+<p><a href="https://www.theverge.com/ai-artificial-intelligence/980742/chatgpts-computer-history-tracks-your-clicks-and-keystrokes">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Robert Hart</name>
+			</author>
+			
+			<title type="html"><![CDATA[Rogue AI aren’t science fiction anymore]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/column/980337/rogue-ai-science-fiction-openai" />
+			<id>https://www.theverge.com/?p=980337</id>
+			<updated>2026-08-14T11:16:22-04:00</updated>
+			<published>2026-08-16T08:00:00-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Column" /><category scheme="https://www.theverge.com" term="OpenAI" /><category scheme="https://www.theverge.com" term="Security" /><category scheme="https://www.theverge.com" term="Tech" /><category scheme="https://www.theverge.com" term="The Stepback" />
+							<summary type="html"><![CDATA[This is The Stepback, a weekly newsletter breaking down one essential story from the tech world. For more on AI safety, follow Robert Hart. The Stepback arrives in our subscribers' inboxes at 8AM ET. Opt in for The Stepback here. How it started It all started in July, when one of OpenAI's autonomous AI agents [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="" data-caption="" data-portal-copyright="Image: The Verge" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2026/08/STK485_STK414_AI_SAFETY_A-1.jpg?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="wp-block-paragraph"><em>This is </em><a href="https://www.theverge.com/the-stepback-newsletter">The Stepback</a><em>, a weekly newsletter breaking down one essential story from the tech world. For more on AI safety, <a href="https://www.theverge.com/authors/robert-hart">follow Robert Hart</a>. </em>The Stepback <em>arrives in our subscribers' inboxes at 8AM ET. Opt in for </em>The Stepback<em> <a href="https://www.theverge.com/newsletters">here</a>.</em></p>
+<h2 class="wp-block-heading">How it started </h2>
+<p class="wp-block-paragraph">It all started in July, when one of OpenAI's autonomous AI agents <a href="https://www.theverge.com/ai-artificial-intelligence/968988/openai-hugging-face-hack-ai">went rogue</a> during a cybersecurity test. The agent escaped its isolated testing environment, accessed the internet, and hacked another company, Hugging Face. A few years ago, that might have sounded like science fiction. But, broadly speaking, that's exactly what happened, and the incident kicked off a wave of concern over what increa …</p>
+<p><a href="https://www.theverge.com/column/980337/rogue-ai-science-fiction-openai">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Terrence O’Brien</name>
+			</author>
+			
+			<title type="html"><![CDATA[Have a laugh at AI’s expense by roleplaying as a chatbot]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/entertainment/980502/roleplay-as-an-ai-chatbot" />
+			<id>https://www.theverge.com/?p=980502</id>
+			<updated>2026-08-17T06:02:14-04:00</updated>
+			<published>2026-08-15T16:45:00-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Culture" /><category scheme="https://www.theverge.com" term="Entertainment" /><category scheme="https://www.theverge.com" term="Internet Culture" /><category scheme="https://www.theverge.com" term="News" />
+							<summary type="html"><![CDATA[Your AI Slop Bores Me is brilliant in its simplicity. There are two tabs: human and LARP as an AI. On one side, you enter a request. On the other, you submit an answer. But the important thing is that there's a human on both sides of the equation. Prompts can request a response as [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="Screenshot of a real human posing as a fake AI and producing a scribble that’s supposed to be a pit bull in a party hat." data-caption="If you squint, you can just about make out the hat. | Screenshot: Terrence O’Brien / The Verge" data-portal-copyright="Screenshot: Terrence O’Brien / The Verge" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2026/08/Screenshot-2026-08-15-at-4.40.53-PM.png?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+	If you squint, you can just about make out the hat. | Screenshot: Terrence O’Brien / The Verge	</figcaption>
+</figure>
+<p class="wp-block-paragraph"><a href="https://youraislopbores.me/">Your AI Slop Bores Me</a> is brilliant in its simplicity. There are two tabs: human and LARP as an AI. On one side, you enter a request. On the other, you submit an answer. But the important thing is that there's a human on both sides of the equation. Prompts can request a response as text or image, and then whoever is roleplaying as the AI gets 150 seconds to respond.</p>
+<p class="wp-block-paragraph">Just like a real LLM, Your AI Slop Bores Me works on a sort of token system. Requests cost credits, and to earn credits, you have to jump onto the AI side and answer some of your own. You can also just wait as you get one free request every two minutes. But, as fun as it is to dr …</p>
+<p><a href="https://www.theverge.com/entertainment/980502/roleplay-as-an-ai-chatbot">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>David Pierce</name>
+			</author>
+			
+			<title type="html"><![CDATA[Mark Zuckerberg has an Instagzam]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/podcast/980367/instagram-logo-new-zuckerberg-ai-vergecast" />
+			<id>https://www.theverge.com/?p=980367</id>
+			<updated>2026-08-14T12:54:16-04:00</updated>
+			<published>2026-08-14T12:54:16-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Instagram" /><category scheme="https://www.theverge.com" term="Meta" /><category scheme="https://www.theverge.com" term="Podcasts" /><category scheme="https://www.theverge.com" term="Tech" /><category scheme="https://www.theverge.com" term="Vergecast" />
+							<summary type="html"><![CDATA[Instagram's wordmark is iconic. Well, was iconic. Apparently Instagram thought it looked old, so the company rolled out a new one this week. It doesn't look like the old Instagram wordmark. It doesn't even look like it spells Instagram anymore. And we cannot figure out why Instagram decided to do this. On this episode of [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="" data-caption="" data-portal-copyright="Image: Alex Parkin / The Verge" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2026/08/VRGVSST_0814_SIte.jpg?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="wp-block-paragraph">Instagram's wordmark is iconic. Well, <em>was </em>iconic. Apparently Instagram thought it looked old, so the company <a href="https://www.theverge.com/tech/979583/this-is-instagrams-new-logo">rolled out a new one this week.</a> It doesn't look like the old Instagram wordmark. It doesn't even look like it spells Instagram anymore. And we cannot figure out why Instagram decided to do this.</p>
+<p class="wp-block-paragraph">On <a href="https://pod.link/vergecast">this episode of <em>The Vergecast</em></a>, David and Nilay start by discussing the new logo, the executive urge to redesign everything all the time, and whether new is always better. After that, they get into the other big Meta release of the week: Mark Zuckerberg's <a href="https://about.fb.com/news/2026/08/the-future-is-for-everyone/">many-thousand-word missive</a> on the future of AI. There are <a href="https://www.theverge.com/tech/977395/meta-mark-zuckerberg-superintelligent-ai-ramble">a lot of ideas and proposals</a> …</p>
+<p><a href="https://www.theverge.com/podcast/980367/instagram-logo-new-zuckerberg-ai-vergecast">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Emma Roth</name>
+			</author>
+			
+			<title type="html"><![CDATA[You can now turn off Google Gemini&#8217;s visible watermarks]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/tech/980416/google-gemini-ai-watermarks-removal" />
+			<id>https://www.theverge.com/?p=980416</id>
+			<updated>2026-08-14T12:49:56-04:00</updated>
+			<published>2026-08-14T12:39:32-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Google" /><category scheme="https://www.theverge.com" term="News" /><category scheme="https://www.theverge.com" term="Tech" />
+							<summary type="html"><![CDATA[Google will now allow you to remove visible watermarks from the images, videos, and music made with AI tools. With the update, you can toggle off a new "Media watermark" setting in Gemini and Google's AI video generator, Flow. When toggled off, Google will remove the "sparkle" watermark that appears in the bottom-right corner of [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="Vector illustration of the Google Gemini logo" data-caption="" data-portal-copyright="Image: Cath Virginia / The Verge" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2025/02/STK255_Google_Gemini_D.jpg?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="wp-block-paragraph">Google will now allow you to remove visible watermarks from the images, videos, and music made with AI tools. With <a href="https://x.com/GeminiApp/status/2088277477672255830?s=20">the update</a>, you can toggle off a new "Media watermark" setting in Gemini and Google's AI video generator, Flow.</p>
+<p class="wp-block-paragraph">When toggled off, Google will remove the "sparkle" watermark that appears in the bottom-right corner of content generated with the company's Nano Banana and Omni models. Though visible watermarks are now optional, AI-generated content will have invisible <a href="https://www.theverge.com/2023/8/29/23849107/synthid-google-deepmind-ai-image-detector">SynthID watermarks</a> and <a href="https://www.theverge.com/2024/8/21/24223932/c2pa-standard-verify-ai-generated-images-content-credentials">C2PA metadata</a> embedded in the background, <a href="https://x.com/joshwoodward/status/2088259244193960386?s=20">according to Josh Woodward</a>, the vice president of Google Labs, Gemini, and AI Studio. That means you  …</p>
+<p><a href="https://www.theverge.com/tech/980416/google-gemini-ai-watermarks-removal">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Robert Hart</name>
+			</author>
+			
+			<title type="html"><![CDATA[Apple trained its own AI model for China with help from Alibaba]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/ai-artificial-intelligence/980160/apple-intelligence-china-custom-ai-model-alibaba" />
+			<id>https://www.theverge.com/?p=980160</id>
+			<updated>2026-08-14T05:30:10-04:00</updated>
+			<published>2026-08-14T05:21:17-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Apple" /><category scheme="https://www.theverge.com" term="News" /><category scheme="https://www.theverge.com" term="Tech" />
+							<summary type="html"><![CDATA[Apple has reportedly trained a custom AI model for the China market alongside domestic tech giant Alibaba, a rare cross-border partnership that cuts across growing tensions between Beijing and Washington. The China-focused large language model was developed in partnership with Alibaba and trained with the company's support, Reuters reports, citing three unnamed people familiar with [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="" data-caption="" data-portal-copyright="Image: The Verge" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2026/08/STK071_APPLE_A-1.jpg?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+		</figcaption>
+</figure>
+<p class="wp-block-paragraph">Apple has reportedly trained a custom AI model for the China market alongside domestic tech giant Alibaba, a rare cross-border partnership that cuts across <a href="https://www.theverge.com/ai-artificial-intelligence/968136/chinese-ai-models-another-sputnik-moment">growing tensions</a> between Beijing and Washington.</p>
+<p class="wp-block-paragraph">The China-focused large language model was developed in partnership with Alibaba and trained with the company's support, <em>Reuters</em> <a href="https://www.reuters.com/business/retail-consumer/apple-trains-its-own-ai-model-china-market-with-alibabas-support-sources-say-2026-08-14/">reports</a>, citing three unnamed people familiar with the matter. </p>
+<p class="wp-block-paragraph">Developing a custom model of its own marks a departure from Apple's previous strategy in the country and would give the company more control over its products in the competitive Chinese smartphone market. Historically, Apple has used domestic Chines …</p>
+<p><a href="https://www.theverge.com/ai-artificial-intelligence/980160/apple-intelligence-china-custom-ai-model-alibaba">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+			<entry>
+			
+			<author>
+				<name>Emma Roth</name>
+			</author>
+			
+			<title type="html"><![CDATA[Microsoft’s Clippy-like Mico character is no longer the face of Copilot]]></title>
+			<link rel="alternate" type="text/html" href="https://www.theverge.com/tech/979871/microsoft-copilot-mico-retired" />
+			<id>https://www.theverge.com/?p=979871</id>
+			<updated>2026-08-13T17:53:09-04:00</updated>
+			<published>2026-08-13T17:42:38-04:00</published>
+			<category scheme="https://www.theverge.com" term="AI" /><category scheme="https://www.theverge.com" term="Microsoft" /><category scheme="https://www.theverge.com" term="News" /><category scheme="https://www.theverge.com" term="Tech" />
+							<summary type="html"><![CDATA[Microsoft Copilot will no longer show its emotive yellow blob, Mico, when you use the chatbot's voice mode. In a support page, Microsoft says it's going to move Mico to its Learn Live platform, where the avatar will have "more to react to," as reported earlier by GeekWire. Mico launched in Copilot's voice mode last [&#8230;]]]></summary>
+			
+							<content type="html">
+											<![CDATA[
+
+						
+<figure>
+
+<img alt="An image of Mico" data-caption="Mico is headed to Learn Live. | Image: Microsoft" data-portal-copyright="Image: Microsoft" data-has-syndication-rights="1" src="https://platform.theverge.com/wp-content/uploads/sites/2/2026/08/mico-copilot.png?quality=90&#038;strip=all&#038;crop=0,0,100,100" />
+	<figcaption>
+	Mico is headed to Learn Live. | Image: Microsoft	</figcaption>
+</figure>
+<p class="wp-block-paragraph">Microsoft Copilot will no longer show its emotive yellow blob, Mico, when you use the chatbot's voice mode. In a <a href="https://support.microsoft.com/en-us/microsoft-365-copilot/frequently-asked-questions-about-retired-copilot-features">support page</a>, Microsoft says it's going to move Mico to its Learn Live platform, where the avatar will have "more to react to," <a href="https://www.geekwire.com/2026/farewell-mico-microsofts-cute-little-ai-blob-is-going-the-way-of-bob/">as reported earlier by <em>GeekWire</em></a>.</p>
+<p class="wp-block-paragraph">Mico <a href="https://www.theverge.com/news/804106/microsoft-mico-copilot-ai-assistant-clippy">launched in Copilot's voice mode last October</a>, with Microsoft AI CEO Mustafa Suleyman pitching the avatar as a way to <a href="https://www.theverge.com/news/713715/microsoft-copilot-appearance-feature-age-mustafa-suleyman-interview">give the chatbot an "identity."</a> The blob would react to what you say in real-time, complete with facial expressions and animations.</p>
+<div class="youtube-embed"><iframe title="Talk it out with Mico | Microsoft Copilot" src="https://www.youtube.com/embed/lZfJ0OXVDPE?rel=0" allowfullscreen allow="accelerometer *; clipboard-write *; encrypted-media *; gyroscope *; picture-in-picture *; web-share *;"></iframe></div>
+<p class="wp-block-paragraph">Mico joins <a href="https://the-microsoft-windows-xp.fandom.com/wiki/Office_Assistants">the long list</a> of virtual helpers that Microsoft has retired over the years, like Clippy, Cortana, and Rover …</p>
+<p><a href="https://www.theverge.com/tech/979871/microsoft-copilot-mico-retired">Read the full story at The Verge.</a></p>
+						]]>
+									</content>
+			
+					</entry>
+	</feed>

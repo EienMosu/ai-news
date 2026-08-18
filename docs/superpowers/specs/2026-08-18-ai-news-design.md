@@ -180,12 +180,39 @@ All keyless and verified reachable on 2026-08-18.
 drown the feed and dominate the Bedrock token budget. HF Daily Papers covers the same
 ground curated, at ~10-20 items/day.
 
-**Anthropic has no official RSS feed** (`/rss.xml`, `/feed.xml`, `/news/rss.xml` all 404).
-The Google News fallback returns `news.google.com/rss/articles/...` wrapper URLs.
-Link stability was tested across two fetches five seconds apart and was identical, but
-the wrapper must still be resolved to the publisher URL before hashing — both to guard
-against multi-day token drift and because the publisher URL is what the user should click.
-If resolution fails, fall back to `sha256(lower(title) + '|' + sourceName)`.
+**Anthropic has no official RSS feed** — re-verified 2026-08-18: `/rss.xml`, `/feed.xml`,
+`/news/rss.xml`, `/atom.xml`, `/news/feed`, `/index.xml` all return 404. The Google News
+fallback returns `news.google.com/rss/articles/...` wrapper URLs.
+
+> **[revised]** The original design required resolving the wrapper to the publisher URL
+> before hashing. **That is not buildable.** Measured 2026-08-18: following the wrapper with
+> redirects enabled ends on `news.google.com` itself (1 redirect, HTTP 200, 579 KB), and the
+> returned body contains **zero occurrences of `anthropic.com`** and no external publisher URL
+> of any kind. The `CBMi…` id base64-decodes to an opaque 83-byte token, not a URL. Google now
+> resolves the target **client-side in JavaScript** (the body carries four `location.href`
+> assignments), so no server-side fetch can recover the publisher link.
+
+Three consequences, each ruled on:
+
+1. **Hashing.** Anthropic items are keyed by `titleHash(title, sourceName)`, not by the wrapper
+   URL. The wrapper token is opaque and its multi-day stability is unproven — hashing it risks
+   the same post being re-keyed onto a later day and **duplicated in the archive**, which is the
+   exact failure `if_not_exists` on `ingestDay` exists to prevent. A title hash is deterministic,
+   and its failure mode (two distinct posts sharing a title) collapses to a dedup, not a
+   duplicate. This requires a per-source `hashStrategy: 'url' | 'title'`, defaulting to `'url'`.
+2. **Outbound link.** The wrapper URL is kept as the article's `url`. It is degraded but not
+   broken: a real browser follows the JavaScript hop and lands on the Anthropic post. The user
+   pays one extra redirect.
+3. **Do not drop the source.** Anthropic is a primary lab; losing it entirely is a worse product
+   than an extra redirect hop.
+
+**Follow-up (not v1):** scraping `anthropic.com/news` directly yields correct publisher URLs —
+14 `/news/<slug>` anchors were extracted from the live page at HTTP 200 without JavaScript.
+It is deferred because the surrounding text is positionally unreliable: on the same page one
+card reads `Introducing Claude Opus 5 · Product · Jul 24, 2026` while the next reads
+`Announcements · Jul 9, 2026 · Inviting hard questions` — title and date swap places between
+adjacent items, so a positional parser would mis-title articles **silently**. That needs its own
+task and its own tests, not a line in this one.
 
 ---
 
@@ -205,7 +232,8 @@ If resolution fails, fall back to `sha256(lower(title) + '|' + sourceName)`.
 
 ```
 pk = ART#<urlHash>        sk = A
-     urlHash = sha256(normalize(resolveRedirect(url)))
+     urlHash = sha256(normalize(url))            <- hashStrategy 'url'  (default)
+             | sha256(lower(title) + '|' + sourceName)   <- hashStrategy 'title' (Anthropic, see 3)
      normalize: lowercase host; strip utm_*, fbclid, gclid, mc_cid, mc_eid, igshid,
                 ref, source, at_*; strip trailing slash; strip #:~:text= fragments
 
@@ -213,7 +241,8 @@ pk = META#DAY             sk = <YYYY-MM-DD>
      status ("complete" | "partial"), articleCount, runId, completedAt
 
 pk = META#lastRun         sk = A
-     startedAt, durationMs, perSourceCounts, llmStatus, itemsWritten, itemsFailed, errors[]
+     startedAt, durationMs, llmStatus, itemsWritten, itemsFailed, errors[]
+     perSourceCounts, filtered, quarantined      <- all three persisted, see below
 ```
 
 **GSI1 — `feed-by-day`** (the only index)
@@ -240,6 +269,7 @@ clusterId, corroborationToday
 llmImportance, whyItMatters
 points, upvotes, pointsImputed
 score, scoreVersion
+hashVersion                  (which urlHash algorithm produced this key)
 v                            (schema version, for future backfills)
 ```
 
@@ -262,8 +292,14 @@ Two rules:
   runtime and omit the LLM fields entirely when that stage failed, so a degraded run
   refreshes volatile signals without touching enrichment.
 
-Capture writes use a conditional put (`attribute_not_exists(pk)`) so re-seeing an
-article costs a failed condition rather than a full item write.
+> **[revised]** This section previously ended with "Capture writes use a conditional put
+> (`attribute_not_exists(pk)`) so re-seeing an article costs a failed condition rather than a
+> full item write." **That line is deleted.** It contradicted the rule directly above it — a
+> conditional put that succeeds is still a whole-item replace, and one that fails never
+> refreshes `points` — and, checked against AWS's documented on-demand billing, the
+> optimisation **would not have saved money even if implemented.** It was left over from the
+> pre-UpdateItem design. Hourly capture re-writing unchanged articles costs roughly
+> $0.60-0.90/month in total, which is the real figure this section should have carried.
 
 ### Day derivation
 
@@ -277,6 +313,32 @@ One shared helper, unit-tested at the 23:59 and 00:01 boundaries.
 > constant UTC+3, so `new Date().toISOString().slice(0,10)` at 00:00 local stamps
 > **the previous day**. The reader would query a partition that never exists. Not an edge
 > case — it would have been wrong every single day.
+
+### Key and cluster invariants
+
+**`hashVersion` is mandatory on every item.** `urlHash` is a normalization pipeline — strip this
+query parameter, lowercase that host — and any change to it silently re-keys every future write.
+The archive would fork: the same article stored twice under two keys, with no way after the fact
+to tell which items came from which algorithm. `hashVersion` starts at `1` and increments with
+any normalization change; a backfill can then find every affected item. This attribute costs one
+number per item and is the only thing that makes the key algorithm revisable at all.
+
+**`clusterId` values beginning with `__self__:` are not clusters.** When the model returns no
+cluster for an article, capture assigns `__self__:<urlHash>` rather than leaving the field blank.
+
+> **[revised]** Blank cluster ids were originally left as empty strings. Every article the model
+> failed to cluster then shared the id `""`, so they merged into one giant cluster — converting a
+> *missing* signal into a *fabricated corroboration* signal that inflated `corroborationToday`
+> and pushed unrelated articles up the ranking. The namespace prefix makes each one a singleton.
+
+Consumers must honour this: `corroborationToday` is `1` for a `__self__:` item, and the UI shows
+no cluster affordance for it. The prefix is reserved — a model-supplied id starting with
+`__self__:` is treated as absent.
+
+**Day partitions are bounded.** With 13 sources, a 7-day recency window and a 50-item per-source
+cap, one day's GSI1 partition holds at most 650 items and in practice ~170. That is far inside
+DynamoDB's 10 GB partition limit and one `Query` page, so the feed read stays a single round trip
+and needs no pagination in v1. If sources are added, re-check this bound before assuming it holds.
 
 ### Access patterns
 
@@ -342,8 +404,10 @@ const sk = String(Math.min(9999, Math.max(0, Math.round(score)))).padStart(4, '0
 > 0.35 to 0.15, with the freed 0.20 going to `sourceWeight`. An honest signal at 15%
 > beats a misleading one at 35%.
 
-`clusterId` is namespaced as `<ingestDay>#<llmIndex>` so ids from different runs cannot
-collide. At the end of each run the day partition is re-read once and `corroborationToday`
+`clusterId` is namespaced as `<ingestDay>#<slug>` so ids from different days cannot collide.
+Ids the model did not supply are assigned `__self__:<urlHash>` by `reconcile` **before**
+namespacing and are left un-prefixed — they already carry a unique hash, and the reserved
+prefix is what marks them as non-clusters (§4). At the end of each run the day partition is re-read once and `corroborationToday`
 recomputed for the whole day, making it consistent and idempotent under repeated
 manual triggers.
 
@@ -419,8 +483,17 @@ const text = msg.content.find((b) => b.type === "text")?.text;
 
 - `max_tokens` caps thinking **plus** response text. The original 3K output estimate was
   30 tokens per article; ~100 items with a one-sentence rationale each is realistically
-  4.5-7K before thinking. Set 32000 and validate against a real batch with
-  `countTokens()` before deploying.
+  4.5-7K before thinking. Set 32000 and validate against a real batch before deploying.
+
+  > **[revised]** The original instruction said to validate with `countTokens()`. **That does
+  > not work on Bedrock, and it fails in the worst possible way.** Measured 2026-08-18: the
+  > method is present and callable on `AnthropicBedrock`, does **not** throw, and RESOLVES with
+  > `{"Output":{"__type":"com.amazon.coral.service#UnknownOperationException"},"Version":"1.0"}`
+  > — an AWS error envelope handed back as though it were a successful response. So
+  > `const { input_tokens } = await countTokens(...)` yields `undefined` and the caller carries
+  > on. A missing method fails loudly; this fails plausibly, and no `typeof` guard detects it.
+  > Validate instead from the `usage` field of one real ranking call, which the smoke script
+  > runs once before the first scheduled run.
 - **`stop_reason === "max_tokens"` branches separately** from a failed call. Truncation
   yields invalid JSON, which would otherwise be caught as a generic Bedrock failure and
   silently degrade the whole day, looking identical to an outage.
@@ -438,9 +511,18 @@ const text = msg.content.find((b) => b.type === "text")?.text;
   A Lambda timeout kills the execution environment with no catchable signal, so without
   the abort the degraded-mode fallback **cannot run at all**.
 
-**Cost:** $3/MTok input, $15/MTok output on the global endpoint. Realistically
-**$4.50-12.50/month** depending on effort. Bedrock has **no always-free allowance** —
-every call draws credit from day one, unlike Lambda, DynamoDB, and EventBridge.
+**Cost:** $3/MTok input, $15/MTok output on the global endpoint. Bedrock has **no
+always-free allowance** — every call draws credit from day one, unlike Lambda, DynamoDB and
+EventBridge.
+
+> **[revised]** The original estimate of **$4.50-12.50/month** was too low. Recomputed
+> independently against 200 articles at 300 summary characters, with `thinking` billed as
+> output: **$10.50-16.50+/month** for Bedrock alone, plus ~$0.60-0.90 for DynamoDB under
+> *hourly* capture (the original $0.15 figure appears to assume a daily job) and ~$0.50 for
+> everything else. **Total: roughly $12-18/month.** Still inside the $20-30 ceiling, but with
+> materially less headroom than first stated. The thinking-token component remains an
+> estimate — it is the reason the range is wide, and why `countTokens()` validation against a
+> real batch is required before the first scheduled run.
 
 ---
 
@@ -542,17 +624,43 @@ filtering, and unhandled pagination silently returns partial results.
 Three things, all free, sized for a single-user project:
 
 1. **`META#lastRun` surfaced in the UI header** —
-   `last run 4h ago · 97 items · 9/9 sources · LLM ok`. Turns red when any source
-   returns zero items on two consecutive runs. This is the highest-value item: without
-   it, a feed that starts 404ing or returning an HTML error page with HTTP 200 is
+   `last run 4h ago · 97 items · 13/13 sources · LLM ok`. This is the highest-value item:
+   without it, a feed that starts 404ing or returning an HTML error page with HTTP 200 is
    indistinguishable from a quiet news day, and `Promise.allSettled` swallows it forever.
+
+   > **[revised]** The original rule — "turns red when any source returns zero items on two
+   > consecutive runs" — is wrong, and the 2026-08-18 dry run proved it by producing two
+   > *different* zeroes at once: `venturebeat` produced 0 because all 7 of its items fell
+   > outside the recency window (a healthy but slow feed), and `reddit-ml` produced 0 because
+   > it was rate-limited with HTTP 429 (a transient fetch failure). Under the old rule both
+   > would alarm identically, and so would a genuinely dead feed. An alarm that fires on
+   > normal operation gets ignored within a week.
+
+   Capture therefore persists three counters per source — `perSourceCounts` (produced),
+   `filtered` (fetched, parsed, dropped by the recency window or the cap) and `quarantined`
+   (fetched, parsed, rejected by the schema) — plus `errors[]`. These four separate the states
+   that a single zero conflates:
+
+   | produced | filtered | quarantined | error | state | surfaced as |
+   |---|---|---|---|---|---|
+   | >0 | any | 0 | no | healthy | normal |
+   | 0 | >0 | 0 | no | quiet — nothing recent enough | grey, no alarm |
+   | any | any | >0 | no | **parser or schema drift** | amber, always shown |
+   | 0 | 0 | 0 | yes | fetch failed | amber; red on 2 consecutive runs |
+   | 0 | 0 | 0 | no | **dead — feed returned nothing at all** | red on 2 consecutive runs |
+
+   Only the last two rows can turn the header red, and only on two consecutive runs.
+   `quarantined > 0` is never silent: it is the signature of a feed whose shape changed
+   under us, which is the failure most likely to degrade the archive without anyone noticing.
 2. **Two CloudWatch alarms → SNS → email:** Lambda `Errors >= 1`, and
    `Invocations < 1 over 25 hours` with `treatMissingData: breaching` — the second is
    what catches a silently stopped schedule.
 3. **Two AWS Budget alarms**, plus calendar reminders for the Free Plan expiry and the
    90-day closure date. Thresholds are set against expected spend (§8, cost) rather than
-   against zero: **$15/month** as the "higher than it should be" warning and **$30/month**
-   as "something is wrong — go look". A $5 alarm would fire during normal operation and
+   against zero: **$25/month** as the "higher than it should be" warning and **$40/month**
+   as "something is wrong — go look". These were $15/$30 until the cost estimate was corrected
+   upward; at a ~$16.30 worst case a $15 warning fires in a legitimate month. A $5 alarm would
+   fire during normal operation and
    be ignored within a week, which is worse than no alarm. This is the only defense
    against the failure that destroys the product.
 
@@ -561,8 +669,14 @@ Three things, all free, sized for a single-user project:
 ## 9. Security and IAM
 
 **Lambda execution roles** (capture and rank, separately scoped):
-- `dynamodb:UpdateItem`, `Query`, `GetItem` on the **table ARN only** — writes propagate
-  to GSIs automatically and index ARNs are not needed for writes.
+- `dynamodb:UpdateItem` on the **table ARN only** — writes propagate to GSIs automatically
+  and index ARNs are not needed for writes. A `Query` **against a GSI does need the index
+  ARN**, so the rank role carries `.../index/feed-by-day` as a separate statement. `PutItem`
+  is needed for the `META#*` snapshot items and is constrained by a `dynamodb:LeadingKeys`
+  condition, so a compromised role cannot overwrite an article wholesale or forge `META#DAY`.
+- `bedrock:InvokeModel` must carry a **`bedrock:InferenceProfileArn` condition**. Without it
+  the foundation-model ARN in the resource list also authorises direct on-demand invocation of
+  the bare model, bypassing the `global.` profile — the grant fails **open**, not closed.
 - `bedrock:InvokeModel` (rank only) on the inference-profile ARN **plus the
   foundation-model ARN in every region the profile can route to**. Omitting those
   produces *intermittent* `AccessDeniedException` that fails only when a request happens

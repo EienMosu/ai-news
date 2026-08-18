@@ -1,0 +1,399 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>AI News &amp; Artificial Intelligence | TechCrunch</title>
+	<atom:link href="https://techcrunch.com/category/artificial-intelligence/feed/" rel="self" type="application/rss+xml" />
+	<link>https://techcrunch.com/category/artificial-intelligence/</link>
+	<description>Startup and Technology News</description>
+	<lastBuildDate>Tue, 18 Aug 2026 00:33:39 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=6.9.7</generator>
+
+<image>
+	<url>https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png?w=32</url>
+	<title>AI News &amp; Artificial Intelligence | TechCrunch</title>
+	<link>https://techcrunch.com/category/artificial-intelligence/</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+	<item>
+		<title>Anthropic&#8217;s annualized revenue surges to $65B</title>
+		<link>https://techcrunch.com/2026/08/17/anthropics-annualized-revenue-surges-to-65b/</link>
+		
+		<dc:creator><![CDATA[Marina Temkin]]></dc:creator>
+		<pubDate>Mon, 17 Aug 2026 23:56:26 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Anthropic]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153733</guid>
+
+					<description><![CDATA[The model maker added $18 billion in annualized revenue in two months.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>AI automation startup Relay shuts down, staff joins Google&#8217;s Chrome team</title>
+		<link>https://techcrunch.com/2026/08/17/ai-automation-startup-relay-shuts-down-staff-joins-googles-chrome-team/</link>
+		
+		<dc:creator><![CDATA[Lucas Ropek]]></dc:creator>
+		<pubDate>Mon, 17 Aug 2026 21:27:05 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Chrome]]></category>
+		<category><![CDATA[gemini]]></category>
+		<category><![CDATA[Google]]></category>
+		<category><![CDATA[relay]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153653</guid>
+
+					<description><![CDATA["We have some really ambitious plans to help you work with AI in Chrome to get things done, and I’ll have more to share soon," Jacob Bank, Relay founder and CEO, said.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Amazon, which started off selling books, is destroying rare texts to train AI</title>
+		<link>https://techcrunch.com/2026/08/17/amazon-once-an-online-bookseller-is-destroying-rare-books-to-train-ai-models/</link>
+		
+		<dc:creator><![CDATA[Amanda Silberling]]></dc:creator>
+		<pubDate>Mon, 17 Aug 2026 16:38:44 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[AI training]]></category>
+		<category><![CDATA[Amazon]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153430</guid>
+
+					<description><![CDATA[Rare books are incredibly valuable for training LLMs, since these models have already trained on whatever's available online.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Groq raises $350M to fuel its pivot from AI chips to neocloud</title>
+		<link>https://techcrunch.com/2026/08/17/groq-raises-350m-to-fuel-its-pivot-from-ai-chips-to-neocloud/</link>
+		
+		<dc:creator><![CDATA[Rebecca Bellan]]></dc:creator>
+		<pubDate>Mon, 17 Aug 2026 16:15:12 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Fundraising]]></category>
+		<category><![CDATA[data centers]]></category>
+		<category><![CDATA[groq]]></category>
+		<category><![CDATA[neocloud]]></category>
+		<category><![CDATA[nvidia]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153443</guid>
+
+					<description><![CDATA[Groq raised $350 million at a $3.5 billion valuation as the former AI chipmaker pivots to a neocloud business and expands its Nvidia-powered data center footprint.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Nvidia investing $1.5B in SoftBank data center developer behind OpenAI project</title>
+		<link>https://techcrunch.com/2026/08/17/nvidia-investing-1-5b-in-softbank-data-center-developer-behind-openai-project/</link>
+		
+		<dc:creator><![CDATA[Tim De Chant]]></dc:creator>
+		<pubDate>Mon, 17 Aug 2026 15:16:24 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[data centers]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[nvidia]]></category>
+		<category><![CDATA[OpenAI]]></category>
+		<category><![CDATA[Softbank]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153419</guid>
+
+					<description><![CDATA[Nvidia's investment in SoftBank's data center developer will guarantee its chips power an OpenAI data center.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Wispr raises $280M at $2B valuation as it looks beyond dictation</title>
+		<link>https://techcrunch.com/2026/08/17/wispr-raises-280m-at-2b-valuation-as-it-looks-beyond-dictation/</link>
+		
+		<dc:creator><![CDATA[Ivan Mehta]]></dc:creator>
+		<pubDate>Mon, 17 Aug 2026 13:10:05 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Fundraising]]></category>
+		<category><![CDATA[Funding]]></category>
+		<category><![CDATA[Wispr]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153341</guid>
+
+					<description><![CDATA[The funds will allow Wispr to increase its footprint as it ventures into new areas, such as meetings, with its newly released note-taker tool.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Stripe will reportedly acquire AI gateway startup OpenRouter for $7B+</title>
+		<link>https://techcrunch.com/2026/08/16/stripe-will-reportedly-acquire-ai-gateway-startup-openrouter-for-7b/</link>
+		
+		<dc:creator><![CDATA[Anthony Ha]]></dc:creator>
+		<pubDate>Sun, 16 Aug 2026 20:57:04 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[stripe]]></category>
+		<category><![CDATA[Mergers and Acquisitions]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[openrouter]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153332</guid>
+
+					<description><![CDATA[OpenRouter's CEO recently described the startup as Stripe for AI.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Why people aren&#8217;t buying Mark Zuckerberg’s AI future</title>
+		<link>https://techcrunch.com/2026/08/16/why-people-arent-buying-mark-zuckerbergs-ai-future/</link>
+		
+		<dc:creator><![CDATA[Anthony Ha]]></dc:creator>
+		<pubDate>Sun, 16 Aug 2026 20:32:01 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Social]]></category>
+		<category><![CDATA[Mark Zuckerberg]]></category>
+		<category><![CDATA[Meta]]></category>
+		<category><![CDATA[Equity podcast]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153329</guid>
+
+					<description><![CDATA[On the latest episode of Equity podcast, we discuss why not everyone is buying Zuckerberg’s vision.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Anthropic CEO says AI backlash is ‘fundamentally a crisis of trust’</title>
+		<link>https://techcrunch.com/2026/08/16/anthropic-ceo-says-ai-backlash-is-fundamentally-a-crisis-of-trust/</link>
+		
+		<dc:creator><![CDATA[Anthony Ha]]></dc:creator>
+		<pubDate>Sun, 16 Aug 2026 16:53:51 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Government & Policy]]></category>
+		<category><![CDATA[Anthropic]]></category>
+		<category><![CDATA[dario amodei]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153318</guid>
+
+					<description><![CDATA[Dario Amodei is pushing back against the idea that he's been painting an overly pessimistic picture of AI.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Woman claims her stepfather used Grok to transform childhood photo into explicit imagery</title>
+		<link>https://techcrunch.com/2026/08/15/woman-claims-her-stepfather-used-grok-to-transform-childhood-photo-into-explicit-imagery/</link>
+		
+		<dc:creator><![CDATA[Anthony Ha]]></dc:creator>
+		<pubDate>Sat, 15 Aug 2026 21:29:19 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Government & Policy]]></category>
+		<category><![CDATA[Grok]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[SpaceX]]></category>
+		<category><![CDATA[x.ai]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153313</guid>
+
+					<description><![CDATA[The woman claimed that AI tools are "taking everyday life and turning it into child sexual abuse."]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Anthropic shares more details about how Claude’s new watermarks will work</title>
+		<link>https://techcrunch.com/2026/08/15/anthropic-shares-more-details-about-how-claudes-new-watermarks-will-work/</link>
+		
+		<dc:creator><![CDATA[Anthony Ha]]></dc:creator>
+		<pubDate>Sat, 15 Aug 2026 18:58:39 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[watermarks]]></category>
+		<category><![CDATA[Anthropic]]></category>
+		<category><![CDATA[Claude]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153310</guid>
+
+					<description><![CDATA[How will the watermarking actually work? Can it be hidden with editing? And how does this affect code?]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>SpaceX officially closes its Cursor acquisition</title>
+		<link>https://techcrunch.com/2026/08/15/spacex-officially-closes-its-cursor-acquisition/</link>
+		
+		<dc:creator><![CDATA[Anthony Ha]]></dc:creator>
+		<pubDate>Sat, 15 Aug 2026 16:30:00 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[cursor]]></category>
+		<category><![CDATA[Elon Musk]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[Mergers and Acquisitions]]></category>
+		<category><![CDATA[SpaceX]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153306</guid>
+
+					<description><![CDATA[AI coding startup Cursor is now officially a part of SpaceX.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>How to tell if your AI platforms’ accounts have been hacked</title>
+		<link>https://techcrunch.com/2026/08/15/how-to-tell-if-your-ai-platforms-accounts-have-been-hacked/</link>
+		
+		<dc:creator><![CDATA[Lorenzo Franceschi-Bicchierai]]></dc:creator>
+		<pubDate>Sat, 15 Aug 2026 16:10:00 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Security]]></category>
+		<category><![CDATA[Anthropic]]></category>
+		<category><![CDATA[ChatGPT]]></category>
+		<category><![CDATA[Claude]]></category>
+		<category><![CDATA[cybersecurity]]></category>
+		<category><![CDATA[evergreens]]></category>
+		<category><![CDATA[OpenAI]]></category>
+		<category><![CDATA[Perplexity]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153258</guid>
+
+					<description><![CDATA[A guide on how to check if hackers have broken into your accounts on the most popular AI platforms.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Google will now allow users to remove visible watermark from its AI generations</title>
+		<link>https://techcrunch.com/2026/08/14/google-will-now-allow-users-to-remove-visible-watermark-from-its-ai-generations/</link>
+		
+		<dc:creator><![CDATA[Ivan Mehta]]></dc:creator>
+		<pubDate>Fri, 14 Aug 2026 16:13:40 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Apps]]></category>
+		<category><![CDATA[gemini]]></category>
+		<category><![CDATA[Google]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[watermarks]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153145</guid>
+
+					<description><![CDATA[Turning off this setting won't affect invisible benchmarks used to identify an AI generated file.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Does Mark Zuckerberg really believe AI is &#8216;for everyone&#8217;?</title>
+		<link>https://techcrunch.com/video/does-mark-zuckerberg-really-believe-ai-is-for-everyone/</link>
+		
+		<dc:creator><![CDATA[Theresa Loconsolo]]></dc:creator>
+		<pubDate>Fri, 14 Aug 2026 15:43:28 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Amazon]]></category>
+		<category><![CDATA[Anthropic]]></category>
+		<category><![CDATA[data centers]]></category>
+		<category><![CDATA[Joby Aviation]]></category>
+		<category><![CDATA[Mark Zuckerberg]]></category>
+		<category><![CDATA[Meta]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?post_type=tc_video&#038;p=3153153</guid>
+
+					<description><![CDATA[Meta released Glimmer this week, an open-weight AI&#160;model&#160;anyone can download and run on their own hardware&#160;— a contrast to&#160;Muse&#160;Spark, the company’s more powerful model that stays locked behind its own APIs. The release landed alongside&#160;a letter from Mark Zuckerberg&#160;arguing AI should be “for everyone” rather than controlled by a handful of labs, but as Equity’s [&#8230;]]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Kog is going deeper to squeeze more inference out of GPUs</title>
+		<link>https://techcrunch.com/2026/08/14/kog-is-going-deeper-to-squeeze-more-inference-out-of-gpus/</link>
+		
+		<dc:creator><![CDATA[Anna Heim]]></dc:creator>
+		<pubDate>Fri, 14 Aug 2026 14:50:11 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[AI inference]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3153090</guid>
+
+					<description><![CDATA[The idea that GPUs are poorly suited for agentic workflows may be a misconception, according to French startup Kog.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Hyperscalers might regret embracing natural gas if new forecast proves correct</title>
+		<link>https://techcrunch.com/2026/08/14/hyperscalers-might-regret-embracing-natural-gas-if-new-forecast-proves-correct/</link>
+		
+		<dc:creator><![CDATA[Tim De Chant]]></dc:creator>
+		<pubDate>Fri, 14 Aug 2026 14:05:00 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Climate]]></category>
+		<category><![CDATA[Amazon]]></category>
+		<category><![CDATA[Exclusive]]></category>
+		<category><![CDATA[Google]]></category>
+		<category><![CDATA[Meta]]></category>
+		<category><![CDATA[Microsoft]]></category>
+		<category><![CDATA[natural gas]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3152944</guid>
+
+					<description><![CDATA[Natural gas prices could triple in some parts of the U.S., which could saddle hyperscalers with massive bills to power their AI data centers.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Meta&#8217;s &#8216;open&#8217; AI, and a $250M deal gone very wrong </title>
+		<link>https://techcrunch.com/podcast/metas-open-ai-and-a-250m-deal-gone-very-wrong/</link>
+		
+		<dc:creator><![CDATA[Theresa Loconsolo, Kirsten Korosec, Anthony Ha, Rebecca Bellan]]></dc:creator>
+		<pubDate>Fri, 14 Aug 2026 14:00:00 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[Amazon]]></category>
+		<category><![CDATA[Anthropic]]></category>
+		<category><![CDATA[Equity podcast]]></category>
+		<category><![CDATA[Joby Aviation]]></category>
+		<category><![CDATA[Meta]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?post_type=tc_podcast&#038;p=3153152</guid>
+
+					<description><![CDATA[Meta released Glimmer this week, an open-weight AI&#160;model&#160;anyone can download and run on their own hardware&#160;— a contrast to&#160;Muse&#160;Spark, the company’s more powerful model that stays locked behind its own APIs. The release landed alongside&#160;a letter from Mark Zuckerberg&#160;arguing AI should be “for everyone” rather than controlled by a handful of labs, but as Equity’s [&#8230;]]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Writer introduces new AI model and upgraded harness to contain token costs</title>
+		<link>https://techcrunch.com/2026/08/13/writer-introduces-new-ai-model-and-upgraded-harness-to-contain-token-costs/</link>
+		
+		<dc:creator><![CDATA[Russell Brandom]]></dc:creator>
+		<pubDate>Thu, 13 Aug 2026 21:13:24 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[writer]]></category>
+		<category><![CDATA[Z.ai]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3152760</guid>
+
+					<description><![CDATA[Built as a post-training variation on Z.ai's open source model GLM-5.2, Writer says the new system should provide deployment-ready capabilities at a much lower price.]]></description>
+		
+		
+		
+			</item>
+		<item>
+		<title>Databricks wanted to raise $1B, investors wanted $15B. It settled on $5B at a $190B valuation.</title>
+		<link>https://techcrunch.com/2026/08/13/databricks-wanted-to-raise-1b-investors-wanted-15b-it-settled-on-5b-at-a-190b-valuation/</link>
+		
+		<dc:creator><![CDATA[Julie Bort]]></dc:creator>
+		<pubDate>Thu, 13 Aug 2026 20:14:39 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Fundraising]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[TC]]></category>
+		<category><![CDATA[Databricks]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3152870</guid>
+
+					<description><![CDATA[AI is expensive, Ali Ghodsi tells TechCrunch. With so many investors wanting into his latest round, he said yes to more than planned.]]></description>
+		
+		
+		
+			</item>
+	</channel>
+</rss>

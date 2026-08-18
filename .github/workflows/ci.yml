@@ -1,0 +1,26 @@
+name: checks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+      # synth is its own gate: it is the only step that reads cdk.json, which
+      # Template.fromStack never touches. A legacy feature flag in that file passed
+      # both of the checks above and failed only here.
+      - run: pnpm synth -c alertEmail=ci@example.invalid

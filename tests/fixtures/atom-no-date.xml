@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>No Dates</title>
+  <entry><title>Undated post</title><link href="https://example.com/a"/><summary>Body</summary></entry>
+</feed>
