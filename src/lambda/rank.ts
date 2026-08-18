@@ -370,6 +370,12 @@ export async function handler(
   // ended cannot be finally ranked no matter who asks or which fields they set, so this check
   // does not depend on `interim`, `force`, or any future caller getting a flag combination
   // right -- ISO date strings compare correctly with `<`, so no date arithmetic is needed.
+  //
+  // Deliberate asymmetry, not an oversight: because an interim run always writes "partial",
+  // the already-complete guard above never dedupes a redelivered interim invocation the way it
+  // dedupes a redelivered FINAL one. Only the 20-minute day lock protects that path. That is
+  // acceptable here -- a duplicate interim run costs one extra Bedrock call, not a corrupted
+  // day -- so this is intentionally left as the lock's job rather than given a second guard.
   const dayNotYetOver = day >= istanbulDay(now);
   const status: "complete" | "partial" = interim || dayNotYetOver
     ? "partial"

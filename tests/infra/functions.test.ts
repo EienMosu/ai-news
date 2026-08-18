@@ -76,6 +76,79 @@ describe("Functions", () => {
     expect((rankSchedule as any).Properties.Target.RetryPolicy?.MaximumRetryAttempts).toBe(0);
   });
 
+  /** The 18:00 interim schedule's own Properties, found by its distinct cron expression so it
+   *  can never be confused with the 06:00 final schedule above. */
+  const interimScheduleProperties = () => {
+    const schedules = Object.values(template().findResources("AWS::Scheduler::Schedule"));
+    const interim = schedules.find(
+      (s: any) => s.Properties.ScheduleExpression === "cron(0 18 * * ? *)",
+    )!;
+    return (interim as any).Properties;
+  };
+
+  it("runs the interim rank schedule at 18:00 Europe/Istanbul", () => {
+    // Mutation: changing RankInterimSchedule's `scheduleExpressionTimezone` from
+    // "Europe/Istanbul" to anything else (or omitting it) makes this read undefined instead of
+    // "Europe/Istanbul" -- the interim run would then fire at 18:00 UTC, not 18:00 local.
+    expect(interimScheduleProperties().ScheduleExpressionTimezone).toBe("Europe/Istanbul");
+  });
+
+  it("points the interim schedule's target at the rank function, not capture", () => {
+    const target = interimScheduleProperties().Target;
+    // Resolve both function logical ids directly off their own resources rather than assuming
+    // naming, so this test still means something if either function is ever renamed.
+    const functionIds = Object.keys(template().findResources("AWS::Lambda::Function"));
+    const rankFnId = functionIds.find((id) => id.includes("RankFunction"))!;
+    const captureFnId = functionIds.find((id) => id.includes("CaptureFunction"))!;
+    // Mutation: changing RankInterimSchedule's target `arn` from `this.rank.functionArn` to
+    // `this.capture.functionArn` makes `target.Arn` resolve to the capture function's logical
+    // id instead of the rank function's -- this run would silently invoke the wrong Lambda,
+    // capturing articles at 18:00 instead of ranking them.
+    expect(JSON.stringify(target.Arn)).toContain(rankFnId);
+    expect(JSON.stringify(target.Arn)).not.toContain(captureFnId);
+  });
+
+  it("sends {\"interim\":true} as the interim schedule's invocation payload", () => {
+    // This is the ONLY signal src/lambda/rank.ts's `resolveDay` has to pick today over
+    // yesterday and to force `status: "partial"`. Mutation: changing the payload from
+    // `JSON.stringify({ interim: true })` to `JSON.stringify({ interim: false })` (or omitting
+    // `input` entirely) makes this read something other than the exact string `{"interim":
+    // true}` -- the schedule would then re-run a FINAL rank on yesterday a second time instead
+    // of ranking today so far.
+    expect(interimScheduleProperties().Target.Input).toBe(JSON.stringify({ interim: true }));
+  });
+
+  it("sets the interim schedule's own retry policy to zero, like the 06:00 final schedule", () => {
+    // Same reasoning as the 06:00 schedule's own retry-policy test above: EventBridge
+    // Scheduler's retry is independent of the Lambda-side `retryAttempts: 0`, and a redelivery
+    // after the 20-minute day lock expires would pay for a second Bedrock call.
+    // Mutation: deleting `retryPolicy` from RankInterimSchedule's target leaves this property
+    // absent (undefined, not 0).
+    expect(interimScheduleProperties().Target.RetryPolicy?.MaximumRetryAttempts).toBe(0);
+  });
+
+  it("grants the shared rank scheduler role invoke on the rank function only, not capture", () => {
+    // Both rank schedules share ONE role (see the comment above `rankSchedulerRole` in
+    // functions.ts) -- this confirms that sharing didn't quietly widen what the role can
+    // invoke. `policyDocumentFor` matches on marker text, and "RankFunctionSchedulerRole" is
+    // distinct from "RankFunction" alone, so this can't accidentally match the rank function's
+    // OWN execution-role policy instead of its scheduler role's.
+    //
+    // Checks EVERY `lambda:InvokeFunction` statement, not just the first: a stray extra grant
+    // (e.g. `this.capture.grantInvoke(rankSchedulerRole)`) lands as a SECOND statement in the
+    // same policy document rather than replacing the first, so a `.find()` here would still
+    // see only the rank-only statement and miss it entirely.
+    const doc = policyDocumentFor("RankFunctionSchedulerRole");
+    const invokeStatements = doc.Statement.filter((s: any) =>
+      String(s.Action).includes("lambda:InvokeFunction"));
+    expect(invokeStatements.length).toBeGreaterThan(0);
+    // Mutation: changing `schedulerRole` (called once, shared by both schedules) back to being
+    // called separately per schedule with `fn.grantInvoke` also given `this.capture` by
+    // mistake would make this string contain "CaptureFunction" too.
+    expect(JSON.stringify(invokeStatements)).not.toContain("CaptureFunction");
+    expect(JSON.stringify(invokeStatements)).toContain("RankFunction");
+  });
+
   it("scopes each role to the key prefixes its own code writes", () => {
     // Without this, PutItem on the table ARN lets a compromised role overwrite any article
     // wholesale and forge META#DAY.
