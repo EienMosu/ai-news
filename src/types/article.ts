@@ -20,7 +20,7 @@ export const NormalizedArticleSchema = z.object({
   source: z.string().min(1),
   sourceName: z.string().min(1),
   category: z.enum(CATEGORIES),
-  publishedAt: z.string().datetime().nullable(),
+  publishedAt: z.iso.datetime().nullable(),
   publishedAtSource: z.enum(["feed", "fallback"]),
   points: z.number().int().nonnegative().nullable(),
 });
