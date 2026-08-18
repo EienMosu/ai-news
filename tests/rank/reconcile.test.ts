@@ -50,4 +50,96 @@ describe("reconcile", () => {
     expect(reconcile([h(1)], null).missing).toBe(1);
     expect(reconcile([h(1)], { items: "nope" }).missing).toBe(1);
   });
+
+  it("falls back to urlHash when cluster id is blank and counts it", () => {
+    const r = reconcile([h(1), h(2)], {
+      items: [item(h(1), { clusterId: "" }), item(h(2), { clusterId: "  " })],
+    });
+    expect(r.matched).toBe(2);
+    expect(r.withoutCluster).toBe(2);
+    expect(r.byHash.get(h(1))?.clusterId).toBe(h(1));
+    expect(r.byHash.get(h(2))?.clusterId).toBe(h(2));
+  });
+
+  it("falls back to urlHash when cluster id is missing and counts it", () => {
+    const r = reconcile([h(1)], { items: [item(h(1), { clusterId: undefined })] });
+    expect(r.matched).toBe(1);
+    expect(r.withoutCluster).toBe(1);
+    expect(r.byHash.get(h(1))?.clusterId).toBe(h(1));
+  });
+
+  it("counts entries with missing or blank rationale separately", () => {
+    const r = reconcile([h(1), h(2), h(3)], {
+      items: [
+        item(h(1), { whyItMatters: "" }),
+        item(h(2), { whyItMatters: "  " }),
+        item(h(3), { whyItMatters: "Real reason" }),
+      ],
+    });
+    expect(r.matched).toBe(3);
+    expect(r.withoutRationale).toBe(2);
+    expect(r.byHash.get(h(1))?.whyItMatters).toBe(null);
+    expect(r.byHash.get(h(2))?.whyItMatters).toBe(null);
+    expect(r.byHash.get(h(3))?.whyItMatters).toBe("Real reason");
+  });
+
+  it("counts entries with missing rationale as withoutRationale", () => {
+    const r = reconcile([h(1)], { items: [item(h(1), { whyItMatters: undefined })] });
+    expect(r.matched).toBe(1);
+    expect(r.withoutRationale).toBe(1);
+    expect(r.byHash.get(h(1))?.whyItMatters).toBe(null);
+  });
+
+  it("treats numeric-string importance as a type violation and skips the entry", () => {
+    const r = reconcile([h(1)], { items: [item(h(1), { importance: "85" })] });
+    expect(r.matched).toBe(0);
+    expect(r.missing).toBe(1);
+    expect(r.byHash.has(h(1))).toBe(false);
+  });
+
+  it("treats boolean importance as a type violation and skips the entry", () => {
+    const r = reconcile([h(1)], { items: [item(h(1), { importance: true })] });
+    expect(r.matched).toBe(0);
+    expect(r.missing).toBe(1);
+    expect(r.byHash.has(h(1))).toBe(false);
+  });
+
+  it("keeps first match when response contains duplicate urlHash", () => {
+    const r = reconcile([h(1)], {
+      items: [
+        item(h(1), { importance: 80, clusterId: "first" }),
+        item(h(1), { importance: 90, clusterId: "second" }),
+      ],
+    });
+    expect(r.matched).toBe(1);
+    expect(r.byHash.get(h(1))?.importance).toBe(80);
+    expect(r.byHash.get(h(1))?.clusterId).toBe("first");
+  });
+
+  it("handles input with duplicate hashes correctly", () => {
+    const r = reconcile([h(1), h(1), h(2)], {
+      items: [item(h(1)), item(h(2))],
+    });
+    expect(r.matched).toBe(2);
+    expect(r.missing).toBe(0);
+  });
+
+  it("clamps Infinity to 100 and -Infinity to 0", () => {
+    const r = reconcile([h(1), h(2)], {
+      items: [
+        item(h(1), { importance: Infinity }),
+        item(h(2), { importance: -Infinity }),
+      ],
+    });
+    expect(r.byHash.get(h(1))?.importance).toBe(100);
+    expect(r.byHash.get(h(2))?.importance).toBe(0);
+  });
+
+  it("stores and preserves clusterId and whyItMatters values", () => {
+    const r = reconcile([h(1)], {
+      items: [item(h(1), { clusterId: "cluster-42", whyItMatters: "Breaking story" })],
+    });
+    expect(r.byHash.get(h(1))?.clusterId).toBe("cluster-42");
+    expect(r.byHash.get(h(1))?.whyItMatters).toBe("Breaking story");
+  });
 });
