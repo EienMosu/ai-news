@@ -54,12 +54,19 @@ describe("parseHfPapers", () => {
   });
 
   it("truncates summary by code point (not UTF-16 unit)", () => {
-    const longSummary = "a".repeat(700);
+    // "a".repeat(700) can't distinguish code points from UTF-16 units —
+    // ASCII characters are always one of each. An astral character (each
+    // emoji here is one code point but two UTF-16 units) makes the
+    // assertion actually discriminate: a UTF-16-unit-based truncation would
+    // cut mid-codepoint and leave a lone surrogate.
+    const longSummary = "\u{1F600}".repeat(700);
     const items = parseHfPapers([
       { paper: { id: "1", title: "Long summary", summary: longSummary }, publishedAt: "2026-08-18T00:00:00Z" },
     ]);
-    expect(items[0]!.summary.length).toBe(600);
-    expect(items[0]!.summary).toBe("a".repeat(600));
+    const summary = items[0]!.summary;
+    expect(Array.from(summary).length).toBe(600);
+    expect(summary).toBe("\u{1F600}".repeat(600));
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(summary)).toBe(false);
   });
 
   it("handles empty summaries gracefully", () => {

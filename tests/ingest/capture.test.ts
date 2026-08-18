@@ -53,6 +53,15 @@ describe("captureAll", () => {
     const r = await captureAll({ fetchText: stubFetch(), now: NOW });
     expect(r.articles.length).toBeGreaterThan(0);
     expect(Object.keys(r.perSourceCounts)).toHaveLength(SOURCES.length);
+    // Fix 4: hn.json was a stale fixture from Algolia's relevance-sorted
+    // /search endpoint carrying 2025 dates, which the 7-day recency window
+    // silently dropped in full — HN contributed zero, making this test's
+    // name false without failing it. Re-fetched from the /search_by_date
+    // endpoint the registry actually uses (see sources.ts), so every source
+    // must now contribute at least one article, not just the total.
+    for (const src of SOURCES) {
+      expect(r.perSourceCounts[src.id]).toBeGreaterThan(0);
+    }
   });
 
   it("produces articles that pass schema validation, across more than one category", async () => {
@@ -300,6 +309,38 @@ describe("captureAll", () => {
       const keptTitles = new Set(tcArticles.map((a) => a.title));
       for (let i = 0; i < 50; i++) expect(keptTitles.has(`story-${i}`)).toBe(true);
       for (let i = 50; i < total; i++) expect(keptTitles.has(`story-${i}`)).toBe(false);
+    });
+
+    // Fix 1: fallback-dated items (no date in the feed) are exempt from the
+    // recency window, but now.toISOString() is the newest possible
+    // timestamp — if fallback items sort ahead of dated ones, they win the
+    // cap and evict genuinely recent, dated articles. This is the exact
+    // shape that exposed the regression: 60 undated items plus 10 dated
+    // items within the window, capped at 50, previously kept zero of the 10
+    // dated ones.
+    it("keeps dated articles over fallback-dated ones at the per-source cap (fallback exemption interacting with the cap)", async () => {
+      const tc = SOURCES.find((s) => s.id === "techcrunch")!;
+      const undated = Array.from({ length: 60 }, (_, i) => ({
+        title: `undated-${i}`,
+        link: `https://example.com/undated-${i}`,
+        // No pubDate -> fallback-dated, publishedAt = now.toISOString().
+      }));
+      const dated = Array.from({ length: 10 }, (_, i) => ({
+        title: `dated-${i}`,
+        link: `https://example.com/dated-${i}`,
+        pubDate: new Date(NOW.getTime() - i * 60 * 60 * 1000).toUTCString(),
+      }));
+
+      const r = await captureAll({
+        fetchText: stubFetch({ [tc.url]: rssItems([...undated, ...dated]) }),
+        now: NOW,
+      });
+      const tcArticles = r.articles.filter((a) => a.source === "techcrunch");
+
+      expect(tcArticles).toHaveLength(50);
+      for (let i = 0; i < 10; i++) {
+        expect(tcArticles.some((a) => a.title === `dated-${i}`)).toBe(true);
+      }
     });
 
     it("keeps filtered at 0 and does not touch quarantined for a source with nothing to filter", async () => {

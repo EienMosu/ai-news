@@ -114,11 +114,17 @@ function filterToRecentWindow(
     return Number.isFinite(ms) && ms >= cutoffMs;
   });
 
-  const sorted = [...inWindow].sort((a, b) => {
-    const tb = b.publishedAt ? Date.parse(b.publishedAt) : -Infinity;
-    const ta = a.publishedAt ? Date.parse(a.publishedAt) : -Infinity;
-    return tb - ta;
-  });
+  // Fallback-dated items are window-exempt (see above) but must never
+  // outrank a genuinely dated article for a capped slot — now.toISOString()
+  // is the newest possible timestamp, so without this they'd sort first and
+  // evict real news. Keyed off publishedAtSource rather than publishedAt
+  // truthiness: publishedAt is always a string by this point (toArticle
+  // fills it from the run clock when the feed gave none), so a truthiness
+  // check on it can never distinguish a fallback item from a dated one.
+  const sortTime = (a: NormalizedArticle) =>
+    a.publishedAtSource === "fallback" ? -Infinity : Date.parse(a.publishedAt!);
+
+  const sorted = [...inWindow].sort((a, b) => sortTime(b) - sortTime(a));
 
   const maxItems = src.maxItems ?? DEFAULT_MAX_ITEMS;
   const kept = sorted.slice(0, maxItems);

@@ -49,7 +49,7 @@ describe("parseFeed", () => {
     const items = parseFeed(fixture("techcrunch.xml"));
     const dated = items.find((i) => i.publishedAt !== null);
     expect(dated).toBeDefined();
-    expect(() => new Date(dated!.publishedAt!).toISOString()).not.toThrow();
+    expect(dated!.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
 
   it("keeps real words between literal < and > comparison operators", () => {
@@ -64,6 +64,73 @@ describe("parseFeed", () => {
     const items = parseFeed(xml);
     expect(items).toHaveLength(1);
     expect(items[0]!.summary).toContain("3 < 5 and 9 > 2");
+  });
+
+  // Fix 2: the XML parser decodes &lt;/&gt; for non-CDATA content before our
+  // pipeline ever runs, so an author-quoted "<model>" or "<think>" arrives
+  // as a literal, tag-shaped substring. A bare "strip anything <letter...>"
+  // rule deletes it (and the word inside); only an allowlist of real HTML
+  // tag names can tell the difference.
+  it("keeps unrecognised pseudo-tags and comparison operators intact (non-CDATA path)", () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Pseudo tags</title>
+    <link>https://example.com/model-think</link>
+    <description>its new &lt;model&gt; system shipped. the &lt;think&gt; block is hidden. if x&lt;y and z&gt;w then stop</description>
+  </item>
+</channel></rss>`;
+    const items = parseFeed(xml);
+    expect(items[0]!.summary).toBe(
+      "its new <model> system shipped. the <think> block is hidden. if x<y and z>w then stop",
+    );
+  });
+
+  // Fix 2: CDATA is verbatim per spec, so the XML parser never touches its
+  // entities — decodeEntities is the first thing to see them, and it runs
+  // AFTER the first stripTags pass. A defanged &lt;script&gt; in a CDATA
+  // body therefore only becomes tag-shaped once decoding has already
+  // happened, which is why cleanText must strip tags a second time after
+  // decoding, not just once before it.
+  it("strips a tag reassembled from CDATA-encoded entities after decoding (does not leave <script> in the output)", () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>CDATA entity reassembly</title>
+    <link>https://example.com/cdata-script</link>
+    <description><![CDATA[before &lt;script&gt;alert(1)&lt;/script&gt; after]]></description>
+  </item>
+</channel></rss>`;
+    const items = parseFeed(xml);
+    expect(items[0]!.summary).not.toContain("<script>");
+    expect(items[0]!.summary).not.toContain("</script>");
+    expect(items[0]!.summary).toBe("before alert(1) after");
+  });
+
+  it("strips real HTML tags from CDATA content, leaving only the text", () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Real tags in CDATA</title>
+    <link>https://example.com/cdata-tags</link>
+    <description><![CDATA[<p>Real paragraph</p> with <a href="https://example.com">a link</a>]]></description>
+  </item>
+</channel></rss>`;
+    const items = parseFeed(xml);
+    expect(items[0]!.summary).toBe("Real paragraph with a link");
+  });
+
+  it("strips real HTML tags from non-CDATA content, leaving only the text", () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Real tags, non-CDATA</title>
+    <link>https://example.com/plain-tags</link>
+    <description>&lt;p&gt;Real paragraph&lt;/p&gt; with &lt;a href="https://example.com"&gt;a link&lt;/a&gt;</description>
+  </item>
+</channel></rss>`;
+    const items = parseFeed(xml);
+    expect(items[0]!.summary).toBe("Real paragraph with a link");
   });
 
   it("decodes named, decimal, and hex entities in summaries", () => {
