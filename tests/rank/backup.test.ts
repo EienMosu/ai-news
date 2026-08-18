@@ -66,4 +66,66 @@ describe("backupDay", () => {
     expect(result.error).toContain("401");
     expect(result.error).not.toContain("ghp_secret_value");
   });
+
+  it("treats a non-404 GET failure as unknown, not absent, and never guesses by writing anyway", async () => {
+    // A 403 rate limit or 500 is not "the file doesn't exist" — proceeding with a sha-less PUT
+    // against a file that may already exist is exactly the 409/422 the overwrite path exists
+    // to avoid. Every call here (including a PUT if one were wrongly attempted) returns 500.
+    const f = vi.fn(async () => ok({ message: "Internal Server Error" }, 500)) as unknown as typeof fetch;
+    const result = await backupDay("2026-08-18", [{ a: 1 }], deps(f));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("500");
+    const calls = (f as unknown as { mock: { calls: [string, RequestInit | undefined][] } }).mock.calls;
+    expect(calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
+  it("redacts the token from a thrown fetch error, not just from the 401 message we build ourselves", async () => {
+    // A synchronous throw, not a rejected promise: some fetch implementations throw before
+    // ever returning a promise, and the earlier 401 test only exercises a message backupDay
+    // constructs itself, never one that echoes request internals back at us.
+    const f = (() => {
+      throw new Error("connect failed while sending Bearer ghp_secret_value");
+    }) as unknown as typeof fetch;
+
+    const result = await backupDay("2026-08-18", [{ a: 1 }], deps(f));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("[redacted]");
+    expect(result.error).not.toContain("ghp_secret_value");
+  });
+
+  it("keeps one JSON object per line even when a field contains a literal newline", async () => {
+    const f = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "PUT" ? ok({}, 201) : ok({}, 404),
+    ) as unknown as typeof fetch;
+
+    await backupDay(
+      "2026-08-18",
+      [{ summary: "line one\nline two" }, { summary: "second article" }],
+      deps(f),
+    );
+
+    const put = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(
+      ([, i]) => i.method === "PUT",
+    )!;
+    const decoded = Buffer.from(JSON.parse(put[1].body as string).content, "base64").toString("utf8");
+    const lines = decoded.trimEnd().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0]!)).toEqual({ summary: "line one\nline two" });
+    expect(JSON.parse(lines[1]!)).toEqual({ summary: "second article" });
+  });
+
+  it("round-trips multi-byte UTF-8 through the base64 encoding", async () => {
+    const f = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "PUT" ? ok({}, 201) : ok({}, 404),
+    ) as unknown as typeof fetch;
+
+    const title = "İstanbul'da yağış sürprizi 🎉 ş ğ ç";
+    await backupDay("2026-08-18", [{ title }], deps(f));
+
+    const put = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(
+      ([, i]) => i.method === "PUT",
+    )!;
+    const decoded = Buffer.from(JSON.parse(put[1].body as string).content, "base64").toString("utf8");
+    expect(JSON.parse(decoded.trimEnd())).toEqual({ title });
+  });
 });
