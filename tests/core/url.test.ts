@@ -50,6 +50,22 @@ describe("normalizeUrl", () => {
   it("leaves bare relative paths unchanged", () => {
     expect(normalizeUrl("/blog/post")).toBe("/blog/post");
   });
+
+  it("rejects triple-slash malformed paths", () => {
+    expect(normalizeUrl("///path")).toBe("///path");
+  });
+
+  it("rejects quadruple-slash malformed paths", () => {
+    expect(normalizeUrl("////deep")).toBe("////deep");
+  });
+
+  it("rejects bare double-slash with nothing after", () => {
+    expect(normalizeUrl("//")).toBe("//");
+  });
+
+  it("normalizes valid protocol-relative URLs", () => {
+    expect(normalizeUrl("//x.com/a")).toBe("https://x.com/a");
+  });
 });
 
 describe("urlHash", () => {

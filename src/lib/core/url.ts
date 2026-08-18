@@ -21,7 +21,8 @@ export function normalizeUrl(raw: string): string {
     u = new URL(raw);
   } catch {
     // Fix 3: protocol-relative links like //example.com/post
-    if (raw.startsWith("//")) {
+    // Gate strictly: exactly // followed by non-slash to avoid fabricating hosts from paths
+    if (/^\/\/[^/]/.test(raw)) {
       try {
         u = new URL(`https:${raw}`);
       } catch {
