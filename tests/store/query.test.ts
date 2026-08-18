@@ -1,7 +1,7 @@
 import { mockClient } from "aws-sdk-client-mock";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it } from "vitest";
-import { getLatestCompleteDay, queryDay } from "../../src/lib/store/query.js";
+import { dayHasArticles, getLatestCompleteDay, queryDay } from "../../src/lib/store/query.js";
 
 const ddb = mockClient(DynamoDBDocumentClient);
 beforeEach(() => ddb.reset());
@@ -28,6 +28,19 @@ describe("queryDay", () => {
     expect(items.map((i) => i.title)).toEqual(["a", "b", "c"]);
     expect(ddb.commandCalls(QueryCommand)).toHaveLength(3);
     expect(ddb.commandCalls(QueryCommand)[1]!.args[0].input.ExclusiveStartKey).toEqual({ pk: "x" });
+  });
+});
+
+describe("dayHasArticles", () => {
+  it("is true when the day's partition returns at least one item", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [{ title: "a" }] });
+    expect(await dayHasArticles(ddb as never, "t", "2026-08-18")).toBe(true);
+    expect(ddb.commandCalls(QueryCommand)[0]!.args[0].input.Limit).toBe(1);
+  });
+
+  it("is false rather than throwing when the day has nothing", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [] });
+    expect(await dayHasArticles(ddb as never, "t", "2026-08-18")).toBe(false);
   });
 });
 

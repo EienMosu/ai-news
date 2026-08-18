@@ -9,7 +9,7 @@ import { countCorroboration } from "../lib/rank/corroboration.js";
 import { backupDay } from "../lib/rank/backup.js";
 import { buildRankUpdate } from "../lib/store/articles.js";
 import { buildDayMetaPut } from "../lib/store/meta.js";
-import { queryDay } from "../lib/store/query.js";
+import { dayHasArticles, listDays, queryDay } from "../lib/store/query.js";
 import { docClient } from "../lib/store/client.js";
 
 export interface RankSummary {
@@ -22,6 +22,14 @@ export interface RankSummary {
   status: "complete" | "partial";
   llmStatus: "ok" | "failed" | "truncated";
   backedUp: boolean;
+  /**
+   * How many of the last 7 days (including this one) have articles but no `"complete"` day
+   * record. Task 7 review, ruling on a multi-day Bedrock outage: no automatic catch-up (see
+   * the comment at the call site for why), so this is what makes the gap visible instead of
+   * silently permanent — the manual `{ day }` invocation already exists, this is what tells a
+   * human to use it.
+   */
+  unrankedRecentDays: number;
 }
 
 /**
@@ -52,6 +60,16 @@ export function targetDay(now: Date): string {
   return istanbulDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
 }
 
+/**
+ * `n` days before `day` (n=0 returns `day` itself). Anchored at noon UTC so the 24h subtraction
+ * can never land on the wrong side of a midnight boundary before istanbulDay re-derives the
+ * local calendar day — Turkey's constant UTC+3 makes this exact either way, per targetDay above.
+ */
+function daysBefore(day: string, n: number): string {
+  const anchor = new Date(`${day}T12:00:00Z`);
+  return istanbulDay(new Date(anchor.getTime() - n * 24 * 60 * 60 * 1000));
+}
+
 export async function handler(event?: { day?: string }): Promise<RankSummary> {
   const table = process.env.TABLE_NAME;
   const tokenParam = process.env.GITHUB_TOKEN_PARAM;
@@ -66,7 +84,10 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
   if (stored.length === 0) {
     // Nothing captured. Recording a complete day with zero articles is wrong — it would make
     // the feed show an empty day as authoritative. Leave no META#DAY at all.
-    return { day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok", backedUp: false };
+    return {
+      day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok",
+      backedUp: false, unrankedRecentDays: 0,
+    };
   }
 
   const candidates = stored.map((a) => ({
@@ -94,9 +115,28 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
       ConditionExpression: "attribute_not_exists(pk) OR expiresAt < :now",
       ExpressionAttributeValues: { ":now": runId },
     }));
-  } catch {
-    console.warn("another rank run holds this day", { day });
-    return { day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok", backedUp: false };
+  } catch (e) {
+    // "The call failed" and "the thing is already taken" are different facts. A
+    // ConditionalCheckFailedException means the condition was evaluated and genuinely lost —
+    // another run holds the day, nothing is wrong. Anything else (a throttle, a network
+    // blip, ...) means the condition was never evaluated, so we do NOT know whether we hold
+    // the lock — proceeding could interleave two runs exactly as the lock exists to prevent.
+    // llmStatus: "failed" is what lets a human tell the two apart in the summary and the log.
+    const name = e instanceof Error ? e.name : "Unknown";
+    if (name === "ConditionalCheckFailedException") {
+      console.warn("another rank run holds this day", { day });
+      return {
+        day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "ok",
+        backedUp: false, unrankedRecentDays: 0,
+      };
+    }
+    console.error("day lock write failed; not proceeding without knowing if we hold it", {
+      day, error: name,
+    });
+    return {
+      day, ranked: 0, llmRanked: 0, truncated: 0, status: "partial", llmStatus: "failed",
+      backedUp: false, unrankedRecentDays: 0,
+    };
   }
 
   // ---- Phase 1: ask the model, write enrichment only -----------------------------------
@@ -108,8 +148,13 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
   // scales — a degraded score frozen at first capture for unranked articles, a real score for
   // articles ranked on an earlier day — so slicing by them selects on write history rather
   // than on importance.
-  const ordered = [...candidates].sort((a, b) =>
-    degradedScore(b, now) - degradedScore(a, now));
+  //
+  // Computed once per article, not once per comparison: sort() calls the comparator
+  // O(n log n) times, and degradedScore is pure given `now`, so recomputing it inline in the
+  // comparator repeats the same work for the same article on every comparison it's part of.
+  const withScore = candidates.map((c) => ({ c, degraded: degradedScore(c, now) }));
+  withScore.sort((a, b) => b.degraded - a.degraded);
+  const ordered = withScore.map((x) => x.c);
 
   const controller = new AbortController();
   const abortTimer = setTimeout(() => controller.abort(), BEDROCK_ABORT_MS);
@@ -225,5 +270,32 @@ export async function handler(event?: { day?: string }): Promise<RankSummary> {
     completedAt: new Date().toISOString(),
   })));
 
-  return { day, ranked, llmRanked, truncated, status, llmStatus, backedUp };
+  // ---- Multi-day gap visibility (Task 7 review ruling) ----------------------------------
+  // Deliberately NOT an automatic catch-up. Two reasons: freshness beats completeness in a
+  // news reader, so ranking an old gap before today would delay today's news to recover
+  // last week's; and every make-up day is another Bedrock call on the one path in this
+  // system that spends money, which is exactly where an unbounded recovery loop would hide.
+  // Instead the gap is made visible, since the manual `{ day }` invocation already exists
+  // and the missing piece is knowing to use it — so count and log it instead of acting on it.
+  let unrankedRecentDays = 0;
+  try {
+    const recentDays = Array.from({ length: 7 }, (_, i) => daysBefore(day, i));
+    const metas = await listDays(client, table, 30);
+    const completed = new Set(metas.filter((m) => m.status === "complete").map((m) => m.day));
+    for (const d of recentDays) {
+      if (completed.has(d)) continue;
+      if (await dayHasArticles(client, table, d)) unrankedRecentDays += 1;
+    }
+    if (unrankedRecentDays > 0) {
+      console.error("days with articles but no complete ranking in the last 7", {
+        unrankedRecentDays, day,
+      });
+    }
+  } catch (e) {
+    // Best-effort. The ranking work above is already committed; a failure here must not
+    // undo it or throw out of an otherwise-successful run.
+    console.error("gap check failed", { message: e instanceof Error ? e.message : "unknown" });
+  }
+
+  return { day, ranked, llmRanked, truncated, status, llmStatus, backedUp, unrankedRecentDays };
 }

@@ -41,6 +41,24 @@ export async function queryDay(
   });
 }
 
+/**
+ * True if a day's GSI partition holds at least one article. `Limit: 1` on purpose — Task 7's
+ * multi-day-gap check calls this once per look-back day just to answer "any at all", and
+ * paging the whole partition (queryDay's job) would be needless read cost for that question.
+ */
+export async function dayHasArticles(
+  client: DynamoDBDocumentClient, tableName: string, day: string,
+): Promise<boolean> {
+  const out = await client.send(new QueryCommand({
+    TableName: tableName,
+    IndexName: "feed-by-day",
+    KeyConditionExpression: "gsi1pk = :d",
+    ExpressionAttributeValues: { ":d": dayPartition(day) },
+    Limit: 1,
+  }));
+  return (out.Items?.length ?? 0) > 0;
+}
+
 /** Newest days first. Limit is a hard cap, so this one page is genuinely enough. */
 export async function listDays(
   client: DynamoDBDocumentClient, tableName: string, limit: number,

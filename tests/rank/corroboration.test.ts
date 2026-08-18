@@ -34,4 +34,17 @@ describe("countCorroboration", () => {
     const day = [item("h1", "2026-08-18#gpt6"), item("h2", "2026-08-18#gpt6")];
     expect([...countCorroboration(day)]).toEqual([...countCorroboration(day)]);
   });
+
+  it("keeps two articles that collide on the same __self__ id from inflating each other", () => {
+    // Review finding: deleting the entire `__self__`/no-cluster special case left the OTHER
+    // three tests above green, because in their fixtures a unique __self__ id already sizes
+    // to 1 via the generic cluster-size fallback -- the special case was unreachable by them.
+    // Two articles sharing one __self__ id (which should never happen, since each is supposed
+    // to embed its own hash) is what actually exercises the branch: with it, both are still
+    // singletons; without it, they'd fall through to the generic path and size as a real
+    // 2-member cluster, since the first pass counts __self__ ids exactly like any other.
+    const counts = countCorroboration([item("h1", "__self__:dup"), item("h2", "__self__:dup")]);
+    expect(counts.get("h1")).toBe(1);
+    expect(counts.get("h2")).toBe(1);
+  });
 });

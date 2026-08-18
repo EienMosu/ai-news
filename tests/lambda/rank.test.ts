@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ddb = mockClient(DynamoDBDocumentClient);
 
-vi.mock("../../src/lib/store/query.js", () => ({ queryDay: vi.fn(), listDays: vi.fn() }));
+vi.mock("../../src/lib/store/query.js", () => ({
+  queryDay: vi.fn(), listDays: vi.fn(), dayHasArticles: vi.fn(),
+}));
 // Preserves the real TruncationError export via importActual: rank.ts imports it directly
 // from this module for a live `instanceof` check, and a factory that returns only
 // `{ rankArticles: vi.fn() }` would make every OTHER export (TruncationError included)
@@ -19,7 +21,7 @@ vi.mock("../../src/lib/rank/bedrock.js", async () => {
 });
 vi.mock("../../src/lib/rank/backup.js", () => ({ backupDay: vi.fn() }));
 
-import { queryDay } from "../../src/lib/store/query.js";
+import { dayHasArticles, listDays, queryDay } from "../../src/lib/store/query.js";
 import { rankArticles, TruncationError } from "../../src/lib/rank/bedrock.js";
 import { backupDay } from "../../src/lib/rank/backup.js";
 import { handler, targetDay } from "../../src/lambda/rank.js";
@@ -39,6 +41,10 @@ beforeEach(() => {
   delete process.env.GITHUB_TOKEN_PARAM;
   delete process.env.BACKUP_REPO;
   vi.mocked(queryDay).mockResolvedValue([stored(1), stored(2)]);
+  // Default: no other days are missing a complete ranking, so the gap check (Fix 3) stays
+  // quiet unless a test deliberately exercises it.
+  vi.mocked(listDays).mockResolvedValue([]);
+  vi.mocked(dayHasArticles).mockResolvedValue(false);
   vi.mocked(rankArticles).mockResolvedValue({
     response: { items: [
       { urlHash: HASH(1), importance: 90, clusterId: "gpt6", whyItMatters: "Big." },
@@ -95,6 +101,33 @@ describe("rank handler", () => {
     const metaPut = ddb.commandCalls(PutCommand).at(-1)!.args[0].input.Item!;
     expect(metaPut.pk).toBe("META#DAY");
     expect(metaPut.status).toBe("partial");
+  });
+
+  it("refuses to run when another rank run already holds the day lock", async () => {
+    // Genuine contention: the condition was evaluated and lost. Nothing is wrong -- this is
+    // the lock doing its job, so no article write of either kind should happen.
+    const err = new Error("The conditional request failed");
+    err.name = "ConditionalCheckFailedException";
+    ddb.on(PutCommand).rejects(err);
+
+    const out = await handler();
+    expect(out.status).toBe("partial");
+    expect(out.llmStatus).toBe("ok");
+    expect(ddb.commandCalls(UpdateCommand)).toHaveLength(0);
+  });
+
+  it("does not proceed when the lock write itself fails, since it cannot tell if it holds the lock", async () => {
+    // A throttle or network error means the condition was never evaluated -- unlike genuine
+    // contention, this must NOT look like "nothing was wrong" (llmStatus stays "ok" for that
+    // case above); it needs its own signal so a human doesn't mistake a stuck day for a busy one.
+    const err = new Error("Throughput exceeded");
+    err.name = "ProvisionedThroughputExceededException";
+    ddb.on(PutCommand).rejects(err);
+
+    const out = await handler();
+    expect(out.status).toBe("partial");
+    expect(out.llmStatus).toBe("failed");
+    expect(ddb.commandCalls(UpdateCommand)).toHaveLength(0);
   });
 
   it("keeps degraded scores and writes no null enrichment when Bedrock throws", async () => {
@@ -157,5 +190,28 @@ describe("rank handler", () => {
     // HASH(2) got no cluster, so reconcile made it __self__: — a singleton, never merged
     // with HASH(1) and never inflating its own corroboration.
     expect(corrs).toContain(1);
+  });
+
+  it("counts and logs days with articles but no complete ranking in the last week, without ranking them", async () => {
+    // Fix 3 (Task 7 review): no automatic catch-up -- freshness beats completeness, and every
+    // make-up day would be another Bedrock call. This only verifies the gap is COUNTED and
+    // LOGGED, never that anything gets ranked for it.
+    vi.mocked(listDays).mockResolvedValue([{ day: "2026-08-18", status: "complete" } as never]);
+    vi.mocked(dayHasArticles).mockResolvedValue(true);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const out = await handler({ day: "2026-08-18" });
+
+    // "2026-08-18" itself is marked complete and excluded; the six days before it all "have
+    // articles" per the mock and have no complete record, so all six count as gaps.
+    expect(out.unrankedRecentDays).toBe(6);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "days with articles but no complete ranking in the last 7",
+      expect.objectContaining({ unrankedRecentDays: 6 }),
+    );
+    // The only Bedrock call is this run's own -- one call, for "2026-08-18", not seven.
+    expect(rankArticles).toHaveBeenCalledTimes(1);
+
+    errorSpy.mockRestore();
   });
 });
