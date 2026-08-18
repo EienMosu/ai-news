@@ -399,5 +399,32 @@ describe("captureAll", () => {
         "https://news.google.com/rss/articles/CCC");
       expect(r.articles.filter((x) => x.source === "anthropic")).toHaveLength(0);
     });
+
+    // Code review finding: `filtered[src.id] = filteredCount` (an overwrite) would
+    // silently discard the CDN-fragment drop's count the moment the recency window
+    // also filters something from the same source in the same run. Reverting the fix
+    // to `=` must fail this test even though every other test in the suite still
+    // passes -- this is the only assertion that exercises both contributions to
+    // `filtered` landing on the same source in one captureAll call.
+    it("accumulates the CDN-fragment drop and the recency-window filter into one filtered count, instead of the later write overwriting the earlier one", async () => {
+      const tenDaysAgo = new Date(NOW.getTime() - 10 * 24 * 60 * 60 * 1000).toUTCString();
+      const body = rssItems([
+        // Dropped by the publisherSuffix CDN check, before the recency window runs.
+        { title: "some pdf text - www-cdn.anthropic.com", link: "https://news.google.com/rss/articles/CDN" },
+        // Passes the CDN/quarantine checks and schema validation, then gets excluded
+        // by the 7-day recency window (10 days old) -- a second, independent reason
+        // to increment `filtered` for the same source in the same run.
+        { title: "Old Anthropic post - Anthropic", link: "https://news.google.com/rss/articles/OLD", pubDate: tenDaysAgo },
+      ]);
+
+      const r = await captureAll({ now: NOW, fetchText: stubFetch({ [anthropic.url]: body }) });
+
+      expect(r.articles.filter((x) => x.source === "anthropic")).toHaveLength(0);
+      expect(r.quarantined.anthropic).toBe(0);
+      // 1 (CDN fragment) + 1 (recency window) = 2. A plain `=` instead of `+=` in
+      // capture.ts would leave this at 1 -- the recency window's own count,
+      // clobbering the CDN drop that was counted first.
+      expect(r.filtered.anthropic).toBe(2);
+    });
   });
 });

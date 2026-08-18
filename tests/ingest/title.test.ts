@@ -25,11 +25,27 @@ describe("stripPublisherSuffix", () => {
     expect(stripPublisherSuffix("Well-tuned models")).toBe("Well-tuned models");
   });
 
-  it("returns an empty string for the degenerate title once whitespace has already been trimmed", () => {
-    // fetchers/rss.ts trims and collapses whitespace before a title reaches this
-    // function, so the real degenerate item (" - Anthropic") arrives here as
-    // "- Anthropic" -- no leading space. Must resolve to "" the same as the
-    // untrimmed form above, or the quarantine in capture.ts never fires on real feeds.
-    expect(stripPublisherSuffix("- Anthropic")).toBe("");
+  // Code review finding: a leading "- " is not, on its own, evidence of a degenerate
+  // title -- only the ABSENCE of a " - " separator to split on makes it one. Every row
+  // here is a case from that sanity table, each its own test so a regression names the
+  // exact failing input rather than a batch of assertions in one it().
+  describe("degenerate-vs-real titles that start with a dash (post code-review)", () => {
+    it.each<[string, string]>([
+      // Real title was empty; upstream whitespace trimming already ate the leading
+      // space, so no " - " separator survives anywhere in the string.
+      ["- Anthropic", ""],
+      // Same item, pre-trim form: the " - " separator is intact here, so this also
+      // resolves via the ordinary split path, not the leading-dash fallback.
+      [" - Anthropic", ""],
+      // A real title that happens to start with a dash. The " - " separator before
+      // "Anthropic" is still present, so this must split normally and survive.
+      ["- Interesting update - Anthropic", "- Interesting update"],
+      ["Real post - Anthropic", "Real post"],
+      ["GPT-5 - what changed - Anthropic", "GPT-5 - what changed"],
+      ["No suffix here", "No suffix here"],
+      ["Well-tuned models", "Well-tuned models"],
+    ])("resolves %j to %j", (input, expected) => {
+      expect(stripPublisherSuffix(input)).toBe(expected);
+    });
   });
 });

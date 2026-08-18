@@ -11,12 +11,15 @@
  * overwrite each other silently.
  */
 export function stripPublisherSuffix(title: string): string {
-  // Upstream RSS parsing (fetchers/rss.ts) trims and collapses whitespace before this
-  // function ever sees the title, so a degenerate "<empty> - <Publisher>" item arrives
-  // here as "- Publisher" -- its leading space already gone -- not " - Publisher". A
-  // leading "- " is therefore equivalent to a " - " separator with nothing before it and
-  // must resolve to "" the same way, or the degenerate-title quarantine below never fires.
-  if (title.startsWith("- ")) return "";
   const i = title.lastIndexOf(" - ");
-  return i === -1 ? title : title.slice(0, i).trim();
+  if (i !== -1) return title.slice(0, i).trim();
+
+  // No " - " separator survived to split on. A leading "- " by itself is NOT evidence
+  // of a degenerate title -- "- Interesting update - Anthropic" also starts with "- "
+  // but has a real separator later in the string, and is handled by the branch above.
+  // It is only when there is no separator anywhere that a leading "- " means something:
+  // the real title was empty and the whole string is just "- Publisher" -- the pre-trim
+  // form " - Publisher" with its leading space already eaten by fetchers/rss.ts's
+  // whitespace trimming/collapsing, which runs before this function ever sees the title.
+  return title.startsWith("- ") ? "" : title;
 }
