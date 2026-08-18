@@ -5,13 +5,12 @@ export interface DayMeta {
   day: string;
   status: "complete" | "partial";
   articleCount: number;
-  /** How many of the day's articles the model actually scored. Optional: a run that never
-   *  reaches ranking (e.g. capture-only) still needs to mark the day complete or partial. */
-  llmRanked?: number;
+  /** How many of the day's articles the model actually scored. */
+  llmRanked: number;
   /** How many were cut by RANK_INPUT_CAP and never reached the model. Persisted, not logged:
    *  a day where 450 of 650 articles were never ranked must be visible in the data. */
-  truncated?: number;
-  llmStatus?: "ok" | "failed" | "truncated";
+  truncated: number;
+  llmStatus: "ok" | "failed" | "truncated";
   runId: string;
   completedAt: string;
 }

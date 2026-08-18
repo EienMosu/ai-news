@@ -94,6 +94,20 @@ describe("buildCaptureUpdate", () => {
   it("stamps hashVersion so the key algorithm stays revisable", () => {
     expect(attrs(buildCaptureUpdate("t", base)).hashVersion!.value).toBe(1);
   });
+
+  it("writes a falsy-but-real points value of 0, not the same as absent", () => {
+    // hn.ts normalizes a non-finite points value to exactly 0. A `!value` check in the
+    // builder would drop it as if it had never been supplied.
+    const a = attrs(buildCaptureUpdate("t", { ...base, article: { ...article, points: 0 } }));
+    expect(a.points).toBeDefined();
+    expect(a.points!.value).toBe(0);
+  });
+
+  it("writes an empty-string value rather than treating it as absent", () => {
+    const a = attrs(buildCaptureUpdate("t", { ...base, article: { ...article, summary: "" } }));
+    expect(a.summary).toBeDefined();
+    expect(a.summary!.value).toBe("");
+  });
 });
 
 describe("buildRankUpdate", () => {
@@ -131,5 +145,22 @@ describe("buildRankUpdate", () => {
     const a = attrs(buildRankUpdate("t", { ...rank, score: null, scoreVersion: null }));
     expect(a.gsi1sk).toBeUndefined();
     expect(a.llmImportance).toBeDefined();
+  });
+
+  it("writes a falsy-but-real score of 0, including its sort key", () => {
+    // buildSortKey clamps to a floor of 0, so a genuine zero score exists. A `!value` check
+    // would drop both `score` and `gsi1sk`, and the item would never appear in the feed.
+    const a = attrs(buildRankUpdate("t", { ...rank, score: 0, scoreVersion: "v1" }));
+    expect(a.score).toBeDefined();
+    expect(a.score!.value).toBe(0);
+    expect(a.gsi1sk).toBeDefined();
+    expect(a.gsi1sk!.value).toBe(`0000#${HASH}`);
+  });
+
+  it("writes a falsy-but-real llmImportance of 0", () => {
+    // reconcile clamps importance into 0-100 inclusive, so 0 is a legitimate model output.
+    const a = attrs(buildRankUpdate("t", { ...rank, llmImportance: 0 }));
+    expect(a.llmImportance).toBeDefined();
+    expect(a.llmImportance!.value).toBe(0);
   });
 });

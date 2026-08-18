@@ -5,11 +5,27 @@ describe("buildDayMetaPut", () => {
   it("sorts days lexicographically by using the ISO date as the sort key", () => {
     const item = buildDayMetaPut("t", {
       day: "2026-08-18", status: "complete", articleCount: 97,
+      llmRanked: 97, truncated: 0, llmStatus: "ok",
       runId: "r1", completedAt: "2026-08-18T03:05:00.000Z",
     }).Item!;
     expect(item.pk).toBe("META#DAY");
     expect(item.sk).toBe("2026-08-18");
     expect(item.status).toBe("complete");
+  });
+
+  it("records how much of the day the model actually saw", () => {
+    // These three are REQUIRED on DayMeta, not optional, and this is why: a day where 450 of
+    // 650 articles never reached Bedrock would otherwise persist as plain "complete" and the
+    // gap would exist only in a log line nobody reads. Making them optional lets the rank
+    // handler omit them and reopens exactly that hole.
+    const item = buildDayMetaPut("t", {
+      day: "2026-08-18", status: "partial", articleCount: 650,
+      llmRanked: 200, truncated: 450, llmStatus: "ok",
+      runId: "r1", completedAt: "2026-08-18T03:05:00.000Z",
+    }).Item!;
+    expect(item.llmRanked).toBe(200);
+    expect(item.truncated).toBe(450);
+    expect(item.status).toBe("partial");
   });
 });
 
