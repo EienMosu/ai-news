@@ -160,4 +160,41 @@ describe("Functions", () => {
   it("creates no access key in the template", () => {
     expect(Object.keys(template().findResources("AWS::IAM::AccessKey"))).toHaveLength(0);
   });
+
+  it("attaches no AWS managed policy to either function's execution role", () => {
+    // A default NodejsFunction-generated role carries AWSLambdaBasicExecutionRole, whose actual
+    // Resource is "*" (verified against the live account) — every log group in the account,
+    // not just the function's own. Passing an explicit `role:` is what suppresses that
+    // attachment; this is the regression that would otherwise be invisible, since the function
+    // would keep logging successfully either way.
+    const roles = Object.entries(template().findResources("AWS::IAM::Role"));
+    const executionRoles = roles.filter(([id]) => id.includes("ExecutionRole"));
+    expect(executionRoles.length).toBe(2);
+    for (const [, role] of executionRoles) {
+      expect((role as any).Properties.ManagedPolicyArns).toBeUndefined();
+    }
+  });
+
+  it("scopes each function's logging permission to CreateLogStream/PutLogEvents only, never CreateLogGroup", () => {
+    // The group is declared in CDK and exists before the function does, so nothing needs to
+    // create it. `logs:CreateLogGroup` reappearing here would mean the role can create OTHER
+    // log groups too, which is exactly the account-wide shape spec §9 forbids.
+    for (const doc of [capturePolicyDocument(), rankPolicyDocument()]) {
+      const json = JSON.stringify(doc);
+      expect(json).toContain("logs:CreateLogStream");
+      expect(json).toContain("logs:PutLogEvents");
+      expect(json).not.toContain("logs:CreateLogGroup");
+    }
+  });
+
+  it("scopes the github token grant to GetParameter only, not grantRead's other three actions", () => {
+    // `.grantRead()` on an IStringParameter expands to DescribeParameters, GetParameters,
+    // GetParameter, and GetParameterHistory. GetParameterHistory returns PREVIOUS versions of
+    // a SecureString, so granting it would let a rotated-away PAT stay readable.
+    const json = JSON.stringify(rankPolicyDocument());
+    expect(json).toContain("ssm:GetParameter");
+    for (const forbidden of ["ssm:GetParameterHistory", "ssm:GetParameters", "ssm:DescribeParameters"]) {
+      expect(json).not.toContain(forbidden);
+    }
+  });
 });

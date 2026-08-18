@@ -28,15 +28,39 @@ export class Functions extends Construct {
     super(scope, id);
     const { region, account } = Stack.of(this);
 
-    // An explicit log group per function. CDK's default execution role attaches
-    // AWSLambdaBasicExecutionRole, which grants logs on `arn:aws:logs:*:*:*`; spec §9 asks for
-    // "the function's own log group". Declaring the group also makes retention a property of
-    // the group rather than of the deprecated `logRetention` custom resource.
+    // An explicit log group per function, and an explicit execution role to match. A custom
+    // `logGroup` prop only redirects where the function's logs land and how long they're
+    // retained — it does NOT stop CDK from attaching its default execution role, which carries
+    // the AWS-managed `AWSLambdaBasicExecutionRole` policy. That policy's actual Resource is
+    // `"*"` (checked against the live account), not the `arn:aws:logs:*:*:*` its name implies:
+    // every log group in the account, for both functions, forever. Spec §9 asks for
+    // `logs:CreateLogStream`/`logs:PutLogEvents` on the function's OWN log group, nothing more.
+    // Passing an explicit `role:` is what suppresses the managed-policy attachment
+    // (aws-cdk-lib's own docs: "If you provide a Role, you must add the relevant AWS managed
+    // policies yourself" — that IS the point here, since we add back only the two actions the
+    // runtime needs).
     const logGroup = (name: string) =>
       new logs.LogGroup(this, `${name}Logs`, {
         retention: logs.RetentionDays.TWO_WEEKS,
         removalPolicy: RemovalPolicy.DESTROY,
       });
+
+    // No `logs:CreateLogGroup`: the group is declared above and exists before the function
+    // does, so nothing ever needs to create one. Resource is the single log group ARN — no
+    // separate `:*` stream child is needed because CloudFormation's own `AWS::Logs::LogGroup`
+    // `Arn` attribute already resolves with a trailing `:*` (the same single-ARN shape
+    // `aws-cdk-lib`'s own `LogGroup.grantWrite()` uses internally, per its grants.json:
+    // `["logs:CreateLogStream","logs:PutLogEvents"]` against `[this.logGroupArn]` alone).
+    const executionRole = (name: string, group: logs.LogGroup) => {
+      const role = new iam.Role(this, `${name}ExecutionRole`, {
+        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      });
+      role.addToPolicy(new iam.PolicyStatement({
+        actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
+        resources: [group.logGroupArn],
+      }));
+      return role;
+    };
 
     const common = {
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -49,17 +73,20 @@ export class Functions extends Construct {
       // divergence ever matters more than the ~10 MB of bundle it costs.
     };
 
+    const captureLogGroup = logGroup("Capture");
     this.capture = new NodejsFunction(this, "CaptureFunction", {
       ...common,
       entry: "src/lambda/capture.ts",
       timeout: Duration.minutes(3),
       memorySize: 512,
-      logGroup: logGroup("Capture"),
+      logGroup: captureLogGroup,
+      role: executionRole("CaptureFunction", captureLogGroup),
       // Capture is reachable from a public route. Retrying a failed fetch pass costs nothing
       // and helps; it is set explicitly so it is a decision rather than a default.
       retryAttempts: 1,
     });
 
+    const rankLogGroup = logGroup("Rank");
     this.rank = new NodejsFunction(this, "RankFunction", {
       ...common,
       entry: "src/lambda/rank.ts",
@@ -69,7 +96,8 @@ export class Functions extends Construct {
       // margin between 600s and 900s is what lets the handler finish writing degraded scores.
       timeout: Duration.minutes(15),
       memorySize: 1024,
-      logGroup: logGroup("Rank"),
+      logGroup: rankLogGroup,
+      role: executionRole("RankFunction", rankLogGroup),
       // Spec §9: reserved concurrency of 1, so a manual trigger and the schedule cannot
       // interleave and write two incompatible clusterings into one day partition.
       reservedConcurrentExecutions: 1,
@@ -155,9 +183,18 @@ export class Functions extends Construct {
       conditions: { StringEquals: { "bedrock:InferenceProfileArn": profileArn } },
     }));
 
-    ssm.StringParameter.fromSecureStringParameterAttributes(this, "GithubToken", {
+    const githubToken = ssm.StringParameter.fromSecureStringParameterAttributes(this, "GithubToken", {
       parameterName: props.githubTokenParam,
-    }).grantRead(this.rank);
+    });
+    // Explicit statement, not `.grantRead()`: that helper expands to FOUR actions —
+    // ssm:DescribeParameters, ssm:GetParameters, ssm:GetParameter, ssm:GetParameterHistory.
+    // Spec §9 asks for GetParameter alone. GetParameterHistory in particular returns PREVIOUS
+    // versions of a SecureString, so granting it means rotating a leaked PAT doesn't revoke
+    // read access to the old value — exactly the case rotation exists to close.
+    this.rank.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["ssm:GetParameter"],
+      resources: [githubToken.parameterArn],
+    }));
 
     new scheduler.CfnSchedule(this, "CaptureSchedule", {
       flexibleTimeWindow: { mode: "OFF" },
