@@ -90,6 +90,47 @@ export async function getFeed(section: Section): Promise<FeedResult> {
 }
 
 /**
+ * The home feed's day list, newest first: one entry per day `listDays(count)` names, each
+ * carrying that day's `section`-filtered articles alongside the day totals `listDays` already
+ * returned -- Task 7 Step 2. Exactly `count` days are asked for (`listDays(client, table,
+ * count)`, never a fixed 30) and every day's `queryDay` is issued **concurrently**
+ * (`Promise.all`), not one after another: sequential reads would make the home page as slow as
+ * the sum of every day's round trip, and concurrency is the actual requirement, not an
+ * optimisation on top of it.
+ *
+ * Deliberately reuses each day's own `DayMeta` (`status`, `llmRanked`, `truncated`) already
+ * returned by the single `listDays` call rather than calling `getDay` per day, which would
+ * issue a redundant `GetCommand` against `META#DAY` for a record already in hand -- the day
+ * list and the day's articles are two different query shapes on purpose (one `Query` on
+ * `META#DAY`'s partition, then N `Query`s on `feed-by-day`), never N pairs of both.
+ *
+ * `Promise.all` also keeps the array in `days`' own newest-first order regardless of which
+ * day's `queryDay` happens to resolve first -- the array passed to `.map` fixes the order of
+ * the returned promises, and `Promise.all` preserves that positional order in its result no
+ * matter the completion order underneath.
+ *
+ * Returns `FeedResult[]` (not a new interface) so each entry can be handed straight to
+ * `FeedView` -- the same per-day rendering `getFeed`'s single day already uses, now called once
+ * per array element instead of once for the page.
+ */
+export async function getRecentDays(section: Section, count: number): Promise<FeedResult[]> {
+  const table = requireTableName();
+  const client = docClient();
+  const days = await listDays(client, table, count);
+
+  return await Promise.all(days.map(async (day): Promise<FeedResult> => {
+    const items = await queryDay(client, table, day.day);
+    return {
+      articles: bySection(items.map(toFeedArticle), section),
+      day: day.day,
+      status: day.status,
+      llmRankedInDay: day.llmRanked,
+      truncatedInDay: day.truncated,
+    };
+  }));
+}
+
+/**
  * The named day, unfiltered by section -- `/day/[date]` deep-links to a specific date and
  * shows both verticals. Unlike `getFeed`, the day is a caller-supplied fact, not something
  * this function discovers, so `day` in the result is always the input, even when nothing

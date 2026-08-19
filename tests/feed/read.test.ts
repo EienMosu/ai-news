@@ -3,7 +3,7 @@ import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { __setDocClient } from "../../src/lib/store/client.js";
 import {
-  getArchive, getArticle, getDay, getFeed, getRunStatus,
+  getArchive, getArticle, getDay, getFeed, getRecentDays, getRunStatus,
 } from "../../src/lib/feed/read.js";
 
 const HASH = "b".repeat(64);
@@ -192,6 +192,141 @@ describe("getDay", () => {
 
     expect(result.status).toBeNull();
     expect(result.articles).toHaveLength(1);
+  });
+});
+
+describe("getRecentDays", () => {
+  it("asks listDays for exactly `count` days, not a larger fixed number", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem({ day: "2020-01-01" })] });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+    await getRecentDays("ai", 3);
+
+    const listDaysCall = ddb.commandCalls(QueryCommand)
+      .find((c) => c.args[0].input.IndexName === undefined)!;
+    expect(listDaysCall.args[0].input.Limit).toBe(3);
+  });
+
+  it("returns [] and issues no day queries when no day has ever ranked", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [] });
+
+    const days = await getRecentDays("ai", 7);
+
+    expect(days).toEqual([]);
+    expect(ddb.commandCalls(QueryCommand).filter((c) => c.args[0].input.IndexName === "feed-by-day"))
+      .toHaveLength(0);
+  });
+
+  it("never issues a GetCommand per day -- reuses each day's own DayMeta from listDays, not getDay", async () => {
+    ddb.on(QueryCommand).resolves({
+      Items: [dayMetaItem({ day: "2020-01-02" }), dayMetaItem({ day: "2020-01-01" })],
+    });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+    await getRecentDays("ai", 2);
+
+    expect(ddb.commandCalls(GetCommand)).toHaveLength(0);
+  });
+
+  it("filters each day's articles to the requested section via bySection, not by returning everything", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem({ day: "2020-01-01" })] });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({
+      Items: [
+        rawArticle({ pk: `ART#${"a".repeat(64)}`, section: "ai" }),
+        rawArticle({ pk: `ART#${"c".repeat(64)}`, section: "design" }),
+      ],
+    });
+
+    const days = await getRecentDays("design", 1);
+
+    expect(days).toHaveLength(1);
+    expect(days[0]!.articles).toHaveLength(1);
+    expect(days[0]!.articles[0]!.urlHash).toBe("c".repeat(64));
+  });
+
+  it("carries each day's own status/llmRanked/truncated through, from listDays' own record", async () => {
+    ddb.on(QueryCommand).resolves({
+      Items: [dayMetaItem({ day: "2020-01-01", status: "partial", llmRanked: 9, truncated: 2 })],
+    });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+    const days = await getRecentDays("ai", 1);
+
+    expect(days).toEqual([
+      { day: "2020-01-01", articles: [], status: "partial", llmRankedInDay: 9, truncatedInDay: 2 },
+    ]);
+  });
+
+  it("keeps listDays' own newest-first order, regardless of which day's query resolves first", async () => {
+    ddb.on(QueryCommand).resolves({
+      Items: [
+        dayMetaItem({ day: "2020-01-03" }),
+        dayMetaItem({ day: "2020-01-02" }),
+        dayMetaItem({ day: "2020-01-01" }),
+      ],
+    });
+
+    let releaseNewest = () => {};
+    const gate = new Promise<void>((resolve) => { releaseNewest = resolve; });
+
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).callsFake(
+      async (input: { ExpressionAttributeValues: Record<string, string> }) => {
+        // The NEWEST day is the one that resolves LAST -- if the implementation ever assembled
+        // its result array in completion order (e.g. pushing into an array as each promise
+        // settles) rather than relying on `Promise.all`'s positional guarantee, this would put
+        // 2020-01-03 at the end instead of the start.
+        if (input.ExpressionAttributeValues[":d"] === "DAY#2020-01-03") await gate;
+        return { Items: [] };
+      },
+    );
+
+    const promise = getRecentDays("ai", 3);
+    await new Promise((r) => setTimeout(r, 10));
+    releaseNewest();
+
+    const days = await promise;
+    expect(days.map((d) => d.day)).toEqual(["2020-01-03", "2020-01-02", "2020-01-01"]);
+  });
+
+  it("issues its per-day queries concurrently, not one after another", async () => {
+    ddb.on(QueryCommand).resolves({
+      Items: [
+        dayMetaItem({ day: "2020-01-03" }),
+        dayMetaItem({ day: "2020-01-02" }),
+        dayMetaItem({ day: "2020-01-01" }),
+      ],
+    });
+
+    const invoked: string[] = [];
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).callsFake(
+      async (input: { ExpressionAttributeValues: Record<string, string> }) => {
+        const day = input.ExpressionAttributeValues[":d"]!;
+        invoked.push(day);
+        // Only the NEWEST day's query ever hangs. A sequential implementation (a `for` loop
+        // awaiting each `queryDay` before starting the next) would never issue the other two
+        // days' queries until this one resolves -- so `invoked` would still hold only one entry
+        // at the checkpoint below. A concurrent `Promise.all` issues all three `send()` calls
+        // synchronously, before any of them can resolve.
+        if (day === "DAY#2020-01-03") await gate;
+        return { Items: [] };
+      },
+    );
+
+    const promise = getRecentDays("ai", 3);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(invoked.sort()).toEqual(["DAY#2020-01-01", "DAY#2020-01-02", "DAY#2020-01-03"]);
+
+    release();
+    await promise;
+  });
+
+  it("throws a clear error naming TABLE_NAME when it is not set", async () => {
+    delete process.env.TABLE_NAME;
+    await expect(getRecentDays("ai", 7)).rejects.toThrow(/TABLE_NAME/);
   });
 });
 
