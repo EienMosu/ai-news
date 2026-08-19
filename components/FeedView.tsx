@@ -19,7 +19,7 @@ const SECTION_LABELS: Record<Section, string> = { ai: "AI", design: "design" };
  * `status: "partial"` is worded as a plain fact, not an error: a partial day with some articles
  * truncated by the ranking cap (the live data's normal case -- 14 of 264 -- is exactly this) is
  * not a failure state and must not read like one. It is also never worded as "today's ranking":
- * the day this describes is whatever `getLatestCompleteDay`/`getDay` returned, which is
+ * the day this describes is whatever `getRecentDays`/`getDay` returned, which is
  * routinely yesterday (or, once a pipeline has been quietly broken for a while, weeks old) --
  * this function has no `now` and cannot know whether `day` is today, so it must never claim it
  * is. "That day's ranking was partial" names the fact without a claim it cannot back up.

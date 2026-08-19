@@ -130,7 +130,7 @@ describe("dayStatusLine", () => {
 
   it("never calls a ranked day 'today' -- the function has no `now` and cannot know", () => {
     // The day shown is routinely yesterday (or, on a quietly-broken pipeline, weeks old --
-    // getLatestCompleteDay looks back 30 days). A day named "2020-01-01" makes the point
+    // the archive reaches 30 days back). A day named "2020-01-01" makes the point
     // regardless of when this test happens to run.
     const line = dayStatusLine("partial", 264, 14, "2020-01-01");
     expect(line).not.toMatch(/\btoday\b/i);

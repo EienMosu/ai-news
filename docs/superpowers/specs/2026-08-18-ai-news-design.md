@@ -344,7 +344,7 @@ and needs no pagination in v1. If sources are added, re-check this bound before 
 
 | Pattern | Query | Round trips |
 |---|---|---|
-| Latest complete day | `META#DAY` desc limit 1, then GSI1 on that day | 2 |
+| Home feed, N day sections | `META#DAY` desc limit N, then one GSI1 Query per day, concurrent | 1 + N |
 | Archive calendar | `META#DAY` desc limit 60 | 1 |
 | Specific day | GSI1 `DAY#<date>` desc, plus `META#DAY`/`<date>` | 2, issued together |
 | Category filter | client-side over the fetched day | 0 |
@@ -364,6 +364,17 @@ observe a partially-written day, and a run that dies mid-way leaves a day marked
 > and no added latency, and a transient failure on the metadata read degrades the page to
 > "status unknown" instead of killing it. The record is fetched by key rather than through
 > `listDays`, which reaches only 30 days back and would silently miss an older archived day.
+
+> **[revised]** "Latest complete day" was a two-round-trip pattern: find the newest day whose
+> status is `complete`, then Query it. The home feed no longer works that way. It renders **N
+> day sections** (7 by default, up to 30), reading the newest N `META#DAY` records in one Query
+> and then Querying each day's partition concurrently — `1 + N` round trips, 8 at the default.
+>
+> The "prefer complete" preference is gone deliberately, not by accident. It existed to pick the
+> one best day to show; seven days each labelled with its own status tells a reader more than one
+> day picked silently. `getLatestCompleteDay` was deleted once nothing called it. Only days with
+> a `META#DAY` record appear at all, and that record is written last, so a day still being
+> captured cannot leak into the feed unranked.
 
 ---
 
@@ -578,13 +589,15 @@ EventBridge.
 > > component and pulls the card tree across that boundary. Separate routes also give each
 > > vertical a real URL to link, bookmark and share, which a filter chip does not.
 > >
-> > What it costs: one `Query` over a partition §4 bounds at ~650 items, plus the `META#DAY`
-> > lookup. **Not free** — §2's table is explicit that on-demand DynamoDB has no free tier, and
-> > this revision originally claimed otherwise, which is the misconception this document
-> > corrects in two other places. At ~264 items/day of ~1.5 KB, an eventually-consistent Query
-> > reads ~400 KB ≈ 50 RRU, on the order of $0.00001 per page view. Negligible in dollars,
-> > which is a different claim from free. If traffic ever makes it matter, the fix is caching
-> > the day, not merging the verticals.
+> > What it costs: one `Query` per day rendered, plus the `META#DAY` list. **Not free** — §2's
+> > table is explicit that on-demand DynamoDB has no free tier, and this revision originally
+> > claimed otherwise, which is the misconception this document corrects in two other places.
+> > At ~264 items/day of ~1.5 KB, an eventually-consistent Query reads ~400 KB ≈ 50 RRU **per
+> > day section**. The ~$0.00001-per-page-view figure first written here assumed the feed
+> > rendered one day; it renders seven, so the real cost is ~350 RRU (~$0.00005) at the default
+> > and ~1,500 RRU (~$0.0002) at `?days=30`. Still negligible in dollars, which remains a
+> > different claim from free. If traffic ever makes it matter, the fix is caching the day, not
+> > merging the verticals.
 >
 > **The day-section count is per vertical.** `META#DAY.articleCount` is the total across both,
 > so a header reading "23 stories" under the AI nav must be computed from the filtered list,

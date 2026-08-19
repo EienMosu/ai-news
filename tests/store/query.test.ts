@@ -1,7 +1,7 @@
 import { mockClient } from "aws-sdk-client-mock";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it } from "vitest";
-import { dayHasArticles, getLatestCompleteDay, queryDay } from "../../src/lib/store/query.js";
+import { dayHasArticles, queryDay } from "../../src/lib/store/query.js";
 
 const ddb = mockClient(DynamoDBDocumentClient);
 beforeEach(() => ddb.reset());
@@ -41,20 +41,5 @@ describe("dayHasArticles", () => {
   it("is false rather than throwing when the day has nothing", async () => {
     ddb.on(QueryCommand).resolves({ Items: [] });
     expect(await dayHasArticles(ddb as never, "t", "2026-08-18")).toBe(false);
-  });
-});
-
-describe("getLatestCompleteDay", () => {
-  it("skips a partial day and returns the newest complete one", async () => {
-    ddb.on(QueryCommand).resolves({ Items: [
-      { day: "2026-08-19", status: "partial" },
-      { day: "2026-08-18", status: "complete" },
-    ] });
-    expect((await getLatestCompleteDay(ddb as never, "t"))?.day).toBe("2026-08-18");
-  });
-
-  it("returns null rather than throwing when no day has completed yet", async () => {
-    ddb.on(QueryCommand).resolves({ Items: [] });
-    expect(await getLatestCompleteDay(ddb as never, "t")).toBeNull();
   });
 });
