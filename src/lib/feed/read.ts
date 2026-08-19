@@ -174,15 +174,47 @@ export async function getArchive(limit: number): Promise<DayMeta[]> {
  * the failure spec §8 is written to prevent. Every other counter in the record is still true
  * and still worth showing.
  */
-export type RunStatus = Omit<LastRun, "llmStatus"> & { llmStatus: LastRun["llmStatus"] | null };
+export interface RunStatus {
+  startedAt: string | null;
+  durationMs: number | null;
+  perSourceCounts: Record<string, number>;
+  filtered: Record<string, number>;
+  quarantined: Record<string, number>;
+  llmStatus: LastRun["llmStatus"] | null;
+  itemsWritten: number | null;
+  itemsFailed: number | null;
+  errors: { source: string; message: string }[];
+}
+
+/** A per-source counter map, keeping only the entries that are actually numbers. §8's header
+ *  iterates these; a non-object or a string count would throw inside the component rather
+ *  than in this file, where the boundary actually is. */
+function countRecord(v: unknown): Record<string, number> {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(v)) if (typeof n === "number") out[k] = n;
+  return out;
+}
+
+/** §8's `errors[]`, keeping only entries carrying both strings the header renders. */
+function errorList(v: unknown): { source: string; message: string }[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((e) =>
+    typeof e === "object" && e !== null
+      && typeof (e as { source?: unknown }).source === "string"
+      && typeof (e as { message?: unknown }).message === "string"
+      ? [{ source: (e as { source: string }).source, message: (e as { message: string }).message }]
+      : []);
+}
 
 /**
  * The header's run-status line (Spec §7/§8) -- the last capture-or-rank run's outcome, read
- * from the single `META#lastRun` item. `null` when the pipeline has never run, e.g. right
- * after a fresh deploy -- or when the record's `llmStatus` is not a recognised value, the one
- * field narrowed here rather than trusted via an unchecked cast: a malformed write should read
- * as "no status to show", not hand this section's highest-value component a value it has not
- * checked carries the shape `LastRun` promises.
+ * from the single `META#lastRun` item. `null` means exactly one thing -- the pipeline has
+ * never run, e.g. right after a fresh deploy. Every other malformed-write case degrades a
+ * field rather than the record, because §8's whole point is that a single null must not
+ * conflate states an operator needs to tell apart. The four fields the header iterates
+ * (`perSourceCounts`, `filtered`, `quarantined`, `errors`) are coerced to renderable shapes
+ * here, at the boundary, rather than throwing inside the component.
  */
 export async function getRunStatus(): Promise<RunStatus | null> {
   const table = requireTableName();
@@ -191,6 +223,16 @@ export async function getRunStatus(): Promise<RunStatus | null> {
     new GetCommand({ TableName: table, Key: { pk: LAST_RUN_PK, sk: LAST_RUN_SK } }),
   );
   if (!out.Item) return null;
-  const item = out.Item as LastRun;
-  return { ...item, llmStatus: memberOrNull(LAST_RUN_STATUSES, item.llmStatus) };
+  const item = out.Item;
+  return {
+    startedAt: typeof item.startedAt === "string" ? item.startedAt : null,
+    durationMs: asNumberOrNull(item.durationMs),
+    perSourceCounts: countRecord(item.perSourceCounts),
+    filtered: countRecord(item.filtered),
+    quarantined: countRecord(item.quarantined),
+    llmStatus: memberOrNull(LAST_RUN_STATUSES, item.llmStatus),
+    itemsWritten: asNumberOrNull(item.itemsWritten),
+    itemsFailed: asNumberOrNull(item.itemsFailed),
+    errors: errorList(item.errors),
+  };
 }

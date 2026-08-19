@@ -236,6 +236,26 @@ describe("getRunStatus", () => {
     expect(await getRunStatus()).toBeNull();
   });
 
+  it("coerces the counters the header iterates, instead of letting them reach the component", async () => {
+    // Spec section 8's header walks perSourceCounts / filtered / quarantined / errors. A
+    // malformed write reaching a component throws there, far from the boundary that could
+    // have caught it -- and takes the whole health surface down with it.
+    ddb.on(GetCommand).resolves({ Item: {
+      ...lastRunItem,
+      perSourceCounts: { hn: 3, bad: "not-a-number" },
+      filtered: "not-an-object",
+      quarantined: null,
+      errors: [{ source: "hn", message: "boom" }, { source: 42 }, "junk"],
+    } });
+
+    const status = await getRunStatus();
+
+    expect(status?.perSourceCounts).toEqual({ hn: 3 });
+    expect(status?.filtered).toEqual({});
+    expect(status?.quarantined).toEqual({});
+    expect(status?.errors).toEqual([{ source: "hn", message: "boom" }]);
+  });
+
   it("keeps the record but nulls llmStatus when the stored value is unrecognised", async () => {
     // Discarding the whole record here would make "capture wrote a status we do not
     // understand" indistinguishable from "capture has never run" -- the health page would go
