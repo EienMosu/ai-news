@@ -7,8 +7,10 @@
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": ["node", "react", "react-dom"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
     "outDir": "dist"
   },
-  "include": ["src", "tests", "scripts", "infra", "next.config.ts"]
+  "include": ["src", "tests", "scripts", "infra", "next.config.ts", "components"]
 }

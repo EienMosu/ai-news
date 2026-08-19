@@ -118,12 +118,24 @@ export function bySection(articles: FeedArticle[], section: Section): FeedArticl
 }
 
 /**
+ * True when `clusterId` denotes a real, shared cluster -- not absent (`null`, e.g. a degraded
+ * day when clustering never ran) and not a `__self__:`-prefixed placeholder, which means the
+ * model considered the article and deliberately assigned it no cluster. Grouping by a
+ * `__self__:` id would fuse every unclustered article of the day into one fake story, since
+ * several articles can carry the same placeholder.
+ *
+ * Kept private and shared by `clusterSiblings` and `hasCorroboration` so "what counts as a
+ * real cluster" is defined in exactly one place -- a UI predicate must never reimplement it.
+ */
+function isRealCluster(clusterId: string | null): boolean {
+  return clusterId !== null && !clusterId.startsWith("__self__:");
+}
+
+/**
  * The other articles covering the same story as `article`, never including `article` itself.
  *
  * Matching is plain equality on the stored `clusterId` string -- it is already day-namespaced,
- * so there is no day to parse back out. `__self__:<urlHash>` ids are excluded outright: they
- * mean the model assigned no cluster, and grouping by that value would fuse every unclustered
- * article of the day into one fake story.
+ * so there is no day to parse back out.
  *
  * Self-exclusion compares `urlHash`, not object identity. A story detail page fetches one
  * article by `urlHash` and the day's list separately -- two distinct fetches produce two
@@ -131,7 +143,17 @@ export function bySection(articles: FeedArticle[], section: Section): FeedArticl
  * subject leak into its own sibling list.
  */
 export function clusterSiblings(articles: FeedArticle[], article: FeedArticle): FeedArticle[] {
-  const id = article.clusterId;
-  if (id === null || id.startsWith("__self__:")) return [];
-  return articles.filter((a) => a.urlHash !== article.urlHash && a.clusterId === id);
+  if (!isRealCluster(article.clusterId)) return [];
+  return articles.filter((a) => a.urlHash !== article.urlHash && a.clusterId === article.clusterId);
+}
+
+/**
+ * True exactly when a card should show its "also covered by N others" marker: `article`
+ * belongs to a real cluster (`isRealCluster` -- not `null`, not a `__self__:` placeholder) AND
+ * more than one article shares it. `corroborationToday` counts the cluster's total size
+ * including `article` itself (see `countCorroboration` in rank/corroboration.ts), so `> 1`
+ * means "at least one other" -- the marker's "N others" text is `corroborationToday - 1`.
+ */
+export function hasCorroboration(article: FeedArticle): boolean {
+  return isRealCluster(article.clusterId) && (article.corroborationToday ?? 0) > 1;
 }

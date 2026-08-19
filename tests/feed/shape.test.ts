@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bySection, clusterSiblings, isUnranked, toFeedArticle } from "../../src/lib/feed/shape.js";
+import {
+  bySection,
+  clusterSiblings,
+  hasCorroboration,
+  isUnranked,
+  toFeedArticle,
+} from "../../src/lib/feed/shape.js";
 
 const raw = (over: Record<string, unknown> = {}) => ({
   pk: `ART#${"a".repeat(64)}`, sk: "A",
@@ -104,5 +110,32 @@ describe("clusterSiblings", () => {
     ];
     const subject = toFeedArticle(subjectRaw); // same urlHash as items[0], distinct object
     expect(clusterSiblings(items, subject).map((a) => a.title)).toEqual(["B"]);
+  });
+});
+
+describe("hasCorroboration", () => {
+  it("is true for a real cluster shared by more than one article", () => {
+    const a = toFeedArticle(raw({ clusterId: "2026-08-18#gpt6", corroborationToday: 2 }));
+    expect(hasCorroboration(a)).toBe(true);
+  });
+
+  it("is false when corroborationToday is 1, even for a real clusterId", () => {
+    const a = toFeedArticle(raw({ clusterId: "2026-08-18#gpt6", corroborationToday: 1 }));
+    expect(hasCorroboration(a)).toBe(false);
+  });
+
+  it("is false for a __self__ id, even when corroborationToday is (wrongly) inflated", () => {
+    const a = toFeedArticle(raw({ clusterId: "__self__:shared", corroborationToday: 5 }));
+    expect(hasCorroboration(a)).toBe(false);
+  });
+
+  it("is false when clusterId is null (a degraded day, clustering never ran)", () => {
+    const a = toFeedArticle(raw({ clusterId: undefined, corroborationToday: 5 }));
+    expect(hasCorroboration(a)).toBe(false);
+  });
+
+  it("is false when corroborationToday itself is null", () => {
+    const a = toFeedArticle(raw({ clusterId: "2026-08-18#gpt6", corroborationToday: undefined }));
+    expect(hasCorroboration(a)).toBe(false);
   });
 });
