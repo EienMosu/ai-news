@@ -592,12 +592,20 @@ EventBridge.
 > > What it costs: one `Query` per day rendered, plus the `META#DAY` list. **Not free** — §2's
 > > table is explicit that on-demand DynamoDB has no free tier, and this revision originally
 > > claimed otherwise, which is the misconception this document corrects in two other places.
-> > At ~264 items/day of ~1.5 KB, an eventually-consistent Query reads ~400 KB ≈ 50 RRU **per
-> > day section**. The ~$0.00001-per-page-view figure first written here assumed the feed
-> > rendered one day; it renders seven, so the real cost is ~350 RRU (~$0.00005) at the default
-> > and ~1,500 RRU (~$0.0002) at `?days=30`. Still negligible in dollars, which remains a
-> > different claim from free. If traffic ever makes it matter, the fix is caching the day, not
-> > merging the verticals.
+> > At ~264 items/day of ~1.5 KB, an eventually-consistent Query reads ~400 KB — 0.5 RRU per
+> > 4 KB, so ≈ 50 RRU **per full day section**. The ~$0.00001-per-page-view figure first written
+> > here assumed the feed rendered one day; it renders seven. Up to ~350 RRU at the default and
+> > ~1,500 RRU at `?days=30` — "up to", because a day still being captured holds far fewer items
+> > (78 on 2026-08-19 against 264 on the 18th).
+> >
+> > Stating the rate so all three figures are checkable rather than merely consistent: at
+> > eu-central-1's on-demand read price of ~$0.15 per million read request units, 50 RRU is
+> > $0.0000074, 350 is $0.000052, and 1,500 is $0.00022. The single-day figure above reads
+> > $0.00001 because one significant figure rounds $0.0000074 **up**; scaling that rounded
+> > number by 7 and 30 would give $0.00007 and $0.0003, which are further from the truth than
+> > the rounding they preserve. Still negligible in dollars, which remains a different claim
+> > from free. If traffic ever makes it matter, the fix is caching the day, not merging the
+> > verticals.
 >
 > **The day-section count is per vertical.** `META#DAY.articleCount` is the total across both,
 > so a header reading "23 stories" under the AI nav must be computed from the filtered list,
