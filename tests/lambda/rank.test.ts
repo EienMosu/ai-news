@@ -1,6 +1,6 @@
 import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { mockClient } from "aws-sdk-client-mock";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ddb = mockClient(DynamoDBDocumentClient);
 
@@ -24,7 +24,7 @@ vi.mock("../../src/lib/rank/backup.js", () => ({ backupDay: vi.fn() }));
 import { dayHasArticles, listDays, queryDay } from "../../src/lib/store/query.js";
 import { rankArticles, TruncationError } from "../../src/lib/rank/bedrock.js";
 import { backupDay } from "../../src/lib/rank/backup.js";
-import { handler, targetDay } from "../../src/lambda/rank.js";
+import { handler, resolveDay, targetDay } from "../../src/lambda/rank.js";
 
 const HASH = (n: number) => String(n).padStart(64, "0");
 
@@ -57,6 +57,14 @@ beforeEach(() => {
   vi.mocked(backupDay).mockResolvedValue({ ok: true, path: "p", bytes: 10 });
 });
 
+// A few tests below need to control the handler's internal `new Date()` to exercise the
+// interim (18:00) vs. final (06:00) schedule split. Real timers must come back afterwards, or
+// a fake system time set by one test would leak into every test that runs after it in this
+// file.
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("targetDay", () => {
   it("ranks the previous day, not today", () => {
     // The schedule fires at 06:00 Europe/Istanbul, which is 03:00 UTC (constant UTC+3).
@@ -67,6 +75,52 @@ describe("targetDay", () => {
     // 00:30 Istanbul on the 19th is 21:30 UTC on the 18th. A naive UTC slice would answer
     // "2026-08-17" here and "2026-08-18" an hour later.
     expect(targetDay(new Date("2026-08-18T21:30:00Z"))).toBe("2026-08-18");
+  });
+});
+
+describe("resolveDay", () => {
+  // 18:00 Europe/Istanbul on the 18th, the INTERIM schedule's fire time.
+  const eighteenHundred = new Date("2026-08-18T15:00:00Z");
+  // 06:00 Europe/Istanbul on the 19th, the FINAL schedule's fire time.
+  const sixAM = new Date("2026-08-19T03:00:00Z");
+
+  it("targets today when interim is true, not yesterday", () => {
+    // Mutation: changing `interim ? istanbulDay(now) : targetDay(now)` to always call
+    // `targetDay(now)` (dropping the ternary's true branch) makes this read "2026-08-17"
+    // instead of "2026-08-18" -- exactly the bug the brief calls "does nothing useful".
+    expect(resolveDay({ interim: true }, eighteenHundred)).toEqual({
+      day: "2026-08-18", interim: true,
+    });
+  });
+
+  it("targets yesterday when interim is absent, same as a plain final run", () => {
+    // Mutation: inverting `const interim = Boolean(event?.interim);` to
+    // `!Boolean(event?.interim)` makes a normal (non-interim) event compute `interim: true`
+    // internally, so `day` becomes `istanbulDay(now)` (today, "2026-08-19") instead of
+    // `targetDay(now)` (yesterday, "2026-08-18") -- and the returned `interim` flag flips to
+    // `true` too, which this test also asserts against.
+    expect(resolveDay(undefined, sixAM)).toEqual({ day: "2026-08-18", interim: false });
+    expect(resolveDay({ interim: false }, sixAM)).toEqual({ day: "2026-08-18", interim: false });
+  });
+
+  it("lets an explicit day override which day is picked, without resetting interim", () => {
+    // `day` and `interim` are independent: `day` decides WHICH day, `interim` decides whether
+    // this run may be the final word on it. The runbook's manual override sends `{ day }` with
+    // no `interim`, so it defaults to `false` here -- but a caller that explicitly asks for
+    // BOTH (a manual interim re-run of a specific day) gets exactly that, not a silently
+    // downgraded final run. (Whether a "final" run over that day is actually allowed to report
+    // "complete" is a SEPARATE, calendar-based check in `handler` -- see `dayNotYetOver` --
+    // this function only ever decides which day and which intent, never finality.)
+    //
+    // Mutation: reverting to `if (event?.day) return { day: event.day, interim: false };`
+    // (unconditionally dropping interim whenever day is explicit) makes the second assertion
+    // below read `interim: false` instead of `true`.
+    expect(resolveDay({ day: "2026-07-01" }, sixAM)).toEqual({
+      day: "2026-07-01", interim: false,
+    });
+    expect(resolveDay({ day: "2026-07-01", interim: true }, eighteenHundred)).toEqual({
+      day: "2026-07-01", interim: true,
+    });
   });
 });
 
@@ -314,6 +368,142 @@ describe("rank handler", () => {
     );
     // The only Bedrock call is this run's own -- one call, for "2026-08-18", not seven.
     expect(rankArticles).toHaveBeenCalledTimes(1);
+
+    errorSpy.mockRestore();
+  });
+
+  it("forces status partial on an interim run even when every article ranks cleanly", async () => {
+    // 18:00 Europe/Istanbul, the interim schedule's fire time. Every default mock here ranks
+    // both stored articles with no truncation and no write failures -- exactly the condition
+    // that produces "complete" on a final run (see the next test).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T15:00:00Z"));
+
+    const out = await handler({ interim: true });
+
+    expect(out.day).toBe("2026-08-18");
+    expect(out.ranked).toBe(2);
+    expect(out.truncated).toBe(0);
+    expect(out.llmStatus).toBe("ok");
+    // Mutation: dropping the whole `interim || dayNotYetOver` condition (i.e. computing
+    // `status` from just the ranked/truncated/llmStatus/enrichmentFailed ternary, unguarded)
+    // makes this read "complete" instead, because every one of those conditions is satisfied
+    // here. Note this scenario alone can't isolate `interim` from `dayNotYetOver` -- today is
+    // also never-yet-over, so either term alone would still force "partial" here. The test
+    // below ("an interim run over a past day...") is what isolates `interim` specifically.
+    expect(out.status).toBe("partial");
+  });
+
+  it("never reports complete for an explicit day that is today, even fully ranked and clean", async () => {
+    // The exact hazard this guard exists to close: runbook step 8 invokes rank by hand with
+    // `{"day":"<today>"}` -- an explicit day, no `interim` -- and everything about the run can
+    // go perfectly (every article ranked, nothing truncated, no write failures). Before the
+    // calendar guard, that combination was indistinguishable from a genuinely finished day.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T07:00:00Z")); // 10:00 Europe/Istanbul on the 19th
+
+    const out = await handler({ day: "2026-08-19" }); // explicit, and equal to today
+
+    expect(out.ranked).toBe(2);
+    expect(out.truncated).toBe(0);
+    expect(out.llmStatus).toBe("ok");
+    // Mutation: changing `const dayNotYetOver = day >= istanbulDay(now);` to `day >
+    // istanbulDay(now)` (strictly greater, instead of greater-or-equal) makes this read
+    // "complete" instead of "partial" -- day equals today exactly, and `>` excludes that case
+    // while `>=` correctly includes it.
+    expect(out.status).toBe("partial");
+  });
+
+  it("still reports complete for an explicit day that is yesterday, when the run is clean", async () => {
+    // The override must keep working for its actual purpose: re-ranking a day that has
+    // genuinely ended. Without this test, a mutation that makes the calendar guard too broad
+    // (e.g. always true) would sail through -- every other test either expects "partial" for
+    // an unrelated reason or uses a day that happens to be "today" on purpose.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T07:00:00Z")); // 10:00 Europe/Istanbul on the 19th
+
+    const out = await handler({ day: "2026-08-18" }); // explicit, and strictly before today
+
+    expect(out.ranked).toBe(2);
+    // Mutation: changing `const dayNotYetOver = day >= istanbulDay(now);` to the unconditional
+    // `true` makes this read "partial" instead of "complete" -- the override would no longer
+    // be able to finalize ANY day, defeating its entire purpose.
+    expect(out.status).toBe("complete");
+  });
+
+  it("still reports partial for an interim run over a day that has already ended", async () => {
+    // Isolates `interim` from `dayNotYetOver`: unlike the "forces status partial on an interim
+    // run" test above (where `day` is always today, so `dayNotYetOver` alone would also force
+    // partial), this run explicitly targets YESTERDAY while still marked `interim` -- only the
+    // `interim` term of the guard is available to force "partial" here.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T07:00:00Z")); // 10:00 Europe/Istanbul on the 19th
+
+    const out = await handler({ day: "2026-08-18", interim: true });
+
+    expect(out.day).toBe("2026-08-18");
+    expect(out.ranked).toBe(2);
+    expect(out.truncated).toBe(0);
+    expect(out.llmStatus).toBe("ok");
+    // Mutation: changing `interim || dayNotYetOver` to just `dayNotYetOver` (dropping the
+    // `interim ||` term) makes this read "complete" instead of "partial" -- `day` is strictly
+    // before today, so `dayNotYetOver` alone is `false` and cannot force it.
+    expect(out.status).toBe("partial");
+  });
+
+  it("does not block the following morning's final run from completing the same day", async () => {
+    // Interim run at 18:00 on the 18th: targets "2026-08-18" and must report partial (Change 2).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T15:00:00Z"));
+    const interimOut = await handler({ interim: true });
+    expect(interimOut.day).toBe("2026-08-18");
+    expect(interimOut.status).toBe("partial");
+
+    // What the interim run's own META#DAY write would look like, fed back in as this run's
+    // listDays result -- standing in for DynamoDB state actually persisting across the two
+    // separate invocations, since queryDay/listDays are unit-mocked rather than backed by a
+    // real table in this test file.
+    vi.mocked(listDays).mockResolvedValue([
+      { day: "2026-08-18", status: "partial", articleCount: 2, llmRanked: 2, truncated: 0,
+        llmStatus: "ok", runId: "r", completedAt: "2026-08-18T15:00:00.000Z" } as never,
+    ]);
+
+    // Final run at 06:00 the next morning: targets "2026-08-18" (yesterday relative to the
+    // 19th) -- the SAME day the interim run just touched.
+    vi.setSystemTime(new Date("2026-08-19T03:00:00Z"));
+    const finalOut = await handler();
+
+    expect(finalOut.day).toBe("2026-08-18");
+    // Mutation: widening the already-complete guard's condition from
+    // `if (already?.status === "complete")` to `if (already) {` (treating ANY existing
+    // META#DAY record, "partial" included, as reason to skip) makes the final run see the
+    // interim run's "partial" record and skip without calling Bedrock a second time --
+    // `rankArticles` is called once instead of twice, and this assertion is what catches it
+    // (verified: the two prior tests in this file already pin `interimOut.status === "partial"`
+    // in isolation, so this test's own value is specifically that the interim run's partial
+    // record does NOT get mistaken for "already done" by the guard that exists to skip
+    // genuinely complete days).
+    expect(rankArticles).toHaveBeenCalledTimes(2);
+    expect(finalOut.status).toBe("complete");
+  });
+
+  it("excludes today from the unranked-days gap count", async () => {
+    // Interim run at 18:00: `day` is today, "2026-08-18". Nothing anywhere is marked complete,
+    // and every day in the 7-day window "has articles" per the mock -- including today itself,
+    // which is always true for an interim run since it just ranked what capture wrote today.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T15:00:00Z"));
+    vi.mocked(listDays).mockResolvedValue([]);
+    vi.mocked(dayHasArticles).mockResolvedValue(true);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const out = await handler({ interim: true });
+
+    // Without excluding today, the 7-day window (today..today-6) would count all 7 -- and
+    // every future interim run would count at least 1 forever, since an interim run can never
+    // mark today complete. Mutation: deleting the `if (d === wallClockToday) continue;` line
+    // makes this read 7 instead of 6.
+    expect(out.unrankedRecentDays).toBe(6);
 
     errorSpy.mockRestore();
   });

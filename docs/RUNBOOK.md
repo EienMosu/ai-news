@@ -153,6 +153,14 @@ Record whichever decision you make somewhere durable, then continue to step 1.
    schedule always ranks the previous day, but this manual call passes an explicit `day` so it
    ranks the day you just populated, not the one before it.
 
+   **What this call does, and does not, finish.** It scores today's articles so far and backs
+   them up — enough to confirm the pipeline works end to end. It will **not** mark today
+   `"complete"`, no matter how cleanly it runs: rank refuses to finalize any day that has not
+   ended yet, today included, regardless of what `day` you pass it. Today stays `"partial"`
+   until the automatic 06:00 run finalizes it tomorrow morning, once the rest of today's
+   articles have actually been captured. This is deliberate, not a limitation to work around —
+   there is no follow-up call needed here.
+
    **`--cli-binary-format raw-in-base64-out` is not optional here, and its absence fails before
    the call ever reaches AWS.** The `--payload` here is a raw JSON string, but AWS CLI v2
    treats Lambda's `Payload` parameter as a binary blob and expects base64 by default — without
@@ -209,9 +217,10 @@ deployed) — it does not mean the script itself is broken.
 pnpm cdk destroy
 ```
 
-This removes the two Lambda functions, both schedules, all three alarms, the SNS topic and
-subscription, and both of this stack's own budgets ($25/$40 — not the two pre-existing account
-budgets, which this project never touched and `destroy` has no power over).
+This removes the two Lambda functions, all three schedules (hourly capture, the 06:00 final
+rank, and the 18:00 interim rank), all three alarms, the SNS topic and subscription, and both
+of this stack's own budgets ($25/$40 — not the two pre-existing account budgets, which this
+project never touched and `destroy` has no power over).
 
 **The DynamoDB table is `RETAIN` and survives this on purpose.** It holds the entire archive.
 `cdk destroy` will not touch it. To actually remove it: confirm the GitHub `archive/*.ndjson`

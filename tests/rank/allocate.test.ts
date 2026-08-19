@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allocateRankingCap, type ScoredCandidate } from "../../src/lib/rank/allocate.js";
+import { RANK_INPUT_CAP } from "../../src/lib/rank/model.js";
 
 interface Item {
   section: string;
@@ -162,5 +163,35 @@ describe("allocateRankingCap", () => {
     expect(bySection(first200, "ai")).toHaveLength(135);
     expect(last35).toHaveLength(35);
     expect(bySection(last35, "ai")).toHaveLength(35);
+  });
+
+  it("honors the production RANK_INPUT_CAP (250), splitting fairly across sections without exceeding it", () => {
+    // Mirrors the real day shape after Change 1: at 21 sources the live dry run produces
+    // ~230/day, so this run is deliberately padded past that (265 total, three sections) to
+    // prove the boundary at the ACTUAL production constant rather than an arbitrary test cap.
+    //
+    // Water-filling by ascending group size: video (30, smallest) gets floor(250/3)=83 but
+    // only has 30, so it takes all 30 and returns 1 unused slot; design (65) then sees
+    // floor(220/2)=110, takes all 65, returns another unused slot; ai (170, largest) sees
+    // floor(155/1)=155 and takes 155 -- 30+65+155=250 exactly, ai's remaining 15 truncated.
+    const design = make("design", 65, 1000);
+    const ai = make("ai", 170, 900);
+    const video = make("video", 30, 800);
+    const result = allocateRankingCap([...design, ...ai, ...video], RANK_INPUT_CAP);
+    const selected = result.slice(0, RANK_INPUT_CAP);
+
+    // Mutation: reverting the export in src/lib/rank/model.ts from `RANK_INPUT_CAP = 250` back
+    // to `200` makes `RANK_INPUT_CAP` read 200 here too (it's the same import), so
+    // `selected.length` becomes 200 instead of 250 and the per-section split shifts to
+    // design=65/ai=105/video=30 -- wrong on every assertion below.
+    expect(RANK_INPUT_CAP).toBe(250);
+    expect(selected).toHaveLength(250);
+    expect(bySection(selected, "video")).toHaveLength(30);
+    expect(bySection(selected, "design")).toHaveLength(65);
+    expect(bySection(selected, "ai")).toHaveLength(155);
+    // The allocator never hands out more than the cap, even once every section's fair share
+    // and its own full supply are both accounted for.
+    expect(result).toHaveLength(265);
+    expect(selected.length).toBeLessThanOrEqual(RANK_INPUT_CAP);
   });
 });

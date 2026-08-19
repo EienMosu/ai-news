@@ -31,11 +31,15 @@ export interface RankSummary {
   llmStatus: "ok" | "failed" | "truncated";
   backedUp: boolean;
   /**
-   * How many of the last 7 days (including this one) have articles but no `"complete"` day
-   * record. Task 7 review, ruling on a multi-day Bedrock outage: no automatic catch-up (see
-   * the comment at the call site for why), so this is what makes the gap visible instead of
-   * silently permanent — the manual `{ day }` invocation already exists, this is what tells a
-   * human to use it.
+   * How many of the last 7 days have articles but no `"complete"` day record. Task 7 review,
+   * ruling on a multi-day Bedrock outage: no automatic catch-up (see the comment at the call
+   * site for why), so this is what makes the gap visible instead of silently permanent — the
+   * manual `{ day }` invocation already exists, this is what tells a human to use it.
+   *
+   * Wall-clock "today" is excluded from the 7, whether or not it is `day`: today is by
+   * definition incomplete until tomorrow morning's final run, so counting it would make this
+   * number always at least 1 on every INTERIM run — a count that never reaches zero stops
+   * meaning anything.
    */
   unrankedRecentDays: number;
 }
@@ -63,9 +67,41 @@ function degradedScore(c: { category: string; points: number | null; publishedAt
  * complete — spec §2 moved the cron off 00:00 for exactly this reason. Turkey has been a
  * constant UTC+3 with no DST since 2016, so subtracting 24 hours and re-deriving the local
  * day is exact; istanbulDay does the timezone work either way.
+ *
+ * This is the FINAL run's day selection only. See `resolveDay` for the INTERIM run (18:00),
+ * which targets today instead.
  */
 export function targetDay(now: Date): string {
   return istanbulDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+}
+
+/**
+ * Which day this invocation ranks, and whether it is the INTERIM (18:00) run rather than the
+ * FINAL (06:00) one.
+ *
+ * The 18:00 CfnSchedule sends `{ interim: true }`. Re-targeting `targetDay` (yesterday) at
+ * 18:00 would just re-rank a day the 06:00 run already finished — the "already complete"
+ * guard would then skip it, making the second run a no-op. So `interim: true` targets TODAY
+ * instead: whatever has been captured so far.
+ *
+ * `day` and `interim` are independent: `day`, when given, decides WHICH day is ranked and
+ * nothing else — it does not reset `interim` to `false`. `interim` decides whether this run is
+ * allowed to be the FINAL word on that day, which is why the runbook's manual override (an
+ * explicit `day`, no `interim`) still defaults to `interim: false` and the 18:00 schedule (no
+ * `day`) still defaults to targeting today. A caller is free to combine both — e.g. a manual
+ * interim re-run of a specific day — and get exactly what each field says on its own.
+ *
+ * This function does NOT decide whether a day can actually be marked `"complete"`, on purpose:
+ * that is `handler`'s `dayNotYetOver` check, and it does not trust `interim` (or anything else
+ * a caller sets) either. See the comment there for why.
+ */
+export function resolveDay(
+  event: { day?: string; interim?: boolean } | undefined,
+  now: Date,
+): { day: string; interim: boolean } {
+  const interim = Boolean(event?.interim);
+  const day = event?.day ?? (interim ? istanbulDay(now) : targetDay(now));
+  return { day, interim };
 }
 
 /**
@@ -78,14 +114,16 @@ function daysBefore(day: string, n: number): string {
   return istanbulDay(new Date(anchor.getTime() - n * 24 * 60 * 60 * 1000));
 }
 
-export async function handler(event?: { day?: string; force?: boolean }): Promise<RankSummary> {
+export async function handler(
+  event?: { day?: string; force?: boolean; interim?: boolean },
+): Promise<RankSummary> {
   const table = process.env.TABLE_NAME;
   const tokenParam = process.env.GITHUB_TOKEN_PARAM;
   const repo = process.env.BACKUP_REPO;
   if (!table) throw new Error("TABLE_NAME is not set");
 
   const now = new Date();
-  const day = event?.day ?? targetDay(now);
+  const { day, interim } = resolveDay(event, now);
   const client = docClient();
 
   // ---- Already-complete guard (final review, axis 5) ------------------------------------
@@ -315,9 +353,34 @@ export async function handler(event?: { day?: string; force?: boolean }): Promis
   // `enrichmentFailed === 0` is its own condition, not folded into `llmStatus`: the model call
   // can succeed outright (`llmStatus: "ok"`) while a handful of its writes still fail, and a
   // day is not honestly "complete" while Bedrock output we already paid for was discarded.
-  const status: "complete" | "partial" =
-    ranked === afterEnrichment.length && truncated === 0 && llmStatus === "ok" &&
-    enrichmentFailed === 0
+  //
+  // `interim` forces "partial" regardless of how well the run went. This is the whole point
+  // of the 18:00 run (see `resolveDay`): today's evening articles have not been captured yet,
+  // so no matter how cleanly this run scores what HAS been captured, marking today
+  // "complete" now would make tomorrow's 06:00 final run skip it via the already-complete
+  // guard above, stranding everything captured after 18:00.
+  //
+  // `dayNotYetOver` closes a hazard `interim` alone leaves open: runbook step 8 tells an
+  // operator to invoke rank by hand with `{"day":"<today>"}` -- an explicit day, no `interim`
+  // flag, so `resolveDay` reports `interim: false` and nothing above would stop that call from
+  // marking TODAY "complete". Tomorrow's 06:00 final run would then hit the already-complete
+  // guard and skip today entirely, stranding everything captured after the manual run forever
+  // -- the exact failure the interim run exists to prevent, reachable through the runbook we
+  // ship. Finality is a property of the calendar, not of the payload: a day that has not
+  // ended cannot be finally ranked no matter who asks or which fields they set, so this check
+  // does not depend on `interim`, `force`, or any future caller getting a flag combination
+  // right -- ISO date strings compare correctly with `<`, so no date arithmetic is needed.
+  //
+  // Deliberate asymmetry, not an oversight: because an interim run always writes "partial",
+  // the already-complete guard above never dedupes a redelivered interim invocation the way it
+  // dedupes a redelivered FINAL one. Only the 20-minute day lock protects that path. That is
+  // acceptable here -- a duplicate interim run costs one extra Bedrock call, not a corrupted
+  // day -- so this is intentionally left as the lock's job rather than given a second guard.
+  const dayNotYetOver = day >= istanbulDay(now);
+  const status: "complete" | "partial" = interim || dayNotYetOver
+    ? "partial"
+    : ranked === afterEnrichment.length && truncated === 0 && llmStatus === "ok" &&
+      enrichmentFailed === 0
       ? "complete"
       : "partial";
 
@@ -339,9 +402,16 @@ export async function handler(event?: { day?: string; force?: boolean }): Promis
   let unrankedRecentDays = 0;
   try {
     const recentDays = Array.from({ length: 7 }, (_, i) => daysBefore(day, i));
+    // Today (wall-clock, not `day` — the interim run's `day` IS today) is by definition
+    // incomplete until tomorrow morning's final run: capture keeps writing to it all day, and
+    // nothing marks it "complete" before then. Counting it here would make this metric always
+    // report at least 1 for every interim run — a number that never reaches zero stops being a
+    // gap signal at all.
+    const wallClockToday = istanbulDay(now);
     const metas = await listDays(client, table, 30);
     const completed = new Set(metas.filter((m) => m.status === "complete").map((m) => m.day));
     for (const d of recentDays) {
+      if (d === wallClockToday) continue;
       if (completed.has(d)) continue;
       if (await dayHasArticles(client, table, d)) unrankedRecentDays += 1;
     }
