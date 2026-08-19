@@ -1,4 +1,5 @@
 import { DaySection } from "../../components/DaySection.js";
+import { SectionNav } from "../../components/SectionNav.js";
 import { istanbulDay } from "../../src/lib/core/day.js";
 import { parseQueryParam, parseSectionParam, parseSinceParam, type SearchScope } from "../../src/lib/search/params.js";
 import {
@@ -6,8 +7,9 @@ import {
   RECENT_WINDOW_DAYS,
   exceedsArchiveBound,
   splitSearchRange,
+  subtractDays,
 } from "../../src/lib/search/range.js";
-import { searchArchiveDays, searchRecentDays, type DayMatches } from "../../src/lib/search/read.js";
+import { searchArchiveDays, searchRecentDays, type ArchiveSearchOutcome } from "../../src/lib/search/read.js";
 import type { Section } from "../../src/types/article.js";
 
 // Without this, Next prerenders the route at build time, and a search actually reaching
@@ -50,7 +52,17 @@ const DEFAULT_SCOPE: Section = "ai";
  * result page still shows what was actually searched for, not a blank form above its own
  * results.
  */
-function SearchForm({ query, scope, since }: { query: string; scope: SearchScope; since: string }) {
+function SearchForm(
+  { query, scope, since, today }: { query: string; scope: SearchScope; since: string; today: string },
+) {
+  // Fix round 1, finding 8 (F9 in the review): `min`/`max` make the browser itself refuse a
+  // date outside the window the server would honour, with zero client JS -- consistent with the
+  // rest of this app's no-JS posture. This does not replace server-side validation (a hand-typed
+  // or scripted request still goes through `parseSinceParam`/`isValidDay`); it only spares an
+  // ordinary reader clicking through a native date picker from ever picking a value the server
+  // would have to refuse or reinterpret.
+  const minSince = subtractDays(today, RECENT_WINDOW_DAYS + MAX_ARCHIVE_SEARCH_DAYS - 1);
+
   return (
     <form method="get" action="/search" className="mb-8 flex flex-wrap items-end gap-3 text-sm">
       <label className="flex flex-col text-neutral-700">
@@ -81,6 +93,8 @@ function SearchForm({ query, scope, since }: { query: string; scope: SearchScope
           type="date"
           name="since"
           defaultValue={since}
+          min={minSince}
+          max={today}
           className="mt-1 rounded border border-neutral-300 px-2 py-1"
         />
       </label>
@@ -102,17 +116,29 @@ function SearchForm({ query, scope, since }: { query: string; scope: SearchScope
  * `"use client"` boundary anywhere in the tree.
  *
  * An empty or whitespace-only `q` (decision 7) renders `SearchForm` and returns immediately --
- * before `today`/`scope`/`since` are even used for anything beyond pre-filling the form's own
- * fields -- so a blank submit never reaches `searchRecentDays`/`searchArchiveDays` and never
- * costs a single Query.
+ * before `scope`/`since` are even used for anything beyond pre-filling the form's own fields --
+ * so a blank submit never reaches `searchRecentDays`/`searchArchiveDays` and never costs a
+ * single Query.
+ *
+ * `since` alone decides both halves of the range via one `splitSearchRange(since, today, today)`
+ * call -- fix round 1, finding 4: `recentDays` is whatever that call classifies as "recent" for
+ * *this* `since`, not an unconditional `RECENT_WINDOW_DAYS`-long list, so `?since=` narrows the
+ * recent half too, at the same rate it narrows the archive half.
  *
  * The archive branch's 31-day bound (decision 2) is checked on the *archive* half only:
  * `exceedsArchiveBound` refuses to run `searchArchiveDays` and says so in a visible message,
- * but `searchRecentDays` still runs -- the last 30 days are always affordable regardless of how
- * far back `since` reaches, so a too-wide request still gets the cheap half of its answer
- * instead of nothing at all. What it never gets is a silently partial archive: the message
- * names the bound and asks the reader to narrow `since`, rather than the page fetching the
- * first `MAX_ARCHIVE_SEARCH_DAYS` of `archiveDays` and calling that "the archive searched".
+ * but `searchRecentDays` still runs -- the last 30 days (or however many `since` narrows that
+ * to) are always affordable regardless of how far back `since` reaches, so a too-wide request
+ * still gets the cheap half of its answer instead of nothing at all. What it never gets is a
+ * silently partial archive: the message names the bound and asks the reader to narrow `since`,
+ * rather than the page fetching the first `MAX_ARCHIVE_SEARCH_DAYS` of `archiveDays` and calling
+ * that "the archive searched".
+ *
+ * A *fetch* failure partway through the archive half (fix round 1, finding 5) is not the same
+ * thing as a refused range, and must not be treated the same way: `searchArchiveDays` already
+ * degrades a failed day to "dropped, counted" rather than rejecting the whole call (see its own
+ * doc comment), so the only thing left for this page to do is show that count when it is
+ * nonzero -- the recent results render regardless, exactly as they do for a refused range.
  */
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
@@ -126,8 +152,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   if (query === "") {
     return (
       <main className="mx-auto max-w-2xl px-4 py-8">
+        <SectionNav current={null} />
         <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
-        <SearchForm query={query} scope={scope} since={since} />
+        <SearchForm query={query} scope={scope} since={since} today={today} />
       </main>
     );
   }
@@ -135,25 +162,36 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { recentDays, archiveDays } = splitSearchRange(since, today, today);
   const archiveRefused = exceedsArchiveBound(archiveDays);
 
-  const [recentResults, archiveResults] = await Promise.all([
+  const emptyArchiveOutcome: ArchiveSearchOutcome = { days: [], failedDays: 0 };
+
+  const [recentResults, archiveOutcome] = await Promise.all([
     searchRecentDays(recentDays, scope, query),
     archiveRefused || archiveDays.length === 0
-      ? Promise.resolve<DayMatches[]>([])
+      ? Promise.resolve(emptyArchiveOutcome)
       : searchArchiveDays(archiveDays, scope, query),
   ]);
 
-  const results = [...recentResults, ...archiveResults];
+  const results = [...recentResults, ...archiveOutcome.days];
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
+      <SectionNav current={null} />
       <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
-      <SearchForm query={query} scope={scope} since={since} />
+      <SearchForm query={query} scope={scope} since={since} today={today} />
 
       {archiveRefused ? (
         <p data-testid="search-archive-refused" className="mb-4 text-sm text-amber-700">
           That start date reaches more than {MAX_ARCHIVE_SEARCH_DAYS} days into the archive in
           one search, so the archive was not searched. Pick a "Since" date within the last{" "}
           {RECENT_WINDOW_DAYS + MAX_ARCHIVE_SEARCH_DAYS} days to include it.
+        </p>
+      ) : null}
+
+      {archiveOutcome.failedDays > 0 ? (
+        <p data-testid="search-archive-failed" className="mb-4 text-sm text-amber-700">
+          {archiveOutcome.failedDays} archive {archiveOutcome.failedDays === 1 ? "day" : "days"}{" "}
+          could not be searched just now; the results below may be missing matches from{" "}
+          {archiveOutcome.failedDays === 1 ? "that day" : "those days"}.
         </p>
       ) : null}
 

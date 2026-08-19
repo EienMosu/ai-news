@@ -119,15 +119,48 @@ describe("searchArchiveDays", () => {
 
   it("filters archive results the same way searchRecentDays does", async () => {
     vi.mocked(fetchArchiveDay).mockResolvedValue([rawArticle()]);
-    const results = await searchArchiveDays(["2026-07-01"], "ai", "claude");
-    expect(results).toEqual([
-      { day: "2026-07-01", articles: [expect.objectContaining({ urlHash: HASH_A })] },
-    ]);
+    const outcome = await searchArchiveDays(["2026-07-01"], "ai", "claude");
+    expect(outcome).toEqual({
+      days: [{ day: "2026-07-01", articles: [expect.objectContaining({ urlHash: HASH_A })] }],
+      failedDays: 0,
+    });
   });
 
   it("drops an archive day with zero matches", async () => {
     vi.mocked(fetchArchiveDay).mockResolvedValue([rawArticle({ title: "Nothing relevant here" })]);
-    const results = await searchArchiveDays(["2026-07-01"], "ai", "claude");
-    expect(results).toEqual([]);
+    const outcome = await searchArchiveDays(["2026-07-01"], "ai", "claude");
+    expect(outcome).toEqual({ days: [], failedDays: 0 });
+  });
+
+  describe("a rejected fetchArchiveDay -- fix round 1, finding 5", () => {
+    it("does not reject the whole call when one day's fetchArchiveDay throws", async () => {
+      vi.mocked(fetchArchiveDay).mockRejectedValue(new Error("archive fetch for X failed: HTTP 502"));
+      await expect(searchArchiveDays(["2026-07-01"], "ai", "claude")).resolves.toBeDefined();
+    });
+
+    it("keeps the days that resolved and counts the one that failed", async () => {
+      vi.mocked(fetchArchiveDay).mockImplementation(async (day: string) => {
+        if (day === "2026-07-02") throw new Error("HTTP 502");
+        return [rawArticle()];
+      });
+
+      const outcome = await searchArchiveDays(["2026-07-03", "2026-07-02", "2026-07-01"], "ai", "claude");
+
+      expect(outcome.failedDays).toBe(1);
+      expect(outcome.days.map((d) => d.day)).toEqual(["2026-07-03", "2026-07-01"]);
+    });
+
+    it("reports failedDays: 0 when nothing fails -- the count is exact, not just truthy", async () => {
+      vi.mocked(fetchArchiveDay).mockResolvedValue([]);
+      const outcome = await searchArchiveDays(["2026-07-01", "2026-07-02"], "ai", "claude");
+      expect(outcome.failedDays).toBe(0);
+    });
+
+    it("counts every failed day when all of them reject", async () => {
+      vi.mocked(fetchArchiveDay).mockRejectedValue(new Error("HTTP 500"));
+      const outcome = await searchArchiveDays(["2026-07-01", "2026-07-02", "2026-07-03"], "ai", "claude");
+      expect(outcome.failedDays).toBe(3);
+      expect(outcome.days).toEqual([]);
+    });
   });
 });

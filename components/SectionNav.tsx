@@ -60,6 +60,21 @@ export function SectionNav({ current, days }: SectionNavProps) {
           </Link>
         );
       })}
+      {/* Not part of `LINKS`/`LINKS.map` above -- `NavLink.section` is typed `Section`, and
+       *  Search is not a vertical, it is a separate destination that happens to want to know
+       *  which vertical the reader was just looking at. Task 8 fix round 1, finding 7: `/search`
+       *  was reachable only by typing the URL, with no link in either direction. Carrying
+       *  `?section=<current>` is what makes decision 3's "search the current vertical by
+       *  default" actually true for a reader who clicked here, rather than always landing on the
+       *  page's own hardcoded `DEFAULT_SCOPE` fallback. Omitted when `current` is `null` (the
+       *  story page, the day page, and `/search` itself all render `<SectionNav current={null}>`
+       *  -- none of them is itself a vertical to carry forward). */}
+      <Link
+        href={`/search${current ? `?section=${current}` : ""}`}
+        className="text-neutral-500 hover:text-neutral-900"
+      >
+        Search
+      </Link>
     </nav>
   );
 }

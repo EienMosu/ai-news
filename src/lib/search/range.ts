@@ -28,6 +28,27 @@ export const RECENT_WINDOW_DAYS = 30;
  */
 export const MAX_ARCHIVE_SEARCH_DAYS = 31;
 
+/**
+ * A defensive ceiling on how many days `splitSearchRange` will ever walk in one call --
+ * Task 8 fix round 1, finding F3. `parseSinceParam` is supposed to keep `from` within a sane
+ * distance of `today`, but the day-walk's own only exit condition is "we reached `from`", and it
+ * must not trust a caller's validation unconditionally: a future validation gap, a caller that
+ * bypasses `parseSinceParam` entirely, or simply `?since=0000-01-01` (a real, valid calendar
+ * date -- `isValidDay` does not and should not reject it) would otherwise walk and allocate one
+ * string per day for as long as it takes to reach the given `from`, measured at ~740,000
+ * iterations and ~160 ms for a year-0000 request. 10,000 days (~27 years) is far larger than any
+ * legitimate call needs -- every test in this file that exercises a long-but-real range stays
+ * comfortably under it -- while turning a pathological `from` into a fast, loud throw instead of
+ * a slow, silent crawl.
+ */
+const MAX_ENUMERATION_DAYS = 10_000;
+
+/** `app/day/[date]/page.tsx` carries its own copy of this exact regex, for an unrelated reason
+ *  (rejecting a malformed URL segment before it ever reaches a DynamoDB read, on a page that has
+ *  no reason to import from `src/lib/search`). This copy is the one this module's own parsing
+ *  and `isValidDay` share -- not shared across the two module boundaries, since neither file
+ *  depends on the other and a shared import would only save one regex literal (Task 8 fix round
+ *  1, finding F10). */
 const DAY_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface Ymd {
@@ -65,6 +86,24 @@ const DAYS_IN_MONTH: readonly number[] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31
 function daysInMonth(y: number, m: number): number {
   if (m === 2) return isLeapYear(y) ? 29 : 28;
   return DAYS_IN_MONTH[m - 1] ?? 31;
+}
+
+/**
+ * True when `day` is not just shape-valid (`YYYY-MM-DD`) but a real calendar date -- Task 8 fix
+ * round 1, finding F3. `"2026-08-00"` and `"2026-02-30"` both match `DAY_SHAPE` (four digits, two
+ * digits, two digits) but do not exist on any calendar: `00` is not a month or a day, and
+ * February never reaches 30. A shape check alone let either string reach `splitSearchRange`'s
+ * day-walk, which then stepped past `from` without ever matching `cur === from` (there is no
+ * calendar day equal to `"2026-08-00"` to walk down to) and threw only after enumerating roughly
+ * 740,000 strings -- an unhandled 500 on `/search`, reachable from a plain URL.
+ *
+ * Exported so `parseSinceParam` (src/lib/search/params.ts) can reject a semantically impossible
+ * `?since=` before it ever reaches the day-walk, rather than relying on the walk to fail safely.
+ */
+export function isValidDay(day: string): boolean {
+  if (!DAY_SHAPE.test(day)) return false;
+  const { y, m, d } = parseDay(day);
+  return m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);
 }
 
 /**
@@ -130,10 +169,17 @@ export function splitSearchRange(from: string, to: string, today: string): Searc
   const cutoff = subtractDays(today, RECENT_WINDOW_DAYS - 1);
 
   let cur = to;
+  let steps = 0;
   for (;;) {
     if (cur >= cutoff) recentDays.push(cur);
     else archiveDays.push(cur);
     if (cur === from) break;
+    steps += 1;
+    if (steps > MAX_ENUMERATION_DAYS) {
+      throw new Error(
+        `splitSearchRange: range from ${from} to ${to} exceeds ${MAX_ENUMERATION_DAYS} days -- refusing to keep walking`,
+      );
+    }
     cur = previousDay(cur);
   }
 

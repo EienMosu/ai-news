@@ -184,6 +184,16 @@ Record whichever decision you make somewhere durable, then continue to step 1.
     persisting it somewhere you'd then have to secure separately anyway, so the stack only
     creates the user the key belongs to, and minting the key is left to this manual step.
 
+    **Also set in Vercel's environment variables (not secrets — none of these are credentials):**
+    `TABLE_NAME` (the `TableName` output from step 4) and, as of Task 8's `/search`,
+    **`BACKUP_REPO`** (`EienMosu/ai-news` — the same value `infra/lib/functions.ts` passes to
+    the Lambdas as `BACKUP_REPO`, reused verbatim). `src/lib/search/archive.ts` reads it at
+    request time to build the `raw.githubusercontent.com` URL for a search that reaches past the
+    last 30 days; it needs no token (the repo is public), but it does need this one variable to
+    exist. Left unset, an ordinary search still works — only `?since=` requests reaching into the
+    archive fail, with `BACKUP_REPO environment variable is not set`, which makes the gap easy to
+    miss until someone actually widens a search.
+
     ⚠️ **This key is invisible to CDK, permanently.** Because it's minted outside the stack,
     `cdk diff` will never mention it, before or after it exists. If a future change ever forces
     replacement of the `VercelReader` user construct (renaming it, changing an ID in the
@@ -262,7 +272,9 @@ otherwise, and repeat that same decision if it does.
   and regional prefixes like `eu.` carry a 10% pricing premium. Access is already granted and
   verified `ACTIVE`/invokable in `eu-central-1` — you do not need to request it for this
   account.
-- **Backup target:** GitHub repo `EienMosu/ai-news`, path `archive/<day>.ndjson`.
+- **Backup target:** GitHub repo `EienMosu/ai-news`, path `archive/<day>.ndjson`. As of Task 8,
+  this is also a **Vercel runtime requirement** (`BACKUP_REPO`, see step 10) — the web app's
+  `/search` route reads it too, not only the Lambdas.
 - **GitHub token parameter:** `/ai-news/github-token` (SecureString, `eu-central-1`).
 - Table, both function, and the Vercel IAM user's physical names are all CDK-generated (none
   is hardcoded to what its logical ID suggests). The stack outputs all four — see step 4. If

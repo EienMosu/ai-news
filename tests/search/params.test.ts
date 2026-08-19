@@ -84,7 +84,41 @@ describe("parseSinceParam", () => {
     expect(parseSinceParam(["2026-01-01", "2026-01-02"], TODAY)).toBe(defaultSince);
   });
 
-  it("falls back to the default when missing entirely (undefined)", () => {
-    expect(parseSinceParam(undefined, TODAY)).toBe(defaultSince);
+  describe("calendar-impossible but shape-valid dates -- fix round 1, finding 3", () => {
+    // Task 8 review reproduced: `?since=2026-08-00` and `?since=2026-02-30` both match
+    // `/^\d{4}-\d{2}-\d{2}$/` but are not real calendar dates, and used to reach
+    // `splitSearchRange`'s day-walk unchanged, which stepped past `from` (no calendar day
+    // equals "2026-08-00") and threw after ~740,000 iterations -- an unhandled 500 on a plain
+    // URL. `parseSinceParam` must reject these the same way it rejects "banana": before the
+    // walk ever starts.
+    it("falls back to the default for a day-00 value (no such day exists)", () => {
+      expect(parseSinceParam("2026-08-00", TODAY)).toBe(defaultSince);
+    });
+
+    it("falls back to the default for a month-00 value (no such month exists)", () => {
+      expect(parseSinceParam("2026-00-15", TODAY)).toBe(defaultSince);
+    });
+
+    it("falls back to the default for February 30th (February never reaches 30)", () => {
+      expect(parseSinceParam("2026-02-30", TODAY)).toBe(defaultSince);
+    });
+
+    it("falls back to the default for a month-13 value (no such month exists)", () => {
+      // "2026-13-01" is a bad case for this on its own: it sorts lexicographically AFTER
+      // "2026-08-19" (TODAY) -- "13" > "08" -- so the (unrelated) future-date fallback below
+      // would also reject it, the same coincidental-pass shape the "banana" test above was
+      // rewritten to avoid. An earlier year keeps the whole string before TODAY regardless of
+      // the invalid month, so only the calendar-validity check can be what rejects this one.
+      expect(parseSinceParam("2020-13-01", TODAY)).toBe(defaultSince);
+    });
+
+    it("accepts February 29th in a real leap year", () => {
+      expect(parseSinceParam("2028-02-29", "2028-03-01")).toBe("2028-02-29");
+    });
+
+    it("rejects February 29th in a non-leap year", () => {
+      const fallbackFor2026 = subtractDays("2026-03-01", RECENT_WINDOW_DAYS - 1);
+      expect(parseSinceParam("2026-02-29", "2026-03-01")).toBe(fallbackFor2026);
+    });
   });
 });

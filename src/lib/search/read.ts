@@ -60,17 +60,47 @@ export async function searchRecentDays(
   return results.filter((r) => r.articles.length > 0);
 }
 
+/** `searchArchiveDays`' result: the days that resolved, plus how many did not. Task 8 fix round
+ *  1, finding F5 -- distinct from a bare `DayMatches[]` so a caller can tell "the archive had
+ *  nothing" (`days: [], failedDays: 0`) apart from "some of the archive could not be read"
+ *  (`failedDays > 0`), which the page surfaces as its own notice rather than silently rendering
+ *  the same as a clean zero. */
+export interface ArchiveSearchOutcome {
+  days: DayMatches[];
+  failedDays: number;
+}
+
 /**
  * The archive half of a search: one `fetchArchiveDay` GET per day in `days`, run concurrently,
  * filtered the same way `searchRecentDays` filters GSI1 results. Zero DynamoDB reads --
  * `fetchArchiveDay` talks to `raw.githubusercontent.com` only.
+ *
+ * `Promise.allSettled`, not `Promise.all` -- Task 8 fix round 1, finding F5. A single archive
+ * day's `fetchArchiveDay` throwing (a transient GitHub 5xx, not the 404-is-absence case
+ * `fetchArchiveDay` already degrades on its own) used to reject the whole call, which the page
+ * then let propagate into an unhandled 500 that discarded the recent-window results it had
+ * already paid for and received. That inverted a rule this codebase already wrote down:
+ * `getDay` (src/lib/feed/read.ts) uses `Promise.allSettled` specifically so a transient failure
+ * on a secondary read degrades rather than discards data that came back fine, and propagates
+ * only when there is nothing to show without it. Here there is something to show without the
+ * archive -- the recent half -- so a failed archive day is dropped and counted, not allowed to
+ * blank the page. Order among the *fulfilled* days is preserved (`settled[i]` still corresponds
+ * to `days[i]`), so newest-first ordering survives a failure anywhere in the middle of the list.
  */
 export async function searchArchiveDays(
   days: string[], scope: SearchScope, query: string,
-): Promise<DayMatches[]> {
-  const results = await Promise.all(days.map(async (day): Promise<DayMatches> => {
+): Promise<ArchiveSearchOutcome> {
+  const settled = await Promise.allSettled(days.map(async (day): Promise<DayMatches> => {
     const items = await fetchArchiveDay(day);
     return { day, articles: filterMatches(items, scope, query) };
   }));
-  return results.filter((r) => r.articles.length > 0);
+
+  const resolved: DayMatches[] = [];
+  let failedDays = 0;
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled") resolved.push(outcome.value);
+    else failedDays += 1;
+  }
+
+  return { days: resolved.filter((r) => r.articles.length > 0), failedDays };
 }

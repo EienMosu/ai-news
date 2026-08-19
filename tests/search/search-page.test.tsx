@@ -22,9 +22,15 @@ vi.mock("../../src/lib/search/read.js", () => ({
 import SearchPage, { dynamic } from "../../app/search/page.js";
 import { toFeedArticle, type FeedArticle } from "../../src/lib/feed/shape.js";
 import { MAX_ARCHIVE_SEARCH_DAYS, RECENT_WINDOW_DAYS, subtractDays } from "../../src/lib/search/range.js";
+import type { ArchiveSearchOutcome, DayMatches } from "../../src/lib/search/read.js";
 import { searchArchiveDays, searchRecentDays } from "../../src/lib/search/read.js";
 
 const TODAY = "2026-08-19";
+
+/** `searchArchiveDays` now resolves an `ArchiveSearchOutcome` (fix round 1, finding 5), not a
+ *  bare `DayMatches[]` -- this helper is the one place every test in this file builds that
+ *  shape, so a future change to it only has to happen here. */
+const archiveOutcome = (days: DayMatches[] = [], failedDays = 0): ArchiveSearchOutcome => ({ days, failedDays });
 
 beforeEach(() => {
   vi.setSystemTime(new Date("2026-08-19T12:00:00Z")); // noon UTC = 15:00 Istanbul, same calendar day
@@ -60,6 +66,22 @@ describe("SearchPage dynamic export", () => {
   });
 });
 
+describe("SearchPage -- renders SectionNav (fix round 1, finding 7)", () => {
+  it("renders SectionNav with neither vertical current, even on the blank-query form", async () => {
+    render(await SearchPage({ searchParams: searchParams() }));
+    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("renders SectionNav with neither vertical current on a results page too", async () => {
+    vi.mocked(searchRecentDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
+    render(await SearchPage({ searchParams: searchParams({ q: "claude" }) }));
+    expect(screen.getByRole("link", { name: "AI" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Design" })).toBeTruthy();
+  });
+});
+
 describe("SearchPage -- blank query (decision 7)", () => {
   it("renders only the search form and runs no search for a missing q", async () => {
     render(await SearchPage({ searchParams: searchParams() }));
@@ -83,7 +105,7 @@ describe("SearchPage -- blank query (decision 7)", () => {
 describe("SearchPage -- reads searchParams as a Promise (Next 15+ trap)", () => {
   it("awaits searchParams and passes the parsed, trimmed q through to searchRecentDays", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
 
     await SearchPage({ searchParams: searchParams({ q: "  claude  " }) });
 
@@ -94,21 +116,21 @@ describe("SearchPage -- reads searchParams as a Promise (Next 15+ trap)", () => 
 describe("SearchPage -- section scope (decision 3)", () => {
   it("defaults to the 'ai' vertical when no ?section= is given", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     await SearchPage({ searchParams: searchParams({ q: "claude" }) });
     expect(searchRecentDays).toHaveBeenCalledWith(expect.any(Array), "ai", "claude");
   });
 
   it("passes 'design' through when ?section=design", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     await SearchPage({ searchParams: searchParams({ q: "claude", section: "design" }) });
     expect(searchRecentDays).toHaveBeenCalledWith(expect.any(Array), "design", "claude");
   });
 
   it("passes 'both' through when ?section=both -- brief Step 3's way to search both verticals", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     await SearchPage({ searchParams: searchParams({ q: "claude", section: "both" }) });
     expect(searchRecentDays).toHaveBeenCalledWith(expect.any(Array), "both", "claude");
   });
@@ -117,7 +139,7 @@ describe("SearchPage -- section scope (decision 3)", () => {
 describe("SearchPage -- recent/archive split (decisions 1 and 2)", () => {
   it("asks searchRecentDays for exactly RECENT_WINDOW_DAYS days, newest first, when since is left at its default", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
 
     await SearchPage({ searchParams: searchParams({ q: "claude" }) });
 
@@ -134,7 +156,7 @@ describe("SearchPage -- recent/archive split (decisions 1 and 2)", () => {
 
   it("calls searchArchiveDays with the older days when ?since= reaches past the recent window, within the archive bound", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
 
     const since = subtractDays(TODAY, RECENT_WINDOW_DAYS + 4); // 30 recent + 5 archive
     await SearchPage({ searchParams: searchParams({ q: "claude", since }) });
@@ -168,16 +190,88 @@ describe("SearchPage -- recent/archive split (decisions 1 and 2)", () => {
 
   it("does not show the archive-refused message for a range within the bound", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     render(await SearchPage({ searchParams: searchParams({ q: "claude" }) }));
     expect(screen.queryByTestId("search-archive-refused")).toBeNull();
+  });
+
+  describe("?since= narrows the recent half too -- fix round 1, finding 4", () => {
+    it("asks searchRecentDays for fewer than RECENT_WINDOW_DAYS days when since is inside the recent window", async () => {
+      // Task 8 review's mutation M10 rewired the page so the recent half always asked for the
+      // full RECENT_WINDOW_DAYS regardless of `?since=`, and every existing test (which only
+      // ever exercised the default `since` or a `since` reaching *past* the window) stayed
+      // green. `since = yesterday` is inside the window either way, so only a page that actually
+      // threads `since` into the recent half's own day list -- not a hardcoded `RECENT_WINDOW_DAYS`
+      // -- produces exactly 2 recent days here.
+      vi.mocked(searchRecentDays).mockResolvedValue([]);
+      const since = subtractDays(TODAY, 1); // today and yesterday: 2 days
+      await SearchPage({ searchParams: searchParams({ q: "claude", since }) });
+
+      const [days] = vi.mocked(searchRecentDays).mock.calls[0]!;
+      expect(days).toEqual([TODAY, subtractDays(TODAY, 1)]);
+    });
+
+    it("asks searchRecentDays for exactly one day when since equals today", async () => {
+      vi.mocked(searchRecentDays).mockResolvedValue([]);
+      await SearchPage({ searchParams: searchParams({ q: "claude", since: TODAY }) });
+      const [days] = vi.mocked(searchRecentDays).mock.calls[0]!;
+      expect(days).toEqual([TODAY]);
+    });
+  });
+
+  describe("a hard archive failure degrades to partial results -- fix round 1, finding 5", () => {
+    it("still renders the recent-window results that already resolved when the archive half reports failed days", async () => {
+      vi.mocked(searchRecentDays).mockResolvedValue([
+        { day: TODAY, articles: [article({ title: "A recent match" })] },
+      ]);
+      vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome([], 1));
+
+      const since = subtractDays(TODAY, RECENT_WINDOW_DAYS + 4);
+      render(await SearchPage({ searchParams: searchParams({ q: "claude", since }) }));
+
+      expect(screen.getByText("A recent match")).toBeTruthy();
+    });
+
+    it("shows a distinct failed-archive-days notice, not the refused-range notice, when the archive call reports failures", async () => {
+      vi.mocked(searchRecentDays).mockResolvedValue([]);
+      vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome([], 2));
+
+      const since = subtractDays(TODAY, RECENT_WINDOW_DAYS + 4);
+      render(await SearchPage({ searchParams: searchParams({ q: "claude", since }) }));
+
+      expect(screen.getByTestId("search-archive-failed").textContent).toContain("2 archive days");
+      expect(screen.queryByTestId("search-archive-refused")).toBeNull();
+    });
+
+    it("shows no failed-archive-days notice when failedDays is zero", async () => {
+      vi.mocked(searchRecentDays).mockResolvedValue([]);
+      vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome([], 0));
+
+      const since = subtractDays(TODAY, RECENT_WINDOW_DAYS + 4);
+      render(await SearchPage({ searchParams: searchParams({ q: "claude", since }) }));
+
+      expect(screen.queryByTestId("search-archive-failed")).toBeNull();
+    });
+
+    it("still renders the archive days that did resolve alongside the failure notice", async () => {
+      vi.mocked(searchRecentDays).mockResolvedValue([]);
+      vi.mocked(searchArchiveDays).mockResolvedValue(
+        archiveOutcome([{ day: "2026-07-01", articles: [article({ title: "An archive match" })] }], 1),
+      );
+
+      const since = subtractDays(TODAY, RECENT_WINDOW_DAYS + 4);
+      render(await SearchPage({ searchParams: searchParams({ q: "claude", since }) }));
+
+      expect(screen.getByText("An archive match")).toBeTruthy();
+      expect(screen.getByTestId("search-archive-failed")).toBeTruthy();
+    });
   });
 });
 
 describe("SearchPage -- rendering results", () => {
   it("shows the no-results message when both searches return nothing", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     render(await SearchPage({ searchParams: searchParams({ q: "nonexistent" }) }));
     expect(screen.getByTestId("search-empty").textContent).toContain("nonexistent");
   });
@@ -186,7 +280,7 @@ describe("SearchPage -- rendering results", () => {
     vi.mocked(searchRecentDays).mockResolvedValue([
       { day: "2026-08-19", articles: [article({ title: "Recent story" })] },
     ]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     render(await SearchPage({ searchParams: searchParams({ q: "story" }) }));
     expect(screen.getByText("Recent story")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "2026-08-19" })).toBeTruthy();
@@ -197,14 +291,23 @@ describe("SearchPage -- rendering results", () => {
     vi.mocked(searchRecentDays).mockResolvedValue([
       { day: "2026-08-19", articles: [article({ pk: `ART#${"a".repeat(64)}`, title: "Recent story" })] },
     ]);
-    vi.mocked(searchArchiveDays).mockResolvedValue([
-      { day: "2026-07-01", articles: [article({ pk: `ART#${"b".repeat(64)}`, title: "Archive story" })] },
-    ]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(
+      archiveOutcome([{ day: "2026-07-01", articles: [article({ pk: `ART#${"b".repeat(64)}`, title: "Archive story" })] }]),
+    );
 
     render(await SearchPage({ searchParams: searchParams({ q: "story", since }) }));
 
     const recent = screen.getByText("Recent story");
     const older = screen.getByText("Archive story");
     expect(recent.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("SearchPage -- since input min/max (fix round 1, finding 8)", () => {
+  it("sets max to today and min to today minus the full recent+archive window", async () => {
+    render(await SearchPage({ searchParams: searchParams() }));
+    const input = screen.getByLabelText("Since") as HTMLInputElement;
+    expect(input.max).toBe(TODAY);
+    expect(input.min).toBe(subtractDays(TODAY, RECENT_WINDOW_DAYS + MAX_ARCHIVE_SEARCH_DAYS - 1));
   });
 });

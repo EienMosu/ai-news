@@ -1,7 +1,5 @@
 import type { Section } from "../../types/article.js";
-import { RECENT_WINDOW_DAYS, subtractDays } from "./range.js";
-
-const DAY_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+import { RECENT_WINDOW_DAYS, isValidDay, subtractDays } from "./range.js";
 
 /**
  * Trims a `?q=` value down to the string the reader actually searches for. Missing or a
@@ -37,14 +35,24 @@ export function parseSectionParam(raw: string | string[] | undefined, fallback: 
 /**
  * The oldest day (`YYYY-MM-DD`) a search should reach back to -- Task 8 decision 2's `since`
  * control, the thing a reader narrows when the archive branch refuses a too-long range.
- * Missing, malformed (wrong shape), or a date after `today` all fall back to the same safe
- * default: `today` minus `RECENT_WINDOW_DAYS - 1`, i.e. "the last 30 days including today and
- * no archive days at all" -- never a `since` that would make `splitSearchRange`'s `from > to`
- * branch fire, and never a bare pass-through of unvalidated user input into a range that gets
- * walked one day at a time.
+ * Missing, not a real calendar date (`isValidDay`, not a bare shape check -- fix round 1,
+ * finding F3), or a date after `today` all fall back to the same safe default: `today` minus
+ * `RECENT_WINDOW_DAYS - 1`, i.e. "the last 30 days including today and no archive days at all"
+ * -- never a `since` that would make `splitSearchRange`'s `from > to` branch fire, and never a
+ * bare pass-through of unvalidated user input into a range that gets walked one day at a time.
+ *
+ * A calendar-valid `since` that is merely far in the past (e.g. `?since=1990-01-01`) is passed
+ * through unclamped, on purpose: `splitSearchRange` and `exceedsArchiveBound` already turn that
+ * into the correct, user-visible "too far back, narrow your range" refusal (Spec §8 decision 2),
+ * and silently clamping it here to the widest runnable window would replace an honest refusal
+ * with an answer the reader never asked for and is not told was narrowed -- the same
+ * silently-partial outcome decision 2 exists to rule out, just moved one step earlier. The
+ * *validity* check above and `splitSearchRange`'s own independent iteration cap are what keep an
+ * extreme `since` (`?since=0000-01-01`, still calendar-valid) cheap to reject; this function does
+ * not additionally narrow a merely-old-but-real date.
  */
 export function parseSinceParam(raw: string | string[] | undefined, today: string): string {
   const fallback = subtractDays(today, RECENT_WINDOW_DAYS - 1);
-  if (typeof raw !== "string" || !DAY_SHAPE.test(raw)) return fallback;
+  if (typeof raw !== "string" || !isValidDay(raw)) return fallback;
   return raw <= today ? raw : fallback;
 }

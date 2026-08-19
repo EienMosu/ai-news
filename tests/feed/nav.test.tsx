@@ -61,4 +61,45 @@ describe("SectionNav", () => {
       );
     });
   });
+
+  describe("the Search entry point -- Task 8 fix round 1, finding 7", () => {
+    it("renders a Search link alongside the two vertical links", () => {
+      render(<SectionNav current="ai" />);
+      expect(screen.getByRole("link", { name: "Search" })).toBeTruthy();
+    });
+
+    it("points a bare Search link at /search with no ?section= when current is null", () => {
+      render(<SectionNav current={null} />);
+      expect(screen.getByRole("link", { name: "Search" }).getAttribute("href")).toBe("/search");
+    });
+
+    it("carries ?section=ai into the Search link when current is 'ai'", () => {
+      render(<SectionNav current="ai" />);
+      expect(screen.getByRole("link", { name: "Search" }).getAttribute("href")).toBe(
+        "/search?section=ai",
+      );
+    });
+
+    it("carries ?section=design into the Search link when current is 'design'", () => {
+      render(<SectionNav current="design" />);
+      expect(screen.getByRole("link", { name: "Search" }).getAttribute("href")).toBe(
+        "/search?section=design",
+      );
+    });
+
+    it("never marks the Search link aria-current -- it is not a vertical", () => {
+      render(<SectionNav current="ai" />);
+      expect(screen.getByRole("link", { name: "Search" }).getAttribute("aria-current")).toBeNull();
+    });
+
+    it("adding the Search link does not disturb the name-scoped AI/Design assertions elsewhere in this file", () => {
+      // Every other test in this file finds "AI" and "Design" by exact accessible name via
+      // getByRole("link", { name: ... }) -- a third link cannot make those ambiguous. This test
+      // just states that invariant explicitly, since the review that asked for this link
+      // verified it by inspection; this is what pins it as an executable fact instead.
+      render(<SectionNav current="ai" />);
+      expect(screen.getAllByRole("link")).toHaveLength(3);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
+    });
+  });
 });
