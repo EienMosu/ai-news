@@ -346,7 +346,7 @@ and needs no pagination in v1. If sources are added, re-check this bound before 
 |---|---|---|
 | Latest complete day | `META#DAY` desc limit 1, then GSI1 on that day | 2 |
 | Archive calendar | `META#DAY` desc limit 60 | 1 |
-| Specific day | GSI1 `DAY#<date>` desc | 1 |
+| Specific day | GSI1 `DAY#<date>` desc, plus `META#DAY`/`<date>` | 2, issued together |
 | Category filter | client-side over the fetched day | 0 |
 | Cluster expansion | client-side over the fetched day | 0 |
 | Search | see §8 | 1 |
@@ -354,6 +354,16 @@ and needs no pagination in v1. If sources are added, re-check this bound before 
 The `META#DAY` item is written **last**, after all articles. Readers therefore never
 observe a partially-written day, and a run that dies mid-way leaves a day marked
 `partial` rather than silently truncated.
+
+> **[revised]** "Specific day" was originally one round trip — the GSI query alone. It now
+> also reads that day's `META#DAY` record, because a `/day/<date>` page that cannot see the
+> record cannot tell a finished day from one whose run died mid-write, nor an empty day from
+> a date before the archive begins. That distinction is the entire reason `META#DAY` is
+> written last, so a reader that ignores it discards the guarantee this section just made.
+> The two reads are issued together with `Promise.allSettled`, so the added cost is ~0.5 RCU
+> and no added latency, and a transient failure on the metadata read degrades the page to
+> "status unknown" instead of killing it. The record is fetched by key rather than through
+> `listDays`, which reaches only 30 days back and would silently miss an older archived day.
 
 ---
 
