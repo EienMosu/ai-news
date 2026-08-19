@@ -9,6 +9,6 @@
     "incremental": true,
     "allowJs": true
   },
-  "include": ["app", "components", "src/lib/feed"],
+  "include": ["app", "components", "src/lib/feed", "tests/**/*.test.tsx"],
   "exclude": ["node_modules"]
 }

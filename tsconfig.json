@@ -7,10 +7,11 @@
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "react", "react-dom"],
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "jsx": "preserve",
+    "types": ["node"],
+    "lib": ["ES2023"],
     "outDir": "dist"
   },
-  "include": ["src", "tests", "scripts", "infra", "next.config.ts", "components"]
+  "include": ["src", "tests", "scripts", "infra", "next.config.ts"],
+  "//": "lib is pinned to ES2023 with no DOM on purpose. TypeScript includes DOM by default when lib is unset, so until this line existed a Lambda could reference document or window and typecheck clean -- verified by planting document.title in src/lambda/capture.ts. This config covers the Lambdas, the CDK app and the Node scripts; JSX files are excluded and covered by tsconfig.app.json, which pnpm typecheck also runs.",
+  "exclude": ["**/*.tsx"]
 }
