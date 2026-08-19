@@ -20,6 +20,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm typecheck
+      # build is its own gate too, and it caught nothing for two days because it was not here.
+      # `next build` is the only step that exercises module resolution the way Vercel will:
+      # a server component importing src/ failed under Turbopack while test, typecheck and
+      # synth all stayed green, because nothing imported it yet. It needs no AWS credentials --
+      # every data route is force-dynamic, so none of them reads DynamoDB at build time.
+      - run: pnpm build
       # synth is its own gate: it is the only step that reads cdk.json, which
       # Template.fromStack never touches. A legacy feature flag in that file passed
       # both of the checks above and failed only here.
