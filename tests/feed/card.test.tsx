@@ -51,12 +51,12 @@ describe("ArticleCard", () => {
     expect(container.querySelector("img")).toBeNull();
   });
 
-  it("renders an img element with the right src when imageUrl is present", () => {
+  it("renders an img element with the right src, lazily loaded, when imageUrl is present", () => {
     const article = toFeedArticle(raw({ imageUrl: "https://example.com/hero.png" }));
     const { container } = render(<ArticleCard article={article} now={NOW} />);
-    expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "https://example.com/hero.png",
-    );
+    const img = container.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("https://example.com/hero.png");
+    expect(img?.getAttribute("loading")).toBe("lazy");
   });
 
   it("renders no rationale element at all when whyItMatters is null", () => {
@@ -111,6 +111,50 @@ describe("ArticleCard", () => {
     const { container } = render(<ArticleCard article={article} now={NOW} />);
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toBe(`/article/${"a".repeat(64)}`);
+  });
+
+  it("wraps the relative time in a <time> element carrying the ISO publishedAt as dateTime", () => {
+    const article = toFeedArticle(raw({ publishedAt: "2026-08-18T09:00:00.000Z" }));
+    const { container } = render(<ArticleCard article={article} now={NOW} />);
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("dateTime")).toBe("2026-08-18T09:00:00.000Z");
+    expect(time?.textContent).toBe("3h ago");
+  });
+
+  it("omits the dateTime attribute (but still shows relative text) when publishedAt is null", () => {
+    const article = toFeedArticle(raw({ publishedAt: undefined }));
+    const { container } = render(<ArticleCard article={article} now={NOW} />);
+    const time = container.querySelector("time");
+    expect(time?.hasAttribute("dateTime")).toBe(false);
+    expect(time?.textContent).toBe("date unknown");
+  });
+
+  it("renders a fully degraded article coherently, with no stray leading separator", () => {
+    // Every optional signal absent at once: no image, no whyItMatters, no clusterId, no
+    // publishedAt, an empty sourceName (the coerced default -- see asString in shape.ts), and
+    // a degraded scoreVersion. This is precisely the case spec §7 says to design for first.
+    const article = toFeedArticle(
+      raw({
+        imageUrl: undefined,
+        whyItMatters: undefined,
+        clusterId: undefined,
+        corroborationToday: undefined,
+        publishedAt: undefined,
+        sourceName: "",
+        scoreVersion: "v1-degraded",
+      }),
+    );
+    const { container } = render(<ArticleCard article={article} now={NOW} />);
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector('[data-testid="why-it-matters"]')).toBeNull();
+    expect(container.querySelector('[data-testid="corroboration"]')).toBeNull();
+    expect(screen.getByText(/new since last ranking/i)).toBeTruthy();
+
+    const meta = container.querySelector('[data-testid="meta"]');
+    // No sourceName means no " · " separator either -- the meta line is just the relative
+    // time, not "· date unknown" or " · date unknown" with a stray leading mark.
+    expect(meta?.textContent).toBe("date unknown");
   });
 
   it("renders bracketed prose and a defanged script tag as visible text, and creates no script element", () => {

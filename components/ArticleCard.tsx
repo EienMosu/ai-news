@@ -30,7 +30,11 @@ export interface ArticleCardProps {
  */
 export function ArticleCard({ article, now }: ArticleCardProps) {
   const showCorroboration = hasCorroboration(article);
-  const others = (article.corroborationToday ?? 1) - 1;
+  // `hasCorroboration` already guarantees `corroborationToday` is a real number greater than 1
+  // whenever `showCorroboration` is true (see shape.ts), so there is no other case to fall back
+  // for here -- a `?? 1` guess would be dead code pretending to handle a case that can't reach
+  // this line.
+  const others = showCorroboration ? article.corroborationToday! - 1 : 0;
 
   return (
     <a
@@ -39,18 +43,25 @@ export function ArticleCard({ article, now }: ArticleCardProps) {
     >
       <article>
         {article.imageUrl !== null ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={article.imageUrl}
             alt=""
+            loading="lazy"
             className="mb-3 h-40 w-full rounded object-cover"
           />
         ) : null}
 
         <h3 className="text-lg font-semibold text-neutral-900">{article.title}</h3>
 
-        <p className="mt-1 text-sm text-neutral-500">
-          {article.sourceName} · {relativeTime(article.publishedAt, now)}
+        {/* `sourceName` is coerced to "" (never undefined/null) when a stored item is missing
+         *  it -- see `asString` in shape.ts -- so a fully degraded article reaches this line
+         *  with an empty string. The separator is part of the same conditional as the name
+         *  itself, so a missing name never leaves a bare leading "·" with nothing before it. */}
+        <p data-testid="meta" className="mt-1 text-sm text-neutral-500">
+          {article.sourceName !== "" ? `${article.sourceName} · ` : null}
+          <time dateTime={article.publishedAt ?? undefined}>
+            {relativeTime(article.publishedAt, now)}
+          </time>
         </p>
 
         {isUnranked(article) ? (
