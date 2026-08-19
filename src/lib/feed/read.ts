@@ -5,7 +5,8 @@ import type { Section } from "../../types/article.js";
 import { docClient } from "../store/client.js";
 import { articleKey, DAY_META_PK, LAST_RUN_PK, LAST_RUN_SK } from "../store/keys.js";
 import type { DayMeta, LastRun } from "../store/meta.js";
-import { getLatestCompleteDay, listDays, queryDay } from "../store/query.js";
+import { listDays, queryDay } from "../store/query.js";
+import { MAX_ARCHIVE_DAYS } from "./days.js";
 import { bySection, toArticleDetail, toFeedArticle, type ArticleDetail, type FeedArticle } from "./shape.js";
 
 const DAY_STATUSES = ["complete", "partial"] as const;
@@ -42,13 +43,6 @@ export interface FeedResult {
   truncatedInDay: number | null;
 }
 
-/** A fresh object every call -- never a shared module-level singleton, which a consumer's
- *  in-place mutation of `articles` (`.sort()`, `.push()`) could corrupt for every later request
- *  handled by the same Node process. */
-function emptyFeedResult(): FeedResult {
-  return { articles: [], day: null, status: null, llmRankedInDay: null, truncatedInDay: null };
-}
-
 /**
  * `TABLE_NAME` is read here, at call time, never at module load: Next's build step and this
  * file's own tests both import the module without the variable set, and a module-level read
@@ -64,36 +58,15 @@ function requireTableName(): string {
 }
 
 /**
- * The feed's entry point. Follows the `META#DAY` pointer via `getLatestCompleteDay` rather
- * than computing a date -- Spec §4: "Readers never compute a date — they follow the
- * `META#DAY` pointer." `getLatestCompleteDay` already falls back to the newest day of ANY
- * status when nothing in the last 30 days is `complete`, so a `partial` day is returned to
- * the caller -- with its real status -- rather than silently swallowed.
- *
- * A fresh deploy with no ranked day yet is a state the UI renders, not an error: this
- * returns the empty `FeedResult` rather than throwing.
- */
-export async function getFeed(section: Section): Promise<FeedResult> {
-  const table = requireTableName();
-  const client = docClient();
-  const day = await getLatestCompleteDay(client, table);
-  if (day === null) return emptyFeedResult();
-
-  const items = await queryDay(client, table, day.day);
-  return {
-    articles: bySection(items.map(toFeedArticle), section),
-    day: day.day,
-    status: day.status,
-    llmRankedInDay: day.llmRanked,
-    truncatedInDay: day.truncated,
-  };
-}
-
-/**
  * The home feed's day list, newest first: one entry per day `listDays(count)` names, each
  * carrying that day's `section`-filtered articles alongside the day totals `listDays` already
- * returned -- Task 7 Step 2. Exactly `count` days are asked for (`listDays(client, table,
- * count)`, never a fixed 30) and every day's `queryDay` is issued **concurrently**
+ * returned -- Task 7 Step 2. `count` is clamped to `MAX_ARCHIVE_DAYS` before being handed to
+ * `listDays` (fix round 1, Q2/Q5): unlike `getArchive`'s unclamped case (one Query with a large
+ * `Limit`, degrading to a merely partial page), an unclamped `count` here would fan out into
+ * `count` full-partition `queryDay` Queries, all fired simultaneously with no concurrency
+ * limit -- a real cost and latency incident, not a wrong-but-cheap answer. `parseDaysParam`
+ * remains the loud, tested boundary that shapes what a reader can request; this clamp is the
+ * quiet backstop for every other caller. Every day's `queryDay` is issued **concurrently**
  * (`Promise.all`), not one after another: sequential reads would make the home page as slow as
  * the sum of every day's round trip, and concurrency is the actual requirement, not an
  * optimisation on top of it.
@@ -110,13 +83,12 @@ export async function getFeed(section: Section): Promise<FeedResult> {
  * matter the completion order underneath.
  *
  * Returns `FeedResult[]` (not a new interface) so each entry can be handed straight to
- * `FeedView` -- the same per-day rendering `getFeed`'s single day already uses, now called once
- * per array element instead of once for the page.
+ * `FeedView`, one call per array element instead of once for the whole page.
  */
 export async function getRecentDays(section: Section, count: number): Promise<FeedResult[]> {
   const table = requireTableName();
   const client = docClient();
-  const days = await listDays(client, table, count);
+  const days = await listDays(client, table, Math.min(count, MAX_ARCHIVE_DAYS));
 
   return await Promise.all(days.map(async (day): Promise<FeedResult> => {
     const items = await queryDay(client, table, day.day);
@@ -132,9 +104,9 @@ export async function getRecentDays(section: Section, count: number): Promise<Fe
 
 /**
  * The named day, unfiltered by section -- `/day/[date]` deep-links to a specific date and
- * shows both verticals. Unlike `getFeed`, the day is a caller-supplied fact, not something
- * this function discovers, so `day` in the result is always the input, even when nothing
- * was found for it.
+ * shows both verticals. Unlike `getRecentDays`, the day is a caller-supplied fact, not something
+ * this function discovers itself from `listDays`, so `day` in the result is always the input,
+ * even when nothing was found for it.
  *
  * The day's `META#DAY` record is looked up directly (a `GetItem` on a known key, not a new
  * query shape) rather than reusing `listDays`, which only reaches 30 days back and would

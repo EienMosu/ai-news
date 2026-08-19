@@ -26,7 +26,7 @@ export default async function DesignPage({ searchParams }: DesignPageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <SectionNav current="design" />
+      <SectionNav current="design" days={days} />
       <FeedArchive section="design" results={results} now={now} days={days} basePath="/design" />
     </main>
   );

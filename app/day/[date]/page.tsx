@@ -32,11 +32,23 @@ const DAY_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
  * a link to that day, not to a vertical, so this renders `<SectionNav current={null} />` rather
  * than picking one section arbitrarily.
  *
- * A date this page cannot show -- one that fails the `YYYY-MM-DD` shape check, or one that
- * parses fine but has no articles at all (an unknown day, or a day that legitimately ranked
- * zero stories in every section) -- is a real 404 via `notFound()`, never an empty page that
- * looks broken. The shape check runs before `getDay` is even called: a string like `"banana"`
- * cannot possibly match a stored partition, so querying for it would only ever waste a read.
+ * A date this page cannot look up at all -- one that fails the `YYYY-MM-DD` shape check -- is a
+ * real 404 via `notFound()`, never an empty page that looks broken. The shape check runs before
+ * `getDay` is even called: a string like `"banana"` cannot possibly match a stored partition, so
+ * querying for it would only ever waste a read.
+ *
+ * A shape-valid date with **no articles and no `META#DAY` record** (`result.status === null`)
+ * is also a 404 -- an unknown day, or one before the archive begins. This departs from the
+ * brief's literal "an unknown or empty date is a 404" (fix round 1, F6, my ruling, not the
+ * brief's): a date with no articles but a REAL `META#DAY` record is a day that ran and legitimately
+ * ranked nothing, which §4 added the `META#DAY` read precisely so a reader could tell apart from
+ * "this day never happened". Collapsing that into the same 404 as an unknown date would throw
+ * away the one signal that distinguishes them. `src/lambda/rank.ts` (around the "Recording a
+ * complete day with zero articles is wrong ... Leave no META#DAY at all" comment) currently
+ * refuses to ever write a `META#DAY` record for a zero-article day, so this branch is not
+ * reachable from today's writer -- but the reader does not lean on that cross-file invariant to
+ * stay safe: if a record ever does exist for an empty day, this renders an honest explanation
+ * instead of a 404, rather than silently depending on the writer never producing that state.
  */
 export default async function DayPage({ params }: DayPageProps) {
   const { date } = await params;
@@ -45,7 +57,7 @@ export default async function DayPage({ params }: DayPageProps) {
   }
 
   const result = await getDay(date);
-  if (result.articles.length === 0) {
+  if (result.articles.length === 0 && result.status === null) {
     notFound();
   }
 
@@ -59,7 +71,13 @@ export default async function DayPage({ params }: DayPageProps) {
         </p>
       ) : null}
 
-      <DaySection day={date} articles={result.articles} now={new Date()} />
+      {result.articles.length === 0 ? (
+        <p data-testid="day-empty" className="text-neutral-600">
+          This day ranked but produced no stories in either vertical.
+        </p>
+      ) : (
+        <DaySection day={date} articles={result.articles} now={new Date()} />
+      )}
     </main>
   );
 }

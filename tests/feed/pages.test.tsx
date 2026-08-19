@@ -94,13 +94,18 @@ describe("Home (app/page.tsx)", () => {
   });
 
   it("renders a section for every day getRecentDays returns, newest first", async () => {
+    // Fix round 1, F11: this previously only asserted both days' text was present, not their
+    // order -- "newest first" in the name was uncashed. `feed-archive.test.tsx` pins the order
+    // via heading order at the component-unit level; this asserts it here too, at the page
+    // wiring level, via document order in the rendered DOM.
     vi.mocked(getRecentDays).mockResolvedValue([
       { ...EMPTY_DAY_RESULT, day: "2026-08-18" },
       { ...EMPTY_DAY_RESULT, day: "2026-08-17" },
     ]);
     render(await Home({ searchParams: searchParams() }));
-    expect(screen.getByText("No AI stories for 2026-08-18.")).toBeTruthy();
-    expect(screen.getByText("No AI stories for 2026-08-17.")).toBeTruthy();
+    const newer = screen.getByText("No AI stories for 2026-08-18.");
+    const older = screen.getByText("No AI stories for 2026-08-17.");
+    expect(newer.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("shows the no-ranked-day-at-all message, distinct from a per-day empty message, when getRecentDays returns no days", async () => {
@@ -118,6 +123,36 @@ describe("Home (app/page.tsx)", () => {
     vi.mocked(getRecentDays).mockResolvedValue(results);
     render(await Home({ searchParams: searchParams() }));
     expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=14");
+  });
+
+  it("passes the parsed/clamped `days` value to FeedArchive, not a raw coercion of the request -- fix round 1, F5", async () => {
+    // "-5" fails parseDaysParam's digit-only shape check, so the correct day count is the
+    // DEFAULT (7) -- it is garbage, not merely "a number below the minimum". A page that instead
+    // fed FeedArchive's `days` prop from something like `Number(rawDays) || days` still calls
+    // getRecentDays correctly (so tests asserting only that call would stay green), but
+    // `Number("-5")` is `-5`, a truthy value that survives the `||` fallback intact and reaches
+    // FeedArchive as `-5` instead of `7`. With exactly 7 days mocked back (matching the true,
+    // correctly-parsed count), `moreMayExist` (`results.length === days`) is `7 === 7` when the
+    // real clamped value reaches the component, and `7 === -5` -- silently false, hiding a real
+    // load-more link -- when the raw coercion does.
+    const results = Array.from({ length: 7 }, (_, i) => ({
+      ...EMPTY_DAY_RESULT,
+      day: `2026-08-${18 - i}`,
+    }));
+    vi.mocked(getRecentDays).mockResolvedValue(results);
+    render(await Home({ searchParams: searchParams({ days: "-5" }) }));
+    expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
+    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=14");
+  });
+
+  it("carries a non-default `days` value into the SectionNav links -- fix round 1, F9", async () => {
+    const results = Array.from({ length: 14 }, (_, i) => ({
+      ...EMPTY_DAY_RESULT,
+      day: `2026-08-${18 - i}`,
+    }));
+    vi.mocked(getRecentDays).mockResolvedValue(results);
+    render(await Home({ searchParams: searchParams({ days: "14" }) }));
+    expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design?days=14");
   });
 });
 
@@ -167,5 +202,15 @@ describe("DesignPage (app/design/page.tsx)", () => {
     vi.mocked(getRecentDays).mockResolvedValue([]);
     const { container } = render(await DesignPage({ searchParams: searchParams() }));
     expect(container.querySelector('[data-testid="feed-empty-no-day"]')).not.toBeNull();
+  });
+
+  it("carries a non-default `days` value into the SectionNav links -- fix round 1, F9", async () => {
+    const results = Array.from({ length: 14 }, (_, i) => ({
+      ...EMPTY_DAY_RESULT,
+      day: `2026-08-${18 - i}`,
+    }));
+    vi.mocked(getRecentDays).mockResolvedValue(results);
+    render(await DesignPage({ searchParams: searchParams({ days: "14" }) }));
+    expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
   });
 });

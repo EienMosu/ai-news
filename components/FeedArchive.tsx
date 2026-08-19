@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DEFAULT_ARCHIVE_DAYS, MAX_ARCHIVE_DAYS } from "../src/lib/feed/days.js";
+import { ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS } from "../src/lib/feed/days.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
 import { FeedView } from "./FeedView.js";
@@ -55,7 +55,7 @@ export function FeedArchive({ section, results, now, days, basePath }: FeedArchi
   // the table's history was exhausted before `days` was reached, and asking again would just
   // repeat the same query for no new data.
   const moreMayExist = results.length === days && days < MAX_ARCHIVE_DAYS;
-  const nextDays = Math.min(days + DEFAULT_ARCHIVE_DAYS, MAX_ARCHIVE_DAYS);
+  const nextDays = Math.min(days + ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS);
 
   return (
     <>

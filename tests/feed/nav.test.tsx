@@ -40,4 +40,25 @@ describe("SectionNav", () => {
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
   });
+
+  describe("carrying `?days=` across a vertical switch -- fix round 1, F9", () => {
+    it("omits ?days= from both links when `days` is not given at all", () => {
+      render(<SectionNav current="ai" />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/");
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
+    });
+
+    it("omits ?days= from both links when `days` equals the default", () => {
+      render(<SectionNav current="ai" days={7} />);
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
+    });
+
+    it("carries a non-default `days` value into both links", () => {
+      render(<SectionNav current="ai" days={21} />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=21");
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe(
+        "/design?days=21",
+      );
+    });
+  });
 });

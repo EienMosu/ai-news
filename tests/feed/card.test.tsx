@@ -206,4 +206,13 @@ describe("DaySection", () => {
     render(<DaySection day="2026-08-18" articles={[]} now={NOW} />);
     expect(screen.getByText("2026-08-18")).toBeTruthy();
   });
+
+  it("links the header date to its own day page -- fix round 1, F3", () => {
+    // Before this fix, nothing inside the app pointed at /day/[date] at all -- it was reachable
+    // only by typing a URL. The header date is the obvious anchor for it.
+    render(<DaySection day="2026-08-18" articles={[]} now={NOW} />);
+    expect(screen.getByRole("link", { name: "2026-08-18" }).getAttribute("href")).toBe(
+      "/day/2026-08-18",
+    );
+  });
 });

@@ -3,8 +3,9 @@ import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { __setDocClient } from "../../src/lib/store/client.js";
 import {
-  getArchive, getArticle, getDay, getFeed, getRecentDays, getRunStatus,
+  getArchive, getArticle, getDay, getRecentDays, getRunStatus,
 } from "../../src/lib/feed/read.js";
+import { MAX_ARCHIVE_DAYS } from "../../src/lib/feed/days.js";
 
 const HASH = "b".repeat(64);
 
@@ -35,76 +36,6 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.TABLE_NAME;
   __setDocClient(undefined);
-});
-
-describe("getFeed", () => {
-  it("queries the day getLatestCompleteDay names, never a computed date", async () => {
-    // The mocked pointer names 2020-01-01, nowhere near "today" -- if getFeed ever computed
-    // its own date instead of following the pointer, this assertion catches it regardless
-    // of what day the test happens to run on.
-    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem()] });
-    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
-
-    await getFeed("ai");
-
-    const dayQuery = ddb.commandCalls(QueryCommand)
-      .find((c) => c.args[0].input.IndexName === "feed-by-day")!;
-    expect(dayQuery.args[0].input.ExpressionAttributeValues![":d"]).toBe("DAY#2020-01-01");
-  });
-
-  it("returns a partial day's status and day-wide counts rather than swallowing them", async () => {
-    ddb.on(QueryCommand).resolves({
-      Items: [dayMetaItem({ status: "partial", llmRanked: 2, truncated: 3 })],
-    });
-    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
-
-    const result = await getFeed("ai");
-
-    expect(result.status).toBe("partial");
-    expect(result.day).toBe("2020-01-01");
-    expect(result.llmRankedInDay).toBe(2);
-    expect(result.truncatedInDay).toBe(3);
-  });
-
-  it("filters to the requested section via bySection, not by returning everything", async () => {
-    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem()] });
-    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({
-      Items: [
-        rawArticle({ pk: `ART#${"a".repeat(64)}`, section: "ai" }),
-        rawArticle({ pk: `ART#${"c".repeat(64)}`, section: "design" }),
-      ],
-    });
-
-    const result = await getFeed("design");
-
-    expect(result.articles).toHaveLength(1);
-    expect(result.articles[0]!.urlHash).toBe("c".repeat(64));
-  });
-
-  it("returns an empty result rather than throwing when no day has ranked yet", async () => {
-    ddb.on(QueryCommand).resolves({ Items: [] });
-
-    const result = await getFeed("ai");
-
-    expect(result).toEqual({
-      articles: [], day: null, status: null, llmRankedInDay: null, truncatedInDay: null,
-    });
-  });
-
-  it("returns a fresh object each call, not a shared singleton a caller can corrupt", async () => {
-    ddb.on(QueryCommand).resolves({ Items: [] });
-
-    const first = await getFeed("ai");
-    first.articles.push({} as never);
-    const second = await getFeed("ai");
-
-    expect(second.articles).toHaveLength(0);
-  });
-
-  it("throws a clear error naming TABLE_NAME when it is not set", async () => {
-    delete process.env.TABLE_NAME;
-    await expect(getFeed("ai")).rejects.toThrow(/TABLE_NAME/);
-  });
 });
 
 describe("getArticle", () => {
@@ -196,7 +127,7 @@ describe("getDay", () => {
 });
 
 describe("getRecentDays", () => {
-  it("asks listDays for exactly `count` days, not a larger fixed number", async () => {
+  it("asks listDays for `count` days when within MAX_ARCHIVE_DAYS, not a larger fixed number", async () => {
     ddb.on(QueryCommand).resolves({ Items: [dayMetaItem({ day: "2020-01-01" })] });
     ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
 
@@ -205,6 +136,22 @@ describe("getRecentDays", () => {
     const listDaysCall = ddb.commandCalls(QueryCommand)
       .find((c) => c.args[0].input.IndexName === undefined)!;
     expect(listDaysCall.args[0].input.Limit).toBe(3);
+  });
+
+  it("clamps `count` to at most MAX_ARCHIVE_DAYS before calling listDays -- fix round 1, Q2/Q5", async () => {
+    // Mirrors getArchive's own internal clamp: unlike getArchive's unclamped case (one Query
+    // with a large Limit -- a merely partial page), an unclamped count here fans out into
+    // `count` full-partition queryDay Queries fired simultaneously with no concurrency limit --
+    // a real cost/latency incident, not a cheap wrong answer. parseDaysParam is a separate,
+    // already-tested boundary at the page level; this is the backstop for every other caller.
+    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem({ day: "2020-01-01" })] });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+    await getRecentDays("ai", 1000);
+
+    const listDaysCall = ddb.commandCalls(QueryCommand)
+      .find((c) => c.args[0].input.IndexName === undefined)!;
+    expect(listDaysCall.args[0].input.Limit).toBe(MAX_ARCHIVE_DAYS);
   });
 
   it("returns [] and issues no day queries when no day has ever ranked", async () => {

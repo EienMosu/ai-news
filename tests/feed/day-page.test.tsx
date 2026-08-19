@@ -70,7 +70,10 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
     expect(getDay).not.toHaveBeenCalled();
   });
 
-  it("triggers a real 404 for a date that parses fine but has no articles at all", async () => {
+  it("triggers a real 404 when there is no META#DAY record and no articles -- an unknown day", async () => {
+    // Fix round 1, F6: 404 requires BOTH no articles AND no META#DAY record (status === null).
+    // This fixture represents "this date never happened" -- distinct from the next test, where
+    // a record exists but the day ranked nothing.
     vi.mocked(getDay).mockResolvedValue({
       articles: [], day: "2026-01-01", status: null, llmRankedInDay: null, truncatedInDay: null,
     });
@@ -82,6 +85,25 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
       caught = err;
     }
     expect(isHTTPAccessFallbackError(caught)).toBe(true);
+  });
+
+  it("does not 404, and shows an explanatory message, when a META#DAY record exists but the day has no articles in either vertical -- fix round 1, F6", async () => {
+    // §4 added the META#DAY read precisely so a reader can tell a day that ran and legitimately
+    // ranked nothing apart from a date that never happened. Collapsing both into one 404 (the
+    // brief's literal wording) would throw away that signal -- my ruling, not the brief's.
+    vi.mocked(getDay).mockResolvedValue({
+      articles: [], day: "2026-01-02", status: "partial", llmRankedInDay: 0, truncatedInDay: 0,
+    });
+
+    let caught: unknown;
+    try {
+      render(await DayPage({ params: params("2026-01-02") }));
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeUndefined();
+    expect(screen.getByTestId("day-empty")).toBeTruthy();
   });
 
   it("renders articles from both sections, unfiltered -- getDay's own contract, not a section filter this page adds", async () => {
@@ -146,6 +168,19 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
     render(await DayPage({ params: params("2026-08-18") }));
 
     expect(screen.queryByTestId("day-status")).toBeNull();
+  });
+
+  it("passes a calendar-impossible but shape-valid date to getDay verbatim -- fix round 1, F4", async () => {
+    // Task 7 Step 3: "a string we look up, never a date we compute from" had zero test
+    // pressure -- inserting `new Date(raw).toISOString().slice(0, 10)` left every other test in
+    // this file green, since `2026-08-18` round-trips to itself through that transform and the
+    // runner's own TZ offset happens to hide the drift on ordinary dates too. `2026-02-30` does
+    // not exist on any calendar: `new Date("2026-02-30")` is `Invalid Date`, and
+    // `.toISOString()` on it throws, which is what actually kills a `Date`-based implementation
+    // regardless of the runner's timezone. `getDay` never sees anything but the raw shape-valid
+    // string.
+    await expect(DayPage({ params: params("2026-02-30") })).rejects.toThrow();
+    expect(getDay).toHaveBeenCalledWith("2026-02-30");
   });
 
   it("uses the literal date string for the DaySection header, never a value derived from getDay's own (possibly stale) day field", async () => {

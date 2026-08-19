@@ -1,10 +1,18 @@
 import Link from "next/link";
+import { DEFAULT_ARCHIVE_DAYS } from "../src/lib/feed/days.js";
 import type { Section } from "../src/types/article.js";
 
 export interface SectionNavProps {
   /** The vertical currently being viewed, or `null` when neither is current. Later pages
    *  (story, archive) render this nav with `null` -- they are not themselves either vertical. */
   current: Section | null;
+  /** The home feed's current `?days=` value, carried into both links so switching verticals
+   *  does not silently reset how far back the reader had loaded (fix round 1, F9). Omitted (the
+   *  story and day pages, which have no archive depth of their own) or equal to
+   *  `DEFAULT_ARCHIVE_DAYS` renders a bare `/` / `/design` href, unchanged from before this
+   *  prop existed -- there is nothing to carry when the destination would ask for the default
+   *  anyway. */
+  days?: number;
 }
 
 interface NavLink {
@@ -31,7 +39,8 @@ const LINKS: NavLink[] = [
  * page's payload instead of reloading the document. It renders an `<a>`, so `getByRole("link")`
  * still finds these, and it needs no router mounted in a jsdom test -- verified.
  */
-export function SectionNav({ current }: SectionNavProps) {
+export function SectionNav({ current, days }: SectionNavProps) {
+  const suffix = days !== undefined && days !== DEFAULT_ARCHIVE_DAYS ? `?days=${days}` : "";
   return (
     <nav aria-label="Sections" className="mb-6 flex gap-4 border-b border-neutral-200 pb-3 text-sm">
       {LINKS.map((link) => {
@@ -39,7 +48,7 @@ export function SectionNav({ current }: SectionNavProps) {
         return (
           <Link
             key={link.section}
-            href={link.href}
+            href={`${link.href}${suffix}`}
             aria-current={isCurrent ? "page" : undefined}
             className={
               isCurrent
