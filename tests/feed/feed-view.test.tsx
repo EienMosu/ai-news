@@ -87,6 +87,16 @@ describe("FeedView", () => {
     );
     expect(screen.getByText(/264 stories ranked across both sections on 2026-08-18/)).toBeTruthy();
   });
+
+  it("omits the day-status line entirely when llmRankedInDay is null, rather than print a confident '0'", () => {
+    // Reachable via getDay() (Task 6's /day/[date]) whenever the day's META#DAY record is
+    // absent or malformed -- day is still known, but the count is not, and "0 stories ranked"
+    // printed directly above a "1 story" header would be self-contradicting.
+    const articles = [toFeedArticle(rawArticle())];
+    const result = feedResult({ articles, llmRankedInDay: null });
+    const { container } = render(<FeedView section="ai" result={result} now={NOW} />);
+    expect(container.querySelector('[data-testid="day-status"]')).toBeNull();
+  });
 });
 
 describe("dayStatusLine", () => {
@@ -110,11 +120,19 @@ describe("dayStatusLine", () => {
 
   it("states a partial day plainly, without error/failure wording", () => {
     const line = dayStatusLine("partial", 264, 14, "2026-08-18");
-    expect(line).toContain("today's ranking is partial");
+    expect(line).toContain("that day's ranking was partial");
     expect(line).not.toMatch(/error|fail|broken/i);
   });
 
   it("says nothing about partial status for a complete day", () => {
     expect(dayStatusLine("complete", 264, 14, "2026-08-18")).not.toContain("partial");
+  });
+
+  it("never calls a ranked day 'today' -- the function has no `now` and cannot know", () => {
+    // The day shown is routinely yesterday (or, on a quietly-broken pipeline, weeks old --
+    // getLatestCompleteDay looks back 30 days). A day named "2020-01-01" makes the point
+    // regardless of when this test happens to run.
+    const line = dayStatusLine("partial", 264, 14, "2020-01-01");
+    expect(line).not.toMatch(/\btoday\b/i);
   });
 });
