@@ -27,6 +27,22 @@ describe("toFeedArticle", () => {
     expect(a.imageUrl).toBeNull();
     expect(a.title).toBe("T");
   });
+
+  it("guards a missing pk instead of producing a garbage urlHash", () => {
+    // String(undefined).slice(4) is "fined" -- a plausible-looking string that is actually
+    // garbage. `?? ""` makes the miss visible instead of disguising it as data.
+    expect(toFeedArticle(raw({ pk: undefined })).urlHash).toBe("");
+  });
+
+  it("returns null, never a lying cast, for a missing or unrecognized category", () => {
+    expect(toFeedArticle(raw({ category: undefined })).category).toBeNull();
+    expect(toFeedArticle(raw({ category: "sports" })).category).toBeNull();
+  });
+
+  it("returns null, never a lying cast, for a missing or unrecognized section", () => {
+    expect(toFeedArticle(raw({ section: undefined })).section).toBeNull();
+    expect(toFeedArticle(raw({ section: "sports" })).section).toBeNull();
+  });
 });
 
 describe("isUnranked", () => {
@@ -48,21 +64,45 @@ describe("bySection", () => {
 
 describe("clusterSiblings", () => {
   it("finds the other articles covering the same story", () => {
-    const items = [raw({ title: "A" }), raw({ title: "B" }),
-      raw({ title: "C", clusterId: "2026-08-18#other" })].map(toFeedArticle);
+    // Distinct pks: self-exclusion now keys on urlHash (see finding 1 below), and no two real
+    // articles ever share a urlHash, so the fixture must not either.
+    const items = [
+      raw({ title: "A", pk: `ART#${"a".repeat(64)}` }),
+      raw({ title: "B", pk: `ART#${"b".repeat(64)}` }),
+      raw({ title: "C", pk: `ART#${"c".repeat(64)}`, clusterId: "2026-08-18#other" }),
+    ].map(toFeedArticle);
     expect(clusterSiblings(items, items[0]!).map((a) => a.title)).toEqual(["B"]);
   });
 
   it("returns nothing for a __self__ id, which is not a cluster", () => {
     // reconcile assigns `__self__:<hash>` when the model gave no cluster. Treating it as one
-    // would group every unclustered article of the day into a single fake story.
-    const items = [raw({ clusterId: "__self__:h1" }), raw({ clusterId: "__self__:h2" })]
-      .map(toFeedArticle);
+    // would group every unclustered article of the day into a single fake story. The two items
+    // share the SAME __self__ id but have distinct urlHashes (distinct pk) -- that is the only
+    // arrangement where the guard, not incidental string inequality, is what holds the result at
+    // zero: with different urlHashes, urlHash-based self-exclusion would not remove the second
+    // item on its own, so only the "__self__:" guard can.
+    const items = [
+      raw({ clusterId: "__self__:shared", pk: `ART#${"a".repeat(64)}` }),
+      raw({ clusterId: "__self__:shared", pk: `ART#${"b".repeat(64)}` }),
+    ].map(toFeedArticle);
     expect(clusterSiblings(items, items[0]!)).toHaveLength(0);
   });
 
   it("never returns the article itself", () => {
     const items = [raw()].map(toFeedArticle);
     expect(clusterSiblings(items, items[0]!)).toHaveLength(0);
+  });
+
+  it("excludes the subject even when it arrives as a separate object with the same urlHash", () => {
+    // A story page fetches one article by urlHash, then the day's list separately -- two fetches,
+    // two distinct objects for the same stored article. Self-exclusion must key on urlHash, not
+    // object identity.
+    const subjectRaw = raw();
+    const items = [
+      toFeedArticle(subjectRaw),
+      toFeedArticle(raw({ title: "B", pk: `ART#${"b".repeat(64)}` })),
+    ];
+    const subject = toFeedArticle(subjectRaw); // same urlHash as items[0], distinct object
+    expect(clusterSiblings(items, subject).map((a) => a.title)).toEqual(["B"]);
   });
 });
