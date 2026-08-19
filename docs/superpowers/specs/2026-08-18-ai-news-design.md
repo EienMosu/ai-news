@@ -564,6 +564,22 @@ EventBridge.
 >    one Query serves both and the nav switches a client-side filter — the same mechanism §4
 >    already specifies for the category filter, at zero additional round trips.
 >
+> > **[revised]** Point 3 above describes an architecture the implementation did not take, and
+> > is left in place so the change is visible rather than silently overwritten. The verticals
+> > are separate **routes** (`/` and `/design`), not a client-side filter over one fetched day,
+> > so switching verticals costs a fresh read of the day rather than zero. Points 1 and 2 are
+> > unaffected and are the reasons that actually carry the decision.
+> >
+> > Why the routes won anyway: a client-side filter needs the filter state to live in the
+> > browser, which makes the feed a client component and pulls the whole card tree across that
+> > boundary — for a reader whose every page is server-rendered from DynamoDB, that is a much
+> > larger cost than one Query. Separate routes also give each vertical a real URL to link,
+> > bookmark and share, which a filter chip does not.
+> >
+> > The read it costs is one `Query` on a partition §4 bounds at ~650 items, plus the
+> > `META#DAY` lookup — well inside the free tier at this traffic. If that ever stops being
+> > true, the fix is caching the day, not merging the verticals.
+>
 > **The day-section count is per vertical.** `META#DAY.articleCount` is the total across both,
 > so a header reading "23 stories" under the AI nav must be computed from the filtered list,
 > not read from the meta item. Showing the combined count on a filtered feed would be a number
