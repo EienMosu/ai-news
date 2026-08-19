@@ -2,13 +2,33 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "jsx": "preserve",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node", "react", "react-dom"],
-    "plugins": [{ "name": "next" }],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node",
+      "react",
+      "react-dom"
+    ],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "noEmit": true,
     "incremental": true,
     "allowJs": true
   },
-  "include": ["app", "components", "src/lib/feed", "tests/**/*.test.tsx"],
-  "exclude": ["node_modules"]
+  "//": "What next build typechecks. Deliberately excludes tests: Vercel builds with next build, and a prod-only install would fail on @testing-library types that the app itself never needs. tsconfig.test.json covers the .tsx tests, and pnpm typecheck runs all three.",
+  "include": [
+    "app",
+    "components",
+    "src/lib/feed",
+    "next-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

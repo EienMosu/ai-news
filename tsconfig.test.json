@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "//": "The .tsx tests. They need the DOM lib and the React types, so they cannot live in the root config; they must not be in the app config, or next build starts depending on devDependencies.",
+  "include": [
+    "tests/**/*.test.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
