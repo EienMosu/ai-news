@@ -570,15 +570,21 @@ EventBridge.
 > > so switching verticals costs a fresh read of the day rather than zero. Points 1 and 2 are
 > > unaffected and are the reasons that actually carry the decision.
 > >
-> > Why the routes won anyway: a client-side filter needs the filter state to live in the
-> > browser, which makes the feed a client component and pulls the whole card tree across that
-> > boundary — for a reader whose every page is server-rendered from DynamoDB, that is a much
-> > larger cost than one Query. Separate routes also give each vertical a real URL to link,
-> > bookmark and share, which a filter chip does not.
+> > To be accurate about how this happened: the routes were specified by the implementation
+> > plan, and no filter-versus-routes trade was weighed while building it. What follows is the
+> > case for keeping them, not a record of a deliberation.
 > >
-> > The read it costs is one `Query` on a partition §4 bounds at ~650 items, plus the
-> > `META#DAY` lookup — well inside the free tier at this traffic. If that ever stops being
-> > true, the fix is caching the day, not merging the verticals.
+> > A client-side filter needs the filter state in the browser, which makes the feed a client
+> > component and pulls the card tree across that boundary. Separate routes also give each
+> > vertical a real URL to link, bookmark and share, which a filter chip does not.
+> >
+> > What it costs: one `Query` over a partition §4 bounds at ~650 items, plus the `META#DAY`
+> > lookup. **Not free** — §2's table is explicit that on-demand DynamoDB has no free tier, and
+> > this revision originally claimed otherwise, which is the misconception this document
+> > corrects in two other places. At ~264 items/day of ~1.5 KB, an eventually-consistent Query
+> > reads ~400 KB ≈ 50 RRU, on the order of $0.00001 per page view. Negligible in dollars,
+> > which is a different claim from free. If traffic ever makes it matter, the fix is caching
+> > the day, not merging the verticals.
 >
 > **The day-section count is per vertical.** `META#DAY.articleCount` is the total across both,
 > so a header reading "23 stories" under the AI nav must be computed from the filtered list,
