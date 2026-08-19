@@ -29,12 +29,11 @@ export interface ArticleCardProps {
  * `<script>` in a summary can never become a live DOM node.
  */
 export function ArticleCard({ article, now }: ArticleCardProps) {
-  const showCorroboration = hasCorroboration(article);
-  // `hasCorroboration` already guarantees `corroborationToday` is a real number greater than 1
-  // whenever `showCorroboration` is true (see shape.ts), so there is no other case to fall back
-  // for here -- a `?? 1` guess would be dead code pretending to handle a case that can't reach
-  // this line.
-  const others = showCorroboration ? article.corroborationToday! - 1 : 0;
+  // `hasCorroboration` is a type predicate, so inside the true branch the compiler knows
+  // `corroborationToday` is a number -- no assertion, and no way for a later change in
+  // shape.ts to loosen the guarantee without breaking this line.
+  const others = hasCorroboration(article) ? article.corroborationToday - 1 : 0;
+  const showCorroboration = others > 0;
 
   return (
     <a

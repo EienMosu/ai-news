@@ -153,7 +153,13 @@ export function clusterSiblings(articles: FeedArticle[], article: FeedArticle): 
  * more than one article shares it. `corroborationToday` counts the cluster's total size
  * including `article` itself (see `countCorroboration` in rank/corroboration.ts), so `> 1`
  * means "at least one other" -- the marker's "N others" text is `corroborationToday - 1`.
+ *
+ * Declared as a type predicate so the caller does not need a non-null assertion: the
+ * guarantee this function makes about `corroborationToday` is then enforced by the compiler
+ * rather than by a comment the next edit can quietly invalidate.
  */
-export function hasCorroboration(article: FeedArticle): boolean {
+export function hasCorroboration(
+  article: FeedArticle,
+): article is FeedArticle & { corroborationToday: number } {
   return isRealCluster(article.clusterId) && (article.corroborationToday ?? 0) > 1;
 }
