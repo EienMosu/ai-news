@@ -165,24 +165,22 @@ export async function getArchive(limit: number): Promise<DayMeta[]> {
 }
 
 /**
- * `META#lastRun` as the health surface reads it.
- *
- * `llmStatus` is widened to include `null` rather than the record being discarded when the
- * stored value is unrecognised. Returning `null` for the whole record would make "capture
- * wrote something we do not understand" indistinguishable from "capture has never run" --
- * blanking the health page at exactly the moment something unusual is in the data, which is
- * the failure spec §8 is written to prevent. Every other counter in the record is still true
- * and still worth showing.
+ * `META#lastRun` as the health surface reads it. Differs from `LastRun` in exactly two ways,
+ * both about what a reader can trust: `llmStatus` may be `null` when the stored value is not
+ * a recognised member, and the four fields §8's header iterates always arrive renderable.
+ * The scalars stay as `capture.ts` writes them -- it is the only writer and always populates
+ * them, so widening those would push null-handling onto every component for a case that
+ * cannot occur.
  */
 export interface RunStatus {
-  startedAt: string | null;
-  durationMs: number | null;
+  startedAt: string;
+  durationMs: number;
   perSourceCounts: Record<string, number>;
   filtered: Record<string, number>;
   quarantined: Record<string, number>;
   llmStatus: LastRun["llmStatus"] | null;
-  itemsWritten: number | null;
-  itemsFailed: number | null;
+  itemsWritten: number;
+  itemsFailed: number;
   errors: { source: string; message: string }[];
 }
 
@@ -192,7 +190,7 @@ export interface RunStatus {
 function countRecord(v: unknown): Record<string, number> {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return {};
   const out: Record<string, number> = {};
-  for (const [k, n] of Object.entries(v)) if (typeof n === "number") out[k] = n;
+  for (const [k, n] of Object.entries(v)) if (Number.isFinite(n)) out[k] = n as number;
   return out;
 }
 
@@ -223,16 +221,16 @@ export async function getRunStatus(): Promise<RunStatus | null> {
     new GetCommand({ TableName: table, Key: { pk: LAST_RUN_PK, sk: LAST_RUN_SK } }),
   );
   if (!out.Item) return null;
-  const item = out.Item;
+  const item = out.Item as LastRun;
   return {
-    startedAt: typeof item.startedAt === "string" ? item.startedAt : null,
-    durationMs: asNumberOrNull(item.durationMs),
+    startedAt: item.startedAt,
+    durationMs: item.durationMs,
     perSourceCounts: countRecord(item.perSourceCounts),
     filtered: countRecord(item.filtered),
     quarantined: countRecord(item.quarantined),
     llmStatus: memberOrNull(LAST_RUN_STATUSES, item.llmStatus),
-    itemsWritten: asNumberOrNull(item.itemsWritten),
-    itemsFailed: asNumberOrNull(item.itemsFailed),
+    itemsWritten: item.itemsWritten,
+    itemsFailed: item.itemsFailed,
     errors: errorList(item.errors),
   };
 }

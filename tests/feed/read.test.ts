@@ -242,10 +242,19 @@ describe("getRunStatus", () => {
     // have caught it -- and takes the whole health surface down with it.
     ddb.on(GetCommand).resolves({ Item: {
       ...lastRunItem,
-      perSourceCounts: { hn: 3, bad: "not-a-number" },
+      // NaN is typeof "number" -- DynamoDB decimal overflow can produce one on unmarshal, and
+      // it would render as garbage rather than crash, which is the harder kind to notice.
+      perSourceCounts: { hn: 3, bad: "not-a-number", overflowed: Number.NaN },
       filtered: "not-an-object",
       quarantined: null,
-      errors: [{ source: "hn", message: "boom" }, { source: 42 }, "junk"],
+      // The last two entries discriminate the two checks separately: drop the source check and
+      // the bad-source entry survives; drop the message check and the bad-message one does.
+      errors: [
+        { source: "hn", message: "boom" },
+        "junk",
+        { source: "ok-source", message: 42 },
+        { source: 42, message: "ok-message" },
+      ],
     } });
 
     const status = await getRunStatus();
