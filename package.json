@@ -12,8 +12,8 @@
     "smoke": "node --experimental-strip-types --import ./scripts/register-ts-extension-resolve-hook.mjs scripts/smoke.ts",
     "cdk": "cdk",
     "synth": "cdk synth",
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start"
   },
   "keywords": [],
