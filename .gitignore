@@ -1,3 +1,6 @@
+# Both forms, deliberately: the trailing slash matches a directory but NOT a symlink,
+# and a worktree with a symlinked node_modules slipped one past this rule once.
+node_modules
 node_modules/
 .next/
 out/
