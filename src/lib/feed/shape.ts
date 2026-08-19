@@ -78,6 +78,35 @@ export function toFeedArticle(item: Record<string, unknown>): FeedArticle {
   };
 }
 
+const PUBLISHED_AT_SOURCES = ["feed", "fallback"] as const;
+
+/**
+ * The story detail page's shape -- `FeedArticle` plus the two attributes that exist only on
+ * the base-table item, never on the `feed-by-day` GSI's projection: `ingestDay` (how the page
+ * locates its own day partition, the only way `clusterSiblings` can be looked up at all) and
+ * `publishedAtSource` (whether `publishedAt` is a reported date or a guessed fallback). The
+ * other non-projected item attributes (`hashVersion`, `gsi1pk`, `gsi1sk`, `v`) are internal
+ * plumbing the UI never reads and are deliberately left out.
+ */
+export interface ArticleDetail extends FeedArticle {
+  ingestDay: string | null;
+  publishedAtSource: "feed" | "fallback" | null;
+}
+
+/**
+ * Turns a raw item from the base table -- a `GetItem` on `ART#<urlHash>` / `A`, never the GSI
+ * -- into the story detail page's shape. Reuses `toFeedArticle` for the 18 fields shared with a
+ * card rather than re-deriving them, so the two mappings can never drift from each other's
+ * coercion rules.
+ */
+export function toArticleDetail(item: Record<string, unknown>): ArticleDetail {
+  return {
+    ...toFeedArticle(item),
+    ingestDay: asStringOrNull(item.ingestDay),
+    publishedAtSource: memberOrNull(PUBLISHED_AT_SOURCES, item.publishedAtSource),
+  };
+}
+
 /** True exactly when the model never scored the article -- capture's degraded score stood in. */
 export function isUnranked(article: FeedArticle): boolean {
   return article.scoreVersion === DEGRADED_SCORE_VERSION;

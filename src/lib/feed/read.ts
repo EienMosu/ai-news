@@ -6,30 +6,56 @@ import { docClient } from "../store/client.js";
 import { articleKey, DAY_META_PK, LAST_RUN_PK, LAST_RUN_SK } from "../store/keys.js";
 import type { DayMeta, LastRun } from "../store/meta.js";
 import { getLatestCompleteDay, listDays, queryDay } from "../store/query.js";
-import { bySection, toFeedArticle, type FeedArticle } from "./shape.js";
+import { bySection, toArticleDetail, toFeedArticle, type ArticleDetail, type FeedArticle } from "./shape.js";
+
+const DAY_STATUSES = ["complete", "partial"] as const;
+const LAST_RUN_STATUSES = ["ok", "skipped", "failed"] as const;
+
+/** `null` for anything that is not a member of `values` -- the same discipline `shape.ts` uses
+ *  for `FeedArticle`'s narrow-union fields, applied here to the two remaining DynamoDB
+ *  boundaries this file reads without going through `toFeedArticle`/`toArticleDetail`: an
+ *  unrecognised value surfaces as an absence rather than flowing a bad write straight into a
+ *  union-typed field via an unchecked cast. */
+function memberOrNull<T extends string>(values: readonly T[], v: unknown): T | null {
+  return typeof v === "string" && (values as readonly string[]).includes(v) ? (v as T) : null;
+}
+
+const asNumberOrNull = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
 /**
- * A day's worth of feed articles plus the metadata the UI needs to say what it is looking
- * at -- whether the day completed, how many of its articles the model actually ranked, and
- * how many were cut by the input cap and never reached it.
+ * A day's worth of feed articles plus the metadata the UI needs to say what it is looking at.
+ *
+ * `llmRankedInDay` and `truncatedInDay` are day totals across BOTH verticals, not counts of
+ * `articles` -- the model's ranking cap and corroboration pass run once per day, not once per
+ * section, so there is no per-section equivalent to report. The "InDay" suffix is deliberate:
+ * a plain `llmRanked` sitting beside a section-filtered `articles` array would read, at the
+ * call site, as if it described that array -- the same hazard Spec §7 calls out for the
+ * sibling `articleCount` field ("a header reading '23 stories' ... must be computed from the
+ * filtered list, not read from the meta item"). A header built on this value must say
+ * "40 ranked across both sections today", never "40 of this section's articles were ranked".
  */
 export interface FeedResult {
   articles: FeedArticle[];
   day: string | null;
   status: "complete" | "partial" | null;
-  llmRanked: number | null;
-  truncated: number | null;
+  llmRankedInDay: number | null;
+  truncatedInDay: number | null;
 }
 
-const emptyFeedResult: FeedResult = {
-  articles: [], day: null, status: null, llmRanked: null, truncated: null,
-};
+/** A fresh object every call -- never a shared module-level singleton, which a consumer's
+ *  in-place mutation of `articles` (`.sort()`, `.push()`) could corrupt for every later request
+ *  handled by the same Node process. */
+function emptyFeedResult(): FeedResult {
+  return { articles: [], day: null, status: null, llmRankedInDay: null, truncatedInDay: null };
+}
 
 /**
  * `TABLE_NAME` is read here, at call time, never at module load: Next's build step and this
  * file's own tests both import the module without the variable set, and a module-level read
  * would capture `undefined` permanently. A missing variable throws a message naming it --
  * cheaper to diagnose than the SDK's own "table not found" once a client actually calls out.
+ * Called before `docClient()` in every exported function below, so a misconfiguration is
+ * reported before anything is constructed, not after.
  */
 function requireTableName(): string {
   const name = process.env.TABLE_NAME;
@@ -48,18 +74,18 @@ function requireTableName(): string {
  * returns the empty `FeedResult` rather than throwing.
  */
 export async function getFeed(section: Section): Promise<FeedResult> {
-  const client = docClient();
   const table = requireTableName();
+  const client = docClient();
   const day = await getLatestCompleteDay(client, table);
-  if (day === null) return emptyFeedResult;
+  if (day === null) return emptyFeedResult();
 
   const items = await queryDay(client, table, day.day);
   return {
     articles: bySection(items.map(toFeedArticle), section),
     day: day.day,
     status: day.status,
-    llmRanked: day.llmRanked,
-    truncated: day.truncated,
+    llmRankedInDay: day.llmRanked,
+    truncatedInDay: day.truncated,
   };
 }
 
@@ -72,61 +98,87 @@ export async function getFeed(section: Section): Promise<FeedResult> {
  * The day's `META#DAY` record is looked up directly (a `GetItem` on a known key, not a new
  * query shape) rather than reusing `listDays`, which only reaches 30 days back and would
  * silently miss an older archived day that this function must still be able to answer for.
- * If articles exist for the day but no `META#DAY` record does (get the record before rank
- * ever wrote one for it, or a lookup for a day older than the archive keeps meta for),
- * `status`, `llmRanked` and `truncated` come back `null` rather than a guess.
+ *
+ * The two reads run concurrently via `Promise.allSettled`, not `Promise.all`: to the reader, a
+ * transient failure on the small `META#DAY` read and the record simply not existing yet are the
+ * same event, and both must degrade to `status: null` rather than the first discarding articles
+ * that already came back fine. A failure on `queryDay` itself is not degraded the same way --
+ * there is nothing to show without it -- and propagates.
+ *
+ * `status` is narrowed through `memberOrNull` rather than trusted via an unchecked cast: an
+ * unrecognised value comes back `null`, same as an absent record, instead of flowing a bad
+ * write straight into a union-typed field.
  */
 export async function getDay(date: string): Promise<FeedResult> {
-  const client = docClient();
   const table = requireTableName();
+  const client = docClient();
 
-  const [items, metaOut] = await Promise.all([
+  const [itemsResult, metaResult] = await Promise.allSettled([
     queryDay(client, table, date),
     client.send(new GetCommand({ TableName: table, Key: { pk: DAY_META_PK, sk: date } })),
   ]);
-  const meta = metaOut.Item as DayMeta | undefined;
+
+  if (itemsResult.status === "rejected") throw itemsResult.reason;
+  const metaItem = metaResult.status === "fulfilled" ? metaResult.value.Item : undefined;
 
   return {
-    articles: items.map(toFeedArticle),
+    articles: itemsResult.value.map(toFeedArticle),
     day: date,
-    status: meta?.status ?? null,
-    llmRanked: meta?.llmRanked ?? null,
-    truncated: meta?.truncated ?? null,
+    status: memberOrNull(DAY_STATUSES, metaItem?.status),
+    llmRankedInDay: asNumberOrNull(metaItem?.llmRanked),
+    truncatedInDay: asNumberOrNull(metaItem?.truncated),
   };
 }
 
 /**
  * One article by `urlHash`, read from the base table -- a `GetItem` on `ART#<urlHash>` / `A`,
- * never the `feed-by-day` index. The GSI's `INCLUDE` projection carries only the 18 card
- * fields; the story detail page needs `points`, `publishedAtSource` and everything else that
- * projection leaves out, which only the base-table item has.
+ * never the `feed-by-day` index. Mapped through `toArticleDetail`, not `toFeedArticle`: the
+ * GSI's `INCLUDE` projection is exactly `FeedArticle`'s 18 fields (`points` among them), so
+ * mapping the base item through `toFeedArticle` here would throw away the two fields that are
+ * the entire reason to read the base table instead of the index -- `ingestDay` (how the story
+ * page locates its own day partition, the only way to look up cluster siblings at all) and
+ * `publishedAtSource` (how it can say a date was guessed rather than reported). The remaining
+ * non-projected attributes (`hashVersion`, `gsi1pk`, `gsi1sk`, `v`) are internal plumbing the
+ * UI never needs and stay out of `ArticleDetail`.
  *
  * A missing item returns `null`. `urlHash` can arrive from a stale link or a bad guess and
  * that is not exceptional -- the caller (a page component) decides whether that is a 404.
  */
-export async function getArticle(urlHash: string): Promise<FeedArticle | null> {
-  const client = docClient();
+export async function getArticle(urlHash: string): Promise<ArticleDetail | null> {
   const table = requireTableName();
+  const client = docClient();
   const out = await client.send(new GetCommand({ TableName: table, Key: articleKey(urlHash) }));
-  return out.Item ? toFeedArticle(out.Item) : null;
+  return out.Item ? toArticleDetail(out.Item) : null;
 }
 
-/** The archive calendar: up to `limit` days, newest first. A thin wrapper over `listDays` --
- *  no new query shape, per Step 2. */
+/**
+ * The archive calendar: up to `limit` days, newest first. A thin wrapper over `listDays` -- no
+ * new query shape, per Step 2 -- but `listDays` issues a single un-paged `QueryCommand` on the
+ * premise that its `Limit` is a hard, small cap (Spec §4 sizes the calendar at 60 days); `limit`
+ * here is a caller-supplied number with no such bound, and Spec §8 forbids unhandled pagination.
+ * Clamped to 60 so a caller asking for more cannot silently get back a partial page instead of
+ * the wider archive it thinks it received.
+ */
 export async function getArchive(limit: number): Promise<DayMeta[]> {
-  return await listDays(docClient(), requireTableName(), limit);
+  const table = requireTableName();
+  return await listDays(docClient(), table, Math.min(limit, 60));
 }
 
 /**
  * The header's run-status line (Spec §7/§8) -- the last capture-or-rank run's outcome, read
  * from the single `META#lastRun` item. `null` when the pipeline has never run, e.g. right
- * after a fresh deploy.
+ * after a fresh deploy -- or when the record's `llmStatus` is not a recognised value, the one
+ * field narrowed here rather than trusted via an unchecked cast: a malformed write should read
+ * as "no status to show", not hand this section's highest-value component a value it has not
+ * checked carries the shape `LastRun` promises.
  */
 export async function getRunStatus(): Promise<LastRun | null> {
-  const client = docClient();
   const table = requireTableName();
+  const client = docClient();
   const out = await client.send(
     new GetCommand({ TableName: table, Key: { pk: LAST_RUN_PK, sk: LAST_RUN_SK } }),
   );
-  return (out.Item as LastRun | undefined) ?? null;
+  if (!out.Item) return null;
+  const item = out.Item as LastRun;
+  return memberOrNull(LAST_RUN_STATUSES, item.llmStatus) ? item : null;
 }
