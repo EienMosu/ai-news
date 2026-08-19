@@ -165,6 +165,18 @@ export async function getArchive(limit: number): Promise<DayMeta[]> {
 }
 
 /**
+ * `META#lastRun` as the health surface reads it.
+ *
+ * `llmStatus` is widened to include `null` rather than the record being discarded when the
+ * stored value is unrecognised. Returning `null` for the whole record would make "capture
+ * wrote something we do not understand" indistinguishable from "capture has never run" --
+ * blanking the health page at exactly the moment something unusual is in the data, which is
+ * the failure spec §8 is written to prevent. Every other counter in the record is still true
+ * and still worth showing.
+ */
+export type RunStatus = Omit<LastRun, "llmStatus"> & { llmStatus: LastRun["llmStatus"] | null };
+
+/**
  * The header's run-status line (Spec §7/§8) -- the last capture-or-rank run's outcome, read
  * from the single `META#lastRun` item. `null` when the pipeline has never run, e.g. right
  * after a fresh deploy -- or when the record's `llmStatus` is not a recognised value, the one
@@ -172,7 +184,7 @@ export async function getArchive(limit: number): Promise<DayMeta[]> {
  * as "no status to show", not hand this section's highest-value component a value it has not
  * checked carries the shape `LastRun` promises.
  */
-export async function getRunStatus(): Promise<LastRun | null> {
+export async function getRunStatus(): Promise<RunStatus | null> {
   const table = requireTableName();
   const client = docClient();
   const out = await client.send(
@@ -180,5 +192,5 @@ export async function getRunStatus(): Promise<LastRun | null> {
   );
   if (!out.Item) return null;
   const item = out.Item as LastRun;
-  return memberOrNull(LAST_RUN_STATUSES, item.llmStatus) ? item : null;
+  return { ...item, llmStatus: memberOrNull(LAST_RUN_STATUSES, item.llmStatus) };
 }

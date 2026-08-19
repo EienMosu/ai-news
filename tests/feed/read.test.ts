@@ -236,8 +236,17 @@ describe("getRunStatus", () => {
     expect(await getRunStatus()).toBeNull();
   });
 
-  it("returns null rather than trusting an unrecognised llmStatus value", async () => {
+  it("keeps the record but nulls llmStatus when the stored value is unrecognised", async () => {
+    // Discarding the whole record here would make "capture wrote a status we do not
+    // understand" indistinguishable from "capture has never run" -- the health page would go
+    // blank at exactly the moment something unusual is in the data. Every other counter in
+    // the record is still true, so the record survives and only the bad field is nulled.
     ddb.on(GetCommand).resolves({ Item: { ...lastRunItem, llmStatus: "bogus" } });
-    expect(await getRunStatus()).toBeNull();
+
+    const status = await getRunStatus();
+
+    expect(status).not.toBeNull();
+    expect(status?.llmStatus).toBeNull();
+    expect(status?.itemsWritten).toBe(10);
   });
 });
