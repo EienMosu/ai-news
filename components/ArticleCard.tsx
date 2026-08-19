@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { hasCorroboration, isUnranked, type FeedArticle } from "../src/lib/feed/shape.js";
 import { relativeTime } from "../src/lib/feed/format.js";
 
@@ -36,7 +37,7 @@ export function ArticleCard({ article, now }: ArticleCardProps) {
   const showCorroboration = others > 0;
 
   return (
-    <a
+    <Link
       href={`/article/${article.urlHash}`}
       className="block rounded-lg border border-neutral-200 p-4 no-underline transition-colors hover:border-neutral-400"
     >
@@ -86,6 +87,6 @@ export function ArticleCard({ article, now }: ArticleCardProps) {
           </p>
         ) : null}
       </article>
-    </a>
+    </Link>
   );
 }

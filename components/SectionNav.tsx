@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Section } from "../src/types/article.js";
 
 export interface SectionNavProps {
@@ -26,8 +27,9 @@ const LINKS: NavLink[] = [
  * explicit prop instead of deriving it from `usePathname`, which would force a client
  * component onto something the caller already knows.
  *
- * Plain `<a>` tags, matching `ArticleCard`'s internal-link convention, rather than `next/link` --
- * one navigation convention for the app's internal links, not two.
+ * `next/link`, so moving between the verticals is a soft navigation that fetches only the new
+ * page's payload instead of reloading the document. It renders an `<a>`, so `getByRole("link")`
+ * still finds these, and it needs no router mounted in a jsdom test -- verified.
  */
 export function SectionNav({ current }: SectionNavProps) {
   return (
@@ -35,7 +37,7 @@ export function SectionNav({ current }: SectionNavProps) {
       {LINKS.map((link) => {
         const isCurrent = link.section === current;
         return (
-          <a
+          <Link
             key={link.section}
             href={link.href}
             aria-current={isCurrent ? "page" : undefined}
@@ -46,7 +48,7 @@ export function SectionNav({ current }: SectionNavProps) {
             }
           >
             {link.label}
-          </a>
+          </Link>
         );
       })}
     </nav>
