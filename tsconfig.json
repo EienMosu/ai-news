@@ -10,5 +10,5 @@
     "types": ["node"],
     "outDir": "dist"
   },
-  "include": ["src", "tests", "scripts", "infra"]
+  "include": ["src", "tests", "scripts", "infra", "next.config.ts"]
 }
