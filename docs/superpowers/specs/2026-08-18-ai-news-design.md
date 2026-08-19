@@ -684,14 +684,33 @@ day one** — the value of a backup is entirely in it having run before it was n
 
 | Range | Source | Cost |
 |---|---|---|
-| Last 30 days | GSI1, one Query per day partition | ~30 queries |
-| Older | the NDJSON exports | one HTTP GET per month, filtered in memory, zero DynamoDB reads |
+| Last 30 days | GSI1, one Query per day partition | ~30 queries, ~1,500 RRU (~$0.0002) per search |
+| Older | the NDJSON exports | one HTTP GET **per day**, filtered in memory, zero DynamoDB reads |
 
 > **[revised]** The original plan — query GSI1 across a date range and filter in the route
 > handler — does not scale. A Query needs one exact partition key value, so a year-long
 > search is 365 queries reading ~6,800 RCU, and a `FilterExpression` would not help:
 > filters are applied *after* the read, so they cost the same capacity. The backup
 > artifact doubles as the deep-search index, so one mechanism serves both needs.
+
+> **[revised]** "One HTTP GET per month" described an artifact that does not exist.
+> `src/lib/rank/backup.ts` writes **one file per day** — `archive/<day>.ndjson` — so a month is
+> ~31 GETs, not one. Measured: `archive/2026-08-18.ndjson` is 269 KB for 264 articles, ~1 KB
+> each. A year would therefore be 365 requests and ~98 MB, which does not fit a Vercel Hobby
+> function's 60-second cap or its memory, so the original sentence understated the deep-search
+> cost by a factor of ~30.
+>
+> The intent survives the correction: **search the archive a month at a time.** One month is
+> ~31 concurrent GETs and ~8 MB, which is comfortable. A range longer than that is refused with
+> a message asking the reader to narrow it, rather than silently truncating results — a search
+> that quietly returns part of the archive is worse than one that says it will not run.
+>
+> The backup repository is **public**, verified against the unauthenticated GitHub API, so the
+> archive branch needs no token. That matters: the deep-search path must never be a reason to
+> put a credential in the web app.
+>
+> Not fixed here: adding monthly rollups to the backup would restore the original one-GET-per-
+> month shape and is the right long-term answer. It is Lambda work, outside the UI plan.
 
 Queries must handle `LastEvaluatedKey`. DynamoDB's 1 MB page limit applies before
 filtering, and unhandled pagination silently returns partial results.
