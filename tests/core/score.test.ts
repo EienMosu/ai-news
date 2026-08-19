@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeScore, WEIGHTS } from "../../src/lib/core/score.js";
+import { computeRecency, computeScore, WEIGHTS } from "../../src/lib/core/score.js";
 
 const NOW = new Date("2026-08-18T12:00:00.000Z");
 
@@ -147,5 +147,39 @@ describe("computeScore", () => {
     const equivalent = computeScore({ ...base, llmImportance: 80, corroborationToday: 1 });
     expect(mixed.scoreVersion).toBe("v1-degraded");
     expect(mixed.score).toBe(equivalent.score);
+  });
+});
+
+// Extracted (Task 6 fix round 1, finding F1) so the story page's ScoreSignals panel can show
+// the same recency term computeScore uses, rather than a second copy of this formula. These
+// pin the function's own behaviour directly; computeScore's tests above already prove the
+// refactor left computeScore's own results unchanged.
+describe("computeRecency", () => {
+  it("is exactly 1 at age zero", () => {
+    expect(computeRecency(NOW.toISOString(), NOW.toISOString(), NOW)).toBe(1);
+  });
+
+  it("halves at exactly one half-life (24h)", () => {
+    const publishedAt = new Date(NOW.getTime() - 24 * 3_600_000).toISOString();
+    expect(computeRecency(publishedAt, NOW.toISOString(), NOW)).toBeCloseTo(0.5, 10);
+  });
+
+  it("falls back to ingestedAt when publishedAt is null", () => {
+    const ingestedAt = new Date(NOW.getTime() - 24 * 3_600_000).toISOString();
+    expect(computeRecency(null, ingestedAt, NOW)).toBeCloseTo(0.5, 10);
+  });
+
+  it("falls back to ingestedAt when publishedAt does not parse", () => {
+    const ingestedAt = new Date(NOW.getTime() - 24 * 3_600_000).toISOString();
+    expect(computeRecency("not a date", ingestedAt, NOW)).toBeCloseTo(0.5, 10);
+  });
+
+  it("clamps a future publishedAt to age zero rather than a value above 1", () => {
+    const future = new Date(NOW.getTime() + 48 * 3_600_000).toISOString();
+    expect(computeRecency(future, NOW.toISOString(), NOW)).toBe(1);
+  });
+
+  it("returns 0, not NaN, when neither timestamp parses", () => {
+    expect(computeRecency("not a date", "also not a date", NOW)).toBe(0);
   });
 });

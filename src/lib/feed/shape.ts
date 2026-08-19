@@ -124,10 +124,14 @@ export function bySection(articles: FeedArticle[], section: Section): FeedArticl
  * `__self__:` id would fuse every unclustered article of the day into one fake story, since
  * several articles can carry the same placeholder.
  *
- * Kept private and shared by `clusterSiblings` and `hasCorroboration` so "what counts as a
- * real cluster" is defined in exactly one place -- a UI predicate must never reimplement it.
+ * Shared by `clusterSiblings` and `hasCorroboration` so "what counts as a real cluster" is
+ * defined in exactly one place -- a UI predicate must never reimplement it. Exported (Task 6
+ * fix round 1, finding F4) so `app/article/[urlHash]/page.tsx` can check this BEFORE issuing
+ * the day's `getDay` query, rather than issuing it unconditionally and discarding the result
+ * via `clusterSiblings`'s own internal check -- the same guard, run one step earlier, on data
+ * (`clusterId`) already in hand from the `GetItem` that fetched the article itself.
  */
-function isRealCluster(clusterId: string | null): boolean {
+export function isRealCluster(clusterId: string | null): boolean {
   return clusterId !== null && !clusterId.startsWith("__self__:");
 }
 
