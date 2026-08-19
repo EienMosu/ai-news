@@ -11,7 +11,10 @@
     "dry-run": "node --experimental-strip-types --import ./scripts/register-ts-extension-resolve-hook.mjs scripts/dry-run.ts",
     "smoke": "node --experimental-strip-types --import ./scripts/register-ts-extension-resolve-hook.mjs scripts/smoke.ts",
     "cdk": "cdk",
-    "synth": "cdk synth"
+    "synth": "cdk synth",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   },
   "keywords": [],
   "author": "",
@@ -21,12 +24,16 @@
     "@aws-sdk/client-bedrock-runtime": "^3.1112.0",
     "@aws-sdk/client-scheduler": "^3.1112.0",
     "@aws-sdk/client-sns": "^3.1112.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "aws-cdk": "^2.1137.0",
     "aws-cdk-lib": "^2.265.0",
     "aws-sdk-client-mock": "^4.1.0",
     "constructs": "^10.8.1",
     "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   },
@@ -36,6 +43,9 @@
     "@aws-sdk/client-ssm": "^3.1112.0",
     "@aws-sdk/lib-dynamodb": "^3.1112.0",
     "fast-xml-parser": "^5.11.0",
+    "next": "^16.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "zod": "^4.4.3"
   },
   "pnpm": {

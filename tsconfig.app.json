@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "react", "react-dom"],
+    "plugins": [{ "name": "next" }],
+    "noEmit": true,
+    "incremental": true,
+    "allowJs": true
+  },
+  "include": ["app", "components", "src/lib/feed"],
+  "exclude": ["node_modules"]
+}
