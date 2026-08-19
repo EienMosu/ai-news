@@ -1,0 +1,197 @@
+import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { mockClient } from "aws-sdk-client-mock";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { __setDocClient } from "../../src/lib/store/client.js";
+import {
+  getArchive, getArticle, getDay, getFeed, getRunStatus,
+} from "../../src/lib/feed/read.js";
+
+const HASH = "b".repeat(64);
+
+const dayMetaItem = (over: Record<string, unknown> = {}) => ({
+  day: "2020-01-01", status: "complete", articleCount: 1,
+  llmRanked: 1, truncated: 0, llmStatus: "ok", runId: "r1", completedAt: "2020-01-01T00:00:00.000Z",
+  ...over,
+});
+
+const rawArticle = (over: Record<string, unknown> = {}) => ({
+  pk: `ART#${HASH}`, sk: "A", title: "T", summary: "s", imageUrl: null,
+  url: "https://e.com/p", source: "techcrunch", sourceName: "TechCrunch",
+  category: "news", section: "ai", publishedAt: "2020-01-01T09:00:00.000Z",
+  clusterId: null, corroborationToday: null, whyItMatters: null, score: 500,
+  scoreVersion: "v1", points: null, pointsImputed: true, llmImportance: null,
+  firstSeenAt: "2020-01-01T10:00:00.000Z",
+  ...over,
+});
+
+const ddb = mockClient(DynamoDBDocumentClient);
+
+beforeEach(() => {
+  ddb.reset();
+  process.env.TABLE_NAME = "the-table";
+  __setDocClient(ddb as unknown as DynamoDBDocumentClient);
+});
+
+afterEach(() => {
+  delete process.env.TABLE_NAME;
+  __setDocClient(undefined);
+});
+
+describe("getFeed", () => {
+  it("queries the day getLatestCompleteDay names, never a computed date", async () => {
+    // The mocked pointer names 2020-01-01, nowhere near "today" -- if getFeed ever computed
+    // its own date instead of following the pointer, this assertion catches it regardless
+    // of what day the test happens to run on.
+    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem()] });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+    await getFeed("ai");
+
+    const dayQuery = ddb.commandCalls(QueryCommand)
+      .find((c) => c.args[0].input.IndexName === "feed-by-day")!;
+    expect(dayQuery.args[0].input.ExpressionAttributeValues![":d"]).toBe("DAY#2020-01-01");
+  });
+
+  it("returns a partial day's status and counts rather than swallowing them", async () => {
+    ddb.on(QueryCommand).resolves({
+      Items: [dayMetaItem({ status: "partial", llmRanked: 2, truncated: 3 })],
+    });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+    const result = await getFeed("ai");
+
+    expect(result.status).toBe("partial");
+    expect(result.day).toBe("2020-01-01");
+    expect(result.llmRanked).toBe(2);
+    expect(result.truncated).toBe(3);
+  });
+
+  it("filters to the requested section via bySection, not by returning everything", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem()] });
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({
+      Items: [
+        rawArticle({ pk: `ART#${"a".repeat(64)}`, section: "ai" }),
+        rawArticle({ pk: `ART#${"c".repeat(64)}`, section: "design" }),
+      ],
+    });
+
+    const result = await getFeed("design");
+
+    expect(result.articles).toHaveLength(1);
+    expect(result.articles[0]!.urlHash).toBe("c".repeat(64));
+  });
+
+  it("returns an empty result rather than throwing when no day has ranked yet", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [] });
+
+    const result = await getFeed("ai");
+
+    expect(result).toEqual({ articles: [], day: null, status: null, llmRanked: null, truncated: null });
+  });
+
+  it("throws a clear error naming TABLE_NAME when it is not set", async () => {
+    delete process.env.TABLE_NAME;
+    await expect(getFeed("ai")).rejects.toThrow(/TABLE_NAME/);
+  });
+});
+
+describe("getArticle", () => {
+  it("reads the base table with GetCommand, not the feed-by-day index", async () => {
+    ddb.on(GetCommand).resolves({ Item: rawArticle() });
+
+    await getArticle(HASH);
+
+    const call = ddb.commandCalls(GetCommand)[0]!.args[0].input;
+    expect(call.TableName).toBe("the-table");
+    expect(call.Key).toEqual({ pk: `ART#${HASH}`, sk: "A" });
+    // GetCommandInput has no IndexName field at all -- the cast only widens the type for the
+    // assertion, it does not change what was actually sent to the client.
+    expect((call as Record<string, unknown>).IndexName).toBeUndefined();
+  });
+
+  it("maps the full item through toFeedArticle, not just the projected fields", async () => {
+    ddb.on(GetCommand).resolves({ Item: rawArticle({ whyItMatters: "Because." }) });
+
+    const article = await getArticle(HASH);
+
+    expect(article?.urlHash).toBe(HASH);
+    expect(article?.whyItMatters).toBe("Because.");
+  });
+
+  it("returns null, never throws, for a missing article", async () => {
+    ddb.on(GetCommand).resolves({});
+    expect(await getArticle(HASH)).toBeNull();
+  });
+});
+
+describe("getDay", () => {
+  it("looks up META#DAY by the exact date given", async () => {
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+    ddb.on(GetCommand).resolves({ Item: dayMetaItem({ day: "2019-03-04", status: "complete" }) });
+
+    await getDay("2019-03-04");
+
+    const call = ddb.commandCalls(GetCommand)[0]!.args[0].input;
+    expect(call.Key).toEqual({ pk: "META#DAY", sk: "2019-03-04" });
+  });
+
+  it("returns status null when articles exist but no META#DAY record does", async () => {
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [rawArticle()] });
+    ddb.on(GetCommand).resolves({});
+
+    const result = await getDay("2026-08-01");
+
+    expect(result.day).toBe("2026-08-01");
+    expect(result.status).toBeNull();
+    expect(result.llmRanked).toBeNull();
+    expect(result.truncated).toBeNull();
+    expect(result.articles).toHaveLength(1);
+  });
+
+  it("carries the found DayMeta's status through when a record exists", async () => {
+    ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+    ddb.on(GetCommand).resolves({
+      Item: dayMetaItem({ day: "2026-08-01", status: "partial", llmRanked: 4, truncated: 1 }),
+    });
+
+    const result = await getDay("2026-08-01");
+
+    expect(result.status).toBe("partial");
+    expect(result.llmRanked).toBe(4);
+    expect(result.truncated).toBe(1);
+  });
+});
+
+describe("getArchive", () => {
+  it("wraps listDays, passing the limit through and returning its days unchanged", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [dayMetaItem()] });
+
+    const days = await getArchive(5);
+
+    expect(days).toEqual([dayMetaItem()]);
+    expect(ddb.commandCalls(QueryCommand)[0]!.args[0].input.Limit).toBe(5);
+  });
+});
+
+describe("getRunStatus", () => {
+  const lastRunItem = {
+    pk: "META#lastRun", sk: "A", startedAt: "2026-08-01T00:00:00.000Z", durationMs: 100,
+    perSourceCounts: {}, filtered: {}, quarantined: {}, llmStatus: "ok",
+    itemsWritten: 10, itemsFailed: 0, errors: [],
+  };
+
+  it("reads META#lastRun / A and maps the item", async () => {
+    ddb.on(GetCommand).resolves({ Item: lastRunItem });
+
+    const status = await getRunStatus();
+
+    expect(ddb.commandCalls(GetCommand)[0]!.args[0].input.Key).toEqual({ pk: "META#lastRun", sk: "A" });
+    expect(status?.startedAt).toBe("2026-08-01T00:00:00.000Z");
+    expect(status?.itemsWritten).toBe(10);
+  });
+
+  it("returns null rather than throwing when the pipeline has never run", async () => {
+    ddb.on(GetCommand).resolves({});
+    expect(await getRunStatus()).toBeNull();
+  });
+});
