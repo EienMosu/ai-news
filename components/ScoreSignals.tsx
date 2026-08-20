@@ -62,63 +62,63 @@ export function ScoreSignals({
   recency,
 }: ScoreSignalsProps) {
   return (
-    <dl data-testid="score-signals" className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5 text-sm">
-      <dt className="text-neutral-500">Source weight</dt>
-      <dd data-testid="source-weight" className="text-neutral-900">
+    <dl data-testid="score-signals" className="grid grid-cols-[max-content_1fr] gap-x-5 gap-y-2.5 border-y border-current/20 py-4">
+      <dt className="apparatus opacity-70">Source weight</dt>
+      <dd data-testid="source-weight" className="apparatus">
         {category !== null ? (
           `${SOURCE_WEIGHTS[category]} (${category})`
         ) : (
-          <span className="text-neutral-400">unknown source category</span>
+          <span className="apparatus opacity-70">unknown source category</span>
         )}
       </dd>
 
-      <dt className="text-neutral-500">LLM importance</dt>
+      <dt className="apparatus opacity-70">LLM importance</dt>
       {/* `null` here is, in the current pipeline, exactly the degraded case (`isUnranked`):
        *  the model never scored this article and a neutral 50 was substituted into the score
        *  in its place. Worded as "not scored", not "unknown" or blank, so this row alone
        *  explains its own absence even if a reader never notices the separate degraded-ranking
        *  note the story page renders next to this panel's heading. */}
-      <dd data-testid="llm-importance" className="text-neutral-900">
+      <dd data-testid="llm-importance" className="apparatus">
         {llmImportance !== null ? (
           `${llmImportance} / 100`
         ) : (
-          <span className="text-neutral-400">not scored (ranking has not run for this article yet)</span>
+          <span className="apparatus opacity-70">not scored (ranking has not run for this article yet)</span>
         )}
       </dd>
 
-      <dt className="text-neutral-500">Corroboration today</dt>
-      <dd data-testid="corroboration-today" className="text-neutral-900">
+      <dt className="apparatus opacity-70">Corroboration today</dt>
+      <dd data-testid="corroboration-today" className="apparatus">
         {corroborationToday !== null ? (
           `${corroborationToday} ${corroborationToday === 1 ? "source" : "sources"}`
         ) : (
-          <span className="text-neutral-400">not available</span>
+          <span className="apparatus opacity-70">not available</span>
         )}
       </dd>
 
-      <dt className="text-neutral-500">Engagement</dt>
+      <dt className="apparatus opacity-70">Engagement</dt>
       {/* The imputed branch is checked first and independently of `points`: `pointsImputed`
        *  is the fact that decides "measured or guessed", and must render distinctly from any
        *  measured value, including a genuine 0 -- see the module doc comment. */}
-      <dd data-testid="engagement" className="text-neutral-900">
+      <dd data-testid="engagement" className="apparatus">
         {pointsImputed ? (
-          <span data-testid="engagement-imputed" className="text-neutral-400">
+          <span data-testid="engagement-imputed" className="opacity-70">
             not measured (source reports no engagement data; treated as neutral)
           </span>
         ) : points !== null ? (
           `${points} points (measured)`
         ) : (
-          <span className="text-neutral-400">unknown</span>
+          <span className="apparatus opacity-70">unknown</span>
         )}
       </dd>
 
-      <dt className="text-neutral-500">Recency</dt>
+      <dt className="apparatus opacity-70">Recency</dt>
       {/* Never "not available" -- see the prop doc comment. The "(right now)" qualifier is not
        *  decoration: this number keeps decaying after the article was last ranked, so it is
        *  not the frozen figure that actually produced the stored score, and saying so is the
        *  same honesty rule applied to a signal that changes on its own rather than one that is
        *  simply missing. */}
-      <dd data-testid="recency" className="text-neutral-900">
-        {recency.toFixed(2)} <span className="text-neutral-400">(right now -- decays between rankings)</span>
+      <dd data-testid="recency" className="apparatus">
+        {recency.toFixed(2)} <span className="apparatus opacity-70">(right now -- decays between rankings)</span>
       </dd>
     </dl>
   );

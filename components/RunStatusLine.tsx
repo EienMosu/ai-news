@@ -73,7 +73,7 @@ export async function RunStatusLine({ now }: RunStatusLineProps) {
 
   if (statusResult.status === "rejected") {
     return (
-      <p data-testid="run-status-unavailable" className="mb-6 text-xs text-neutral-400">
+      <p data-testid="run-status-unavailable" className="apparatus mb-9 opacity-70">
         Run status unavailable.
       </p>
     );
@@ -82,7 +82,7 @@ export async function RunStatusLine({ now }: RunStatusLineProps) {
   const status = statusResult.value;
   if (status === null) {
     return (
-      <p data-testid="run-status-empty" className="mb-6 text-xs text-neutral-400">
+      <p data-testid="run-status-empty" className="apparatus mb-9 opacity-70">
         No ingest run recorded yet.
       </p>
     );
@@ -95,16 +95,18 @@ export async function RunStatusLine({ now }: RunStatusLineProps) {
   const summary = summarizeRunStatus(status, latestDay, now);
 
   return (
-    <div data-testid="run-status" className="mb-6 text-xs text-neutral-500">
-      <p data-testid="run-status-summary">
+    <div data-testid="run-status">
+      <p data-testid="run-status-summary" className="apparatus opacity-90" data-numeric>
         last run {summary.relativeTime} · {summary.itemsWritten} items ·{" "}
         {summary.producingCount}/{summary.totalSources} sources · {summary.llmLine}
       </p>
       {summary.notable.length > 0 ? (
-        <ul data-testid="run-status-notable" className="mt-1 space-y-0.5">
+        <ul data-testid="run-status-notable" className="mt-2.5 flex flex-wrap gap-2">
           {summary.notable.map(({ source, state }) => (
             <li key={source} className={SOURCE_STATE_CLASS[state]}>
-              {source}: {SOURCE_STATE_LABEL[state]}
+              <span className="stamp">
+                {source}: {SOURCE_STATE_LABEL[state]}
+              </span>
             </li>
           ))}
         </ul>

@@ -73,7 +73,8 @@ export function FeedArchive({ section, results, failedDays, now, days, basePath 
   return (
     <>
       {failedDays > 0 ? (
-        <p data-testid="feed-days-failed" className="mb-4 text-sm text-amber-700">
+        <p data-testid="feed-days-failed" className="apparatus mb-6 flex flex-wrap items-center gap-2 opacity-85">
+          <span className="stamp">Incomplete</span>
           {failedDays} {failedDays === 1 ? "day" : "days"} could not be loaded just now; the
           sections below may be missing {failedDays === 1 ? "that day" : "those days"}.
         </p>
@@ -85,7 +86,7 @@ export function FeedArchive({ section, results, failedDays, now, days, basePath 
         <Link
           href={`${basePath}?days=${nextDays}`}
           data-testid="load-more-days"
-          className="mt-2 inline-block text-sm text-neutral-500 underline hover:text-neutral-900"
+          className="apparatus mt-2 inline-block border border-current/45 px-4 py-2.5 no-underline transition-colors duration-200 hover:bg-[var(--color-paper)] hover:text-[var(--field)]"
         >
           Load older days
         </Link>

@@ -65,7 +65,7 @@ function SearchForm(
 
   return (
     <form method="get" action="/search" className="mb-8 flex flex-wrap items-end gap-3 text-sm">
-      <label className="flex flex-col text-neutral-700">
+      <label className="flex flex-col opacity-85">
         Search
         <input
           type="text"
@@ -75,7 +75,7 @@ function SearchForm(
           className="mt-1 rounded border border-neutral-300 px-2 py-1"
         />
       </label>
-      <label className="flex flex-col text-neutral-700">
+      <label className="flex flex-col opacity-85">
         Section
         <select
           name="section"
@@ -87,7 +87,7 @@ function SearchForm(
           ))}
         </select>
       </label>
-      <label className="flex flex-col text-neutral-700">
+      <label className="flex flex-col opacity-85">
         Since
         <input
           type="date"
@@ -100,7 +100,7 @@ function SearchForm(
       </label>
       <button
         type="submit"
-        className="rounded bg-neutral-900 px-4 py-1.5 font-semibold text-white hover:bg-neutral-700"
+        className="rounded bg-[var(--color-paper)] px-4 py-1.5 font-semibold text-[var(--field)] hover:opacity-85"
       >
         Search
       </button>
@@ -160,11 +160,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   if (query === "") {
     return (
-      <main className="mx-auto max-w-2xl px-4 py-8">
+      <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <div className="mx-auto max-w-3xl">
         <SectionNav current={null} />
-        <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
+        <h1 className="mb-4 text-xl font-bold text-current">Search</h1>
         <SearchForm query={query} scope={scope} since={since} today={today} />
-      </main>
+        </div>
+    </main>
     );
   }
 
@@ -199,13 +201,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const results = [...recentOutcome.days, ...archiveOutcome.days];
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <div className="mx-auto max-w-3xl">
       <SectionNav current={null} />
-      <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
+      <h1 className="mb-4 text-xl font-bold text-current">Search</h1>
       <SearchForm query={query} scope={scope} since={since} today={today} />
 
       {archiveRefused ? (
-        <p data-testid="search-archive-refused" className="mb-4 text-sm text-amber-700">
+        <p data-testid="search-archive-refused" className="mb-4 text-sm opacity-90">
           That start date reaches more than {MAX_ARCHIVE_SEARCH_DAYS} days into the archive in
           one search, so the archive was not searched. Pick a "Since" date within the last{" "}
           {RECENT_WINDOW_DAYS + MAX_ARCHIVE_SEARCH_DAYS} days to include it.
@@ -213,7 +216,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ) : null}
 
       {recentOutcome.failedDays > 0 ? (
-        <p data-testid="search-recent-failed" className="mb-4 text-sm text-amber-700">
+        <p data-testid="search-recent-failed" className="mb-4 text-sm opacity-90">
           {recentOutcome.failedDays} recent {recentOutcome.failedDays === 1 ? "day" : "days"}{" "}
           could not be searched just now; the results below may be missing matches from{" "}
           {recentOutcome.failedDays === 1 ? "that day" : "those days"}.
@@ -221,7 +224,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ) : null}
 
       {archiveOutcome.failedDays > 0 ? (
-        <p data-testid="search-archive-failed" className="mb-4 text-sm text-amber-700">
+        <p data-testid="search-archive-failed" className="mb-4 text-sm opacity-90">
           {archiveOutcome.failedDays} archive {archiveOutcome.failedDays === 1 ? "day" : "days"}{" "}
           could not be searched just now; the results below may be missing matches from{" "}
           {archiveOutcome.failedDays === 1 ? "that day" : "those days"}.
@@ -229,12 +232,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ) : null}
 
       {results.length === 0 ? (
-        <p data-testid="search-empty" className="text-neutral-600">
+        <p data-testid="search-empty" className="opacity-80">
           No results for &quot;{query}&quot;.
         </p>
       ) : (
         results.map((r) => <DaySection key={r.day} day={r.day} articles={r.articles} now={now} />)
       )}
+      </div>
     </main>
   );
 }

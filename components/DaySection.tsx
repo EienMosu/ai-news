@@ -12,36 +12,42 @@ export interface DaySectionProps {
 }
 
 /**
- * One day's worth of cards. Presentational only -- no data fetching.
+ * One day, as the sheet it was judged on.
  *
- * The header count is `articles.length`, the array this component is actually rendering --
- * never `META#DAY.articleCount`, and never a `FeedResult`'s `llmRankedInDay`/`truncatedInDay`.
- * All three of those are day totals across BOTH sections (ai + design), because ranking and
- * corroboration run once per day, not once per vertical (see the doc comment on `FeedResult`
- * in src/lib/feed/read.ts). Showing one of those next to a single-section list would print a
- * number that matches nothing on screen -- a live misreporting hazard, not a cosmetic slip.
+ * The count is `articles.length` -- what this section actually renders. Never
+ * `META#DAY.articleCount` and never `llmRankedInDay`, both of which total BOTH verticals; a day
+ * total printed beside a section-filtered list is a number that matches nothing on screen.
  *
- * The header date links to `/day/${day}` (fix round 1, F3) -- before this, nothing inside the
- * app pointed at that route at all, so it was reachable only by typing a URL. The link is a
- * property of the date, not of which vertical is showing it, so this is unconditional: a
- * `DaySection` rendered on the day page itself simply links to its own URL, the same as any
- * other same-page anchor would.
+ * The first entry is the day's lead and renders inverted, on the field rather than the paper.
+ * That is the whole ranking device: no entry is set larger than another, so the reader's eye is
+ * pulled by ground, and every other row stays comparable at one size.
  */
 export function DaySection({ day, articles, now }: DaySectionProps) {
   return (
-    <section className="mb-8">
-      <header className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-xl font-bold text-neutral-900">
-          <Link href={`/day/${day}`} className="hover:underline">{day}</Link>
-        </h2>
-        <span className="text-sm text-neutral-500">
-          {articles.length} {articles.length === 1 ? "story" : "stories"}
-        </span>
-      </header>
+    <section className="mb-10 sm:mb-14">
+      <div
+        data-surface="paper"
+        className="px-4 pb-2 pt-5 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] sm:px-7 sm:pb-4 sm:pt-7"
+      >
+        <header className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 sm:mb-6">
+          <h2 className="font-[family-name:var(--font-display)] text-[1.75rem] font-extrabold leading-none tracking-[-0.028em] sm:text-[2.25rem]">
+            <Link href={`/day/${day}`} className="no-underline hover:underline" data-numeric>
+              {day}
+            </Link>
+          </h2>
+          <span className="apparatus opacity-70" data-numeric>
+            {articles.length} {articles.length === 1 ? "story" : "stories"}
+          </span>
+        </header>
 
-      <div className="flex flex-col gap-4">
-        {articles.map((article) => (
-          <ArticleCard key={article.urlHash} article={article} now={now} />
+        {articles.map((article, i) => (
+          <ArticleCard
+            key={article.urlHash}
+            article={article}
+            now={now}
+            rank={i + 1}
+            lead={i === 0}
+          />
         ))}
       </div>
     </section>

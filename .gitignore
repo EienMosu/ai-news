@@ -12,3 +12,6 @@ cdk.out/
 *.tsbuildinfo
 next-env.d.ts
 coverage/
+
+# Design-skill scratch (question logs), not project state
+.impeccable/

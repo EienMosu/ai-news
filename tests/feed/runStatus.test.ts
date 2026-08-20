@@ -59,13 +59,29 @@ describe("SOURCE_STATE_CLASS -- only amber and grey, never red", () => {
     }
   });
 
-  it("quiet is grey, not amber -- spec §8: a reliably-quiet source is not a fault", () => {
-    expect(SOURCE_STATE_CLASS.quiet).toBe("text-neutral-400");
+  // These used to assert Tailwind colour names. The redesign moved state off hue entirely --
+  // one vertical is drenched vermilion, where a red or amber warning cannot be seen, and the
+  // other is drenched ink blue, where amber is the only thing on the page that glows. State now
+  // ships as a stamp whose WORD carries the meaning (SOURCE_STATE_LABEL), and this map only sets
+  // how hard the stamp is pressed. The product claims below are unchanged; only the mechanism
+  // they are asserted against moved.
+
+  it("quiet is pressed softer than a fault -- spec §8: a reliably-quiet source is not a fault", () => {
+    expect(SOURCE_STATE_CLASS.quiet).not.toBe(SOURCE_STATE_CLASS.drift);
+    expect(SOURCE_STATE_CLASS.quiet).toBe("opacity-70");
   });
 
-  it("drift, fetchFailed and dead all render the same amber, the cap this task chose", () => {
+  it("drift, fetchFailed and dead are pressed identically, the cap this layer can honestly claim", () => {
     expect(SOURCE_STATE_CLASS.drift).toBe(SOURCE_STATE_CLASS.fetchFailed);
     expect(SOURCE_STATE_CLASS.fetchFailed).toBe(SOURCE_STATE_CLASS.dead);
+  });
+
+  it("carries no colour at all, so neither field can swallow a state", () => {
+    // The regression this guards: someone reintroducing `text-amber-600` here would make the
+    // signal invisible on /design and glaring on /, from one map neither page controls.
+    for (const value of Object.values(SOURCE_STATE_CLASS)) {
+      expect(value).not.toMatch(/red|rose|amber|orange|yellow|green|text-/);
+    }
   });
 });
 
