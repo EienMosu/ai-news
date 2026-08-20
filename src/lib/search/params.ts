@@ -42,7 +42,7 @@ export function parseSectionParam(raw: string | string[] | undefined, fallback: 
  * bare pass-through of unvalidated user input into a range that gets walked one day at a time.
  *
  * A calendar-valid `since` that is merely far in the past (e.g. `?since=1990-01-01`) is passed
- * through unclamped, on purpose: `splitSearchRange` and `exceedsArchiveBound` already turn that
+ * through unclamped, on purpose: `exceedsArchiveBoundForRange` already turns that
  * into the correct, user-visible "too far back, narrow your range" refusal (Spec §8 decision 2),
  * and silently clamping it here to the widest runnable window would replace an honest refusal
  * with an answer the reader never asked for and is not told was narrowed -- the same

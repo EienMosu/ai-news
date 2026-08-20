@@ -195,6 +195,31 @@ describe("SearchPage -- recent/archive split (decisions 1 and 2)", () => {
     expect(screen.queryByTestId("search-archive-refused")).toBeNull();
   });
 
+  describe("an absurd but calendar-valid since renders the refusal page, not a crash -- fix round 2", () => {
+    // Task 8 fix round 2: `?since=0000-01-01` is calendar-valid (isValidDay correctly does not
+    // reject a real, if extreme, date), and the archive portion of that range is enormous -- the
+    // decision must be made cheaply, before any day-by-day walk, or this exact request throws an
+    // unhandled error instead of rendering the refusal page every other too-long range already
+    // gets. Awaiting `SearchPage` directly (not wrapped in a try/catch) is itself the assertion:
+    // if the page throws, this test fails with that error, same as any other unexpected throw.
+    it("renders the refusal message instead of throwing", async () => {
+      vi.mocked(searchRecentDays).mockResolvedValue([]);
+      const rendered = render(await SearchPage({
+        searchParams: searchParams({ q: "claude", since: "0000-01-01" }),
+      }));
+      expect(rendered.getByTestId("search-archive-refused")).toBeTruthy();
+      expect(searchArchiveDays).not.toHaveBeenCalled();
+    });
+
+    it("still asks searchRecentDays for exactly RECENT_WINDOW_DAYS days -- the recent half is unaffected by how extreme since is", async () => {
+      vi.mocked(searchRecentDays).mockResolvedValue([]);
+      await SearchPage({ searchParams: searchParams({ q: "claude", since: "0000-01-01" }) });
+      const [days] = vi.mocked(searchRecentDays).mock.calls[0]!;
+      expect(days).toHaveLength(RECENT_WINDOW_DAYS);
+      expect(days[0]).toBe(TODAY);
+    });
+  });
+
   describe("?since= narrows the recent half too -- fix round 1, finding 4", () => {
     it("asks searchRecentDays for fewer than RECENT_WINDOW_DAYS days when since is inside the recent window", async () => {
       // Task 8 review's mutation M10 rewired the page so the recent half always asked for the

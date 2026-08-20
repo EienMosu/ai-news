@@ -22,7 +22,7 @@ export const RECENT_WINDOW_DAYS = 30;
  * Spec §8 [revised]: the archive branch is bounded to this many calendar days per search --
  * roughly a month of NDJSON GETs, which the spec's own accounting calls "comfortable" (~31
  * concurrent requests, ~8 MB). A request whose range asks for more is refused outright (see
- * `exceedsArchiveBound`), never silently served its first `MAX_ARCHIVE_SEARCH_DAYS` days --
+ * `exceedsArchiveBoundForRange`), never silently served its first `MAX_ARCHIVE_SEARCH_DAYS` days --
  * "a search that quietly returns part of the archive is worse than one that says it will not
  * run."
  */
@@ -30,16 +30,23 @@ export const MAX_ARCHIVE_SEARCH_DAYS = 31;
 
 /**
  * A defensive ceiling on how many days `splitSearchRange` will ever walk in one call --
- * Task 8 fix round 1, finding F3. `parseSinceParam` is supposed to keep `from` within a sane
- * distance of `today`, but the day-walk's own only exit condition is "we reached `from`", and it
- * must not trust a caller's validation unconditionally: a future validation gap, a caller that
- * bypasses `parseSinceParam` entirely, or simply `?since=0000-01-01` (a real, valid calendar
- * date -- `isValidDay` does not and should not reject it) would otherwise walk and allocate one
- * string per day for as long as it takes to reach the given `from`, measured at ~740,000
- * iterations and ~160 ms for a year-0000 request. 10,000 days (~27 years) is far larger than any
- * legitimate call needs -- every test in this file that exercises a long-but-real range stays
- * comfortably under it -- while turning a pathological `from` into a fast, loud throw instead of
- * a slow, silent crawl.
+ * Task 8 fix round 1, finding F3, **reduced to an invariant by fix round 2**. The day-walk's own
+ * only exit condition is "we reached `from`", and it must not trust a caller unconditionally: a
+ * future validation gap, or a caller that bypasses `exceedsArchiveBoundForRange`/`isValidDay`
+ * entirely, would otherwise walk and allocate one string per day for as long as it takes to
+ * reach the given `from`.
+ *
+ * As of fix round 2, this should be **unreachable from any URL today**: the search page now
+ * calls `exceedsArchiveBoundForRange` -- an O(1) check, no walking -- *before* ever calling this
+ * function with a raw `since`, so `?since=0000-01-01` (a real, valid, merely extreme calendar
+ * date) is refused with the same message every too-long range gets, never handed to the walk at
+ * all. Fix round 1 measured the walk itself at ~740,000 iterations and ~160 ms for that exact
+ * input, reached because the only way to *learn* a range was too long used to be to walk it and
+ * see; this cap is what remains once that is no longer true -- protection against a future
+ * regression in that ordering, not the mechanism doing the deciding. 10,000 days (~27 years) is
+ * far larger than any legitimate call needs -- every test in this file that exercises a
+ * long-but-real range stays comfortably under it -- while still turning a pathological `from`
+ * (however it got here) into a fast, loud throw instead of a slow, silent crawl.
  */
 const MAX_ENUMERATION_DAYS = 10_000;
 
@@ -160,6 +167,16 @@ export interface SearchRange {
  * `from > to` (a caller error, or a `to` earlier than this app's own inception) returns two
  * empty arrays rather than throwing: there is no day in an empty range, which is a fact about
  * the input, not a failure to compute one.
+ *
+ * Task 8 fix round 2: this function is meant to be called only once a caller already knows the
+ * archive portion is within bounds (`!exceedsArchiveBoundForRange(from, to, today)`), or with a
+ * `from` deliberately substituted for a safe one (the search page uses `cutoff`, never the raw
+ * `since`, once a range is refused) -- never with a raw, unvalidated `from` straight from a
+ * request. `MAX_ENUMERATION_DAYS` below is what happens if that discipline is ever violated: a
+ * defensive invariant, not the mechanism that decides whether a range is too long. That decision
+ * belongs to `exceedsArchiveBoundForRange`, which answers it in O(1) *before* any day gets walked
+ * -- see its own doc comment for why checking `archiveDays.length` after this function had
+ * already built it was the wrong order.
  */
 export function splitSearchRange(from: string, to: string, today: string): SearchRange {
   const recentDays: string[] = [];
@@ -187,11 +204,72 @@ export function splitSearchRange(from: string, to: string, today: string): Searc
 }
 
 /**
- * True when a split range's archive portion is larger than one search should fetch (Spec §8:
- * `MAX_ARCHIVE_SEARCH_DAYS`). The caller (the search page) must refuse the whole archive branch
- * on `true` -- ask the reader to narrow the range -- rather than fetch the first
- * `MAX_ARCHIVE_SEARCH_DAYS` of `archiveDays` and quietly drop the rest.
+ * Days elapsed before Jan 1 of proleptic-Gregorian year `y`, counting from year 1 (day 0) -- the
+ * standard closed-form leap-year day count. Used only by `dayOrdinal` below, for O(1)
+ * range-length arithmetic; never for producing an actual date string (`formatDay`/`previousDay`
+ * do that, and stay just as `Date`-free).
  */
-export function exceedsArchiveBound(archiveDays: string[]): boolean {
-  return archiveDays.length > MAX_ARCHIVE_SEARCH_DAYS;
+function daysBeforeYear(y: number): number {
+  const priorYears = y - 1;
+  return 365 * priorYears + Math.floor(priorYears / 4) - Math.floor(priorYears / 100)
+    + Math.floor(priorYears / 400);
+}
+
+/**
+ * `day`'s ordinal position on the proleptic Gregorian calendar -- a plain integer, monotonic
+ * with calendar order, that turns "how many days apart are these two dates" into one
+ * subtraction instead of a day-by-day walk.
+ *
+ * Task 8 fix round 2: this is what lets `archiveDayCount`/`exceedsArchiveBoundForRange` decide a
+ * range is too long to search *before* walking it. Only a handful of month-table lookups
+ * (bounded by 12, never by how far `y` is from today), so computing it costs the same whether
+ * `day` is next week or the year 0000 -- unlike `previousDay`, which is exactly the day-by-day
+ * cost this function exists to avoid paying up front. Never used to produce a date string back,
+ * only to compare distances.
+ */
+function dayOrdinal(day: string): number {
+  const { y, m, d } = parseDay(day);
+  let ordinal = daysBeforeYear(y) + d;
+  for (let month = 1; month < m; month += 1) ordinal += daysInMonth(y, month);
+  return ordinal;
+}
+
+/**
+ * How many days in the inclusive range `[from, to]` fall in the archive (older than the last
+ * `RECENT_WINDOW_DAYS` days of `today`) -- computed via `dayOrdinal` in O(1), without walking a
+ * single day.
+ *
+ * Task 8 fix round 2: before this existed, the only way to know whether a range's archive
+ * portion was too large was to ask `splitSearchRange` to build it, one day at a time -- so a
+ * range spanning centuries paid hundreds of thousands of `previousDay` calls just to *learn* it
+ * should be refused, and hit `splitSearchRange`'s own defensive enumeration cap before the
+ * refusal path ever got a chance to run (a plain `?since=0000-01-01` threw an unhandled error
+ * instead of rendering the same refusal message a merely-too-long range already got). This
+ * function is the caller's way to ask the question cheaply, first, and only call
+ * `splitSearchRange` at all once the answer is known to be safe.
+ *
+ * `from > to` returns `0`, matching `splitSearchRange`'s own "empty range" convention.
+ */
+export function archiveDayCount(from: string, to: string, today: string): number {
+  if (from > to) return 0;
+  const cutoff = subtractDays(today, RECENT_WINDOW_DAYS - 1);
+  const archiveEnd = Math.min(dayOrdinal(to), dayOrdinal(cutoff) - 1);
+  const start = dayOrdinal(from);
+  return archiveEnd >= start ? archiveEnd - start + 1 : 0;
+}
+
+/**
+ * True when the archive portion of `[from, to]` is larger than one search should fetch (Spec §8:
+ * `MAX_ARCHIVE_SEARCH_DAYS`) -- via `archiveDayCount`, so the caller (the search page) can decide
+ * to refuse *before* ever calling `splitSearchRange` with an unbounded `from`. Task 8 fix round
+ * 2: this replaces the previous `exceedsArchiveBound(archiveDays: string[])`, which could only
+ * answer this question *after* `splitSearchRange` had already paid for the walk that produced
+ * `archiveDays` -- the wrong order for a `from` that is calendar-valid but absurdly distant
+ * (`isValidDay` correctly does not reject `"0000-01-01"`; it is a real date, just an extreme
+ * one). The caller must refuse the whole archive branch on `true` -- ask the reader to narrow
+ * the range -- rather than fetch the first `MAX_ARCHIVE_SEARCH_DAYS` of a would-be `archiveDays`
+ * and quietly drop the rest.
+ */
+export function exceedsArchiveBoundForRange(from: string, to: string, today: string): boolean {
+  return archiveDayCount(from, to, today) > MAX_ARCHIVE_SEARCH_DAYS;
 }

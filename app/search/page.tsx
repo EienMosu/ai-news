@@ -5,7 +5,7 @@ import { parseQueryParam, parseSectionParam, parseSinceParam, type SearchScope }
 import {
   MAX_ARCHIVE_SEARCH_DAYS,
   RECENT_WINDOW_DAYS,
-  exceedsArchiveBound,
+  exceedsArchiveBoundForRange,
   splitSearchRange,
   subtractDays,
 } from "../../src/lib/search/range.js";
@@ -120,19 +120,28 @@ function SearchForm(
  * so a blank submit never reaches `searchRecentDays`/`searchArchiveDays` and never costs a
  * single Query.
  *
- * `since` alone decides both halves of the range via one `splitSearchRange(since, today, today)`
- * call -- fix round 1, finding 4: `recentDays` is whatever that call classifies as "recent" for
- * *this* `since`, not an unconditional `RECENT_WINDOW_DAYS`-long list, so `?since=` narrows the
- * recent half too, at the same rate it narrows the archive half.
+ * `since` alone decides both halves of the range -- fix round 1, finding 4: whichever
+ * `splitSearchRange` call below actually runs, `recentDays` is whatever it classifies as
+ * "recent" for *this* `since`, not an unconditional `RECENT_WINDOW_DAYS`-long list, so `?since=`
+ * narrows the recent half too, at the same rate it narrows the archive half.
  *
- * The archive branch's 31-day bound (decision 2) is checked on the *archive* half only:
- * `exceedsArchiveBound` refuses to run `searchArchiveDays` and says so in a visible message,
- * but `searchRecentDays` still runs -- the last 30 days (or however many `since` narrows that
- * to) are always affordable regardless of how far back `since` reaches, so a too-wide request
- * still gets the cheap half of its answer instead of nothing at all. What it never gets is a
- * silently partial archive: the message names the bound and asks the reader to narrow `since`,
- * rather than the page fetching the first `MAX_ARCHIVE_SEARCH_DAYS` of `archiveDays` and calling
- * that "the archive searched".
+ * The archive branch's 31-day bound (decision 2) is checked on the *archive* half only, and --
+ * fix round 2 -- checked BEFORE `splitSearchRange` ever walks the range, not after:
+ * `exceedsArchiveBoundForRange(since, today, today)` answers "is this too long" in O(1), with no
+ * day-by-day walk, so a `since` that is calendar-valid but absurdly distant (`?since=0000-01-01`
+ * -- `isValidDay` correctly does not reject a real, if extreme, date) is refused the same way a
+ * merely-too-long range is, instead of `splitSearchRange` discovering the same fact the slow way
+ * and hitting its own defensive cap first. When refused, `recentDays` still comes from
+ * `splitSearchRange`, but anchored at the recent window's own `cutoff` rather than the raw
+ * (unbounded) `since` -- correct, because a refused range is by definition wider than the recent
+ * window on its own, so the recent half is unconditionally the full window either way, and safe,
+ * because that walk is always exactly `RECENT_WINDOW_DAYS` steps regardless of how far back
+ * `since` reached. `searchRecentDays` still runs either way -- the last 30 days (or however many
+ * `since` narrows that to, when not refused) are always affordable regardless of how far back
+ * `since` reaches, so a too-wide request still gets the cheap half of its answer instead of
+ * nothing at all. What it never gets is a silently partial archive: the message names the bound
+ * and asks the reader to narrow `since`, rather than the page fetching the first
+ * `MAX_ARCHIVE_SEARCH_DAYS` of `archiveDays` and calling that "the archive searched".
  *
  * A *fetch* failure partway through the archive half (fix round 1, finding 5) is not the same
  * thing as a refused range, and must not be treated the same way: `searchArchiveDays` already
@@ -159,8 +168,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     );
   }
 
-  const { recentDays, archiveDays } = splitSearchRange(since, today, today);
-  const archiveRefused = exceedsArchiveBound(archiveDays);
+  // Fix round 2: decide BEFORE walking, not after. `exceedsArchiveBoundForRange` never walks a
+  // single day -- so a `since` that reaches back centuries costs the same as one that reaches
+  // back a week. Only once we know the range is safe do we let `splitSearchRange` actually walk
+  // it; when it is not, `recentDays` still needs computing, but anchored at `cutoff` rather than
+  // the raw `since` -- see the doc comment above for why that is both correct and bounded.
+  const archiveRefused = exceedsArchiveBoundForRange(since, today, today);
+  const { recentDays, archiveDays } = archiveRefused
+    ? splitSearchRange(subtractDays(today, RECENT_WINDOW_DAYS - 1), today, today)
+    : splitSearchRange(since, today, today);
 
   const emptyArchiveOutcome: ArchiveSearchOutcome = { days: [], failedDays: 0 };
 

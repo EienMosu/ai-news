@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   MAX_ARCHIVE_SEARCH_DAYS,
   RECENT_WINDOW_DAYS,
-  exceedsArchiveBound,
+  archiveDayCount,
+  exceedsArchiveBoundForRange,
   isValidDay,
   splitSearchRange,
   subtractDays,
@@ -159,17 +160,73 @@ describe("splitSearchRange", () => {
   });
 });
 
-describe("exceedsArchiveBound", () => {
-  it("is false for an empty archive list", () => {
-    expect(exceedsArchiveBound([])).toBe(false);
+describe("archiveDayCount / exceedsArchiveBoundForRange -- fix round 2", () => {
+  const TODAY = "2026-08-19";
+
+  it("is 0 when the whole range sits inside the recent window", () => {
+    const since = subtractDays(TODAY, RECENT_WINDOW_DAYS - 1);
+    expect(archiveDayCount(since, TODAY, TODAY)).toBe(0);
+    expect(exceedsArchiveBoundForRange(since, TODAY, TODAY)).toBe(false);
   });
 
-  it("is false at exactly MAX_ARCHIVE_SEARCH_DAYS", () => {
-    expect(exceedsArchiveBound(Array.from({ length: MAX_ARCHIVE_SEARCH_DAYS }, (_, i) => String(i)))).toBe(false);
+  it("counts exactly MAX_ARCHIVE_SEARCH_DAYS archive days without exceeding the bound", () => {
+    const since = subtractDays(TODAY, RECENT_WINDOW_DAYS + MAX_ARCHIVE_SEARCH_DAYS - 1);
+    expect(archiveDayCount(since, TODAY, TODAY)).toBe(MAX_ARCHIVE_SEARCH_DAYS);
+    expect(exceedsArchiveBoundForRange(since, TODAY, TODAY)).toBe(false);
   });
 
-  it("is true one past MAX_ARCHIVE_SEARCH_DAYS", () => {
-    expect(exceedsArchiveBound(Array.from({ length: MAX_ARCHIVE_SEARCH_DAYS + 1 }, (_, i) => String(i)))).toBe(true);
+  it("is exactly MAX_ARCHIVE_SEARCH_DAYS + 1, and exceeds the bound, one day past it", () => {
+    const since = subtractDays(TODAY, RECENT_WINDOW_DAYS + MAX_ARCHIVE_SEARCH_DAYS);
+    expect(archiveDayCount(since, TODAY, TODAY)).toBe(MAX_ARCHIVE_SEARCH_DAYS + 1);
+    expect(exceedsArchiveBoundForRange(since, TODAY, TODAY)).toBe(true);
+  });
+
+  it("is 0 for an invalid range (from > to), matching splitSearchRange's own convention", () => {
+    expect(archiveDayCount("2026-08-20", "2026-08-19", TODAY)).toBe(0);
+  });
+
+  it("agrees exactly with splitSearchRange's own archiveDays.length for a range within bounds", () => {
+    // Not "close enough" -- the O(1) shortcut must be exactly consistent with the day-by-day
+    // walk it lets the caller skip, or a caller that trusts this count over the real split
+    // would be trusting a wrong number.
+    const since = subtractDays(TODAY, 40); // 30 recent + 11 archive -- comfortably within bounds
+    const { archiveDays } = splitSearchRange(since, TODAY, TODAY);
+    expect(archiveDayCount(since, TODAY, TODAY)).toBe(archiveDays.length);
+  });
+
+  it("agrees exactly with splitSearchRange when the archive portion itself straddles a century-correction boundary (2000/2001)", () => {
+    // `daysBeforeYear`'s `- Math.floor(priorYears / 100)` term only changes value when
+    // `priorYears` (== year - 1) crosses a multiple of 100 -- e.g. between year 2000
+    // (priorYears 1999, term 19) and year 2001 (priorYears 2000, term 20). Both `start`
+    // (`dayOrdinal(from)`) and `archiveEnd` must fall in years on OPPOSITE sides of such a
+    // boundary for the term to matter at all: if both land in the same year, or in different
+    // years whose `priorYears` share a hundreds bucket, the term appears identically in both
+    // ordinals and cancels out of the subtraction exactly -- confirmed directly: a first attempt
+    // at this test picked dates that both landed in year 2000, and removing the term entirely
+    // left it (and every other test in this file) green. This anchor/since pair is chosen so the
+    // *archive portion specifically* (`since` in 2000, `cutoff - 1` in 2001) straddles the
+    // boundary, not just the overall requested range.
+    const anchor = "2001-03-01"; // cutoff = anchor - 29 = 2001-01-31 (year 2001)
+    const since = subtractDays(anchor, 100); // 2000-11-21 (year 2000) -- archive start
+    const { archiveDays } = splitSearchRange(since, anchor, anchor);
+    expect(archiveDayCount(since, anchor, anchor)).toBe(archiveDays.length);
+  });
+
+  describe("the reachable-crash case this round fixes", () => {
+    // Task 8 fix round 2: `?since=0000-01-01` is calendar-valid (isValidDay correctly does not
+    // reject it) and used to reach `splitSearchRange` unchanged, which enumerated ~740,000 days
+    // and then hit its own defensive cap -- an unhandled throw, reachable from a plain URL,
+    // instead of the same refusal-with-message page a merely-too-long range already got.
+    // `exceedsArchiveBoundForRange` must answer this in O(1), without walking, so the caller
+    // never has to find out the slow way.
+    it("returns true (never throws) for an absurd but calendar-valid since, computed without walking a single day", () => {
+      expect(() => exceedsArchiveBoundForRange("0000-01-01", TODAY, TODAY)).not.toThrow();
+      expect(exceedsArchiveBoundForRange("0000-01-01", TODAY, TODAY)).toBe(true);
+    });
+
+    it("archiveDayCount itself does not throw for the same input", () => {
+      expect(() => archiveDayCount("0000-01-01", TODAY, TODAY)).not.toThrow();
+    });
   });
 });
 
@@ -232,13 +289,19 @@ describe("isValidDay -- fix round 1, finding 3", () => {
   });
 });
 
-describe("splitSearchRange's independent iteration cap -- fix round 1, finding 3", () => {
-  // Task 8 review reproduced: `?since=0000-01-01` is a real, valid calendar date (isValidDay
-  // does not and should not reject it), so it reaches this function unchanged and used to walk
-  // ~740,000 days before exceedsArchiveBound ever got a chance to refuse it -- a free
-  // CPU/allocation amplifier on a public URL. This cap must fire long before that, and must not
-  // fire on any legitimate range this file already exercises elsewhere (the longest of which is
-  // a few dozen days).
+describe("splitSearchRange's independent iteration cap -- fix round 1, finding 3, now a backstop as of fix round 2", () => {
+  // Task 8 fix round 1 reproduced: `?since=0000-01-01` is a real, valid calendar date (isValidDay
+  // does not and should not reject it), so it reached this function unchanged and walked ~740,000
+  // days before a bound check ever got a chance to refuse it -- a free CPU/allocation amplifier
+  // on a public URL. Fix round 2 moved the actual decision in front of this function
+  // (`exceedsArchiveBoundForRange`, O(1), no walking) -- as of that fix, no request reachable
+  // from a URL should ever cause `splitSearchRange` itself to be called with a `from` this
+  // extreme. This describe block is what is left to prove: that the cap below still exists and
+  // still fires *directly on this function*, independent of whatever the caller does or forgets
+  // to do first -- the fix round 2 review's explicit second pin ("the enumeration guard is still
+  // there and still fires if the length check is removed"). Calling `splitSearchRange` directly
+  // here, bypassing `exceedsArchiveBoundForRange` entirely, is exactly what "the length check is
+  // removed" looks like from this function's own point of view.
   it("throws rather than enumerating hundreds of thousands of days for an extreme range", () => {
     expect(() => splitSearchRange("0000-01-01", "2026-08-19", "2026-08-19")).toThrow(
       /exceeds .* days/,
@@ -247,8 +310,8 @@ describe("splitSearchRange's independent iteration cap -- fix round 1, finding 3
 
   it("does not throw for a long-but-realistic multi-year range", () => {
     // Comfortably above MAX_ARCHIVE_SEARCH_DAYS (so it would already be refused by
-    // exceedsArchiveBound) but nowhere near the defensive cap -- proves the cap does not
-    // interfere with a merely-long, legitimate range.
+    // exceedsArchiveBoundForRange, were a caller to check first) but nowhere near the defensive
+    // cap -- proves the cap does not interfere with a merely-long, legitimate range.
     expect(() => splitSearchRange("2020-01-01", "2026-08-19", "2026-08-19")).not.toThrow();
   });
 });
