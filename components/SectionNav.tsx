@@ -26,7 +26,7 @@ interface NavLink {
 }
 
 const MASTHEAD_CLASS =
-  "font-[family-name:var(--font-display)] text-[2.5rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:text-[3.5rem]";
+  "font-[family-name:var(--font-display)] text-[2.5rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:text-[3rem]";
 
 function Masthead({ asHeading }: { asHeading: boolean }) {
   return asHeading ? (

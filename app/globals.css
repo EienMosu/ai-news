@@ -129,15 +129,10 @@ a {
 }
 
 /*
-  The paper panel. A sheet laid on the field, with a faint graph tint — the drafting-canvas move
-  from Illoca, kept faint enough that prose sits on it comfortably.
+  The paper panel. A clean sheet laid on the field; the shadow does the lifting.
 */
 [data-surface="paper"] {
   background-color: var(--color-paper);
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--color-ink) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--color-ink) 5%, transparent) 1px, transparent 1px);
-  background-size: 1.5rem 1.5rem;
   color: var(--color-ink);
 }
 
