@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NormalizedArticleSchema, SOURCE_WEIGHTS } from "../../src/types/article.js";
+import { NormalizedArticleSchema, SOURCE_WEIGHTS, isValidUrlHash } from "../../src/types/article.js";
 
 const valid = {
   urlHash: "a".repeat(64),
@@ -122,6 +122,32 @@ describe("NormalizedArticleSchema", () => {
       publishedAt: "2026-08-18T09:00:00.000Z",
     });
     expect(parsed.publishedAt).toBe("2026-08-18T09:00:00.000Z");
+  });
+});
+
+describe("isValidUrlHash -- final review, N3", () => {
+  // The read-side counterpart to NormalizedArticleSchema's own urlHash regex check above --
+  // exported so app/(feed)/article/[urlHash]/page.tsx can reject a shape-invalid hash before
+  // ever calling getArticle, the same shared-check discipline range.ts's isValidDay already
+  // established for /day/[date].
+  it("accepts a 64-character lowercase-hex hash", () => {
+    expect(isValidUrlHash("a".repeat(64))).toBe(true);
+  });
+
+  it("rejects a hash that is too short", () => {
+    expect(isValidUrlHash("a".repeat(63))).toBe(false);
+  });
+
+  it("rejects a hash that is too long", () => {
+    expect(isValidUrlHash("a".repeat(65))).toBe(false);
+  });
+
+  it("rejects an uppercase hex character", () => {
+    expect(isValidUrlHash(`A${"a".repeat(63)}`)).toBe(false);
+  });
+
+  it("rejects a non-hex character", () => {
+    expect(isValidUrlHash(`g${"a".repeat(63)}`)).toBe(false);
   });
 });
 

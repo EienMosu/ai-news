@@ -199,6 +199,21 @@ describe("ArticleCard", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(screen.getByTestId("why-it-matters").textContent).toBe(whyItMatters);
   });
+
+  it("renders title's bracketed prose and a defanged script tag as visible text too, and creates no script element -- final review, N2", () => {
+    // M1's own finding text named `title` alongside `summary`/`whyItMatters` as a field this
+    // page renders ("plus title"), but the sweep that followed only pinned the other two. Title
+    // is not subject to the ingest stripTags heuristic the way summary/whyItMatters are, but
+    // nothing in this component's contract prevents a future edit from switching it to
+    // dangerouslySetInnerHTML either -- and until this test existed, one would have (verified by
+    // mutation: all 21 tests in this file stayed green).
+    const title =
+      "The <model> improved, unlike <script>alert(4)</script> which is prose quoted here.";
+    const article = toFeedArticle(raw({ title }));
+    const { container } = render(<ArticleCard article={article} now={NOW} />);
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector("h3")?.textContent).toBe(title);
+  });
 });
 
 describe("DaySection", () => {

@@ -62,15 +62,19 @@ export function isUngrouped(page: string): boolean {
 
 describe("the offender predicate discriminates, independently of what is on disk", () => {
   // Final review, L15: this file previously claimed "Next routes all of them, and none of them
-  // passes through app/(feed)/layout.tsx" for all six fixtures below -- that is true of the four
-  // in THIS block, but false of the two in the next one. `app/_private/page.tsx` and
-  // `app/@slot/page.tsx` used to be in this same list; the review confirmed neither is a route
-  // Next creates at all (see the next describe block), so grouping them here as "evasion shapes
-  // Next routes" was partly fictional evidence, in the one test whose entire claim to authority
-  // is that it was proved by mutation. Two more real, routed shapes (a catch-all segment and a
-  // multi-level nested path) replace them below, so this block still covers the same number of
-  // genuinely exploitable "ships outside the group" shapes it did before the correction, not
-  // fewer.
+  // passes through app/(feed)/layout.tsx" for all six of its original fixtures -- that was true
+  // of only four of them. `app/_private/page.tsx` and `app/@slot/page.tsx` were two of those
+  // original six; the review confirmed neither is a route Next creates at all (see the next
+  // describe block), so grouping them among "evasion shapes Next routes" was partly fictional
+  // evidence, in the one test whose entire claim to authority is that it was proved by mutation.
+  // They were removed from this block and replaced with two more real, routed shapes (a
+  // catch-all segment and a multi-level nested path), so ALL SIX fixtures below are now real,
+  // Next-routed shapes outside app/(feed)/ -- this block covers the same number of genuinely
+  // exploitable "ships outside the group" shapes it did before the correction, not fewer.
+  //
+  // (Fix round 2, N5: an earlier version of this comment said "the four in THIS block" above
+  // this same six-item list -- stale prose, in the file whose own finding was about exactly
+  // that. There are six here, and all six are real.)
   it.each([
     "app/plain/page.tsx",
     "app/[slug]/page.tsx",

@@ -6,6 +6,7 @@ import { computeRecency } from "../../../../src/lib/core/score.js";
 import { relativeTime } from "../../../../src/lib/feed/format.js";
 import { getArticle, getDay } from "../../../../src/lib/feed/read.js";
 import { clusterSiblings, isRealCluster, isUnranked, type FeedArticle } from "../../../../src/lib/feed/shape.js";
+import { isValidUrlHash } from "../../../../src/types/article.js";
 
 // Same reason as app/page.tsx and app/design/page.tsx: without this, Next prerenders the route
 // at build time, calling `getArticle` (and, for an article with a real cluster, `getDay`)
@@ -38,9 +39,19 @@ interface ArticlePageProps {
  * A missing `urlHash` -- a stale link, a bad guess, a crawler probing dead URLs -- is a real
  * 404 via `notFound()`, not a rendered "not found" page of this component's own; a URL this
  * shareable needs the real HTTP status, not a 200 with sad text in it.
+ *
+ * `urlHash` is checked against `isValidUrlHash` (a lowercase-hex sha256 shape, exported from
+ * `src/types/article.ts` where the write-side schema already enforces it) BEFORE `getArticle` is
+ * ever called -- final review, N3. A segment that cannot possibly match a stored key (`/article/nope`,
+ * a truncated hash, a crawler's guess) used to pay a full base-table `GetItem` just to learn it
+ * does not exist -- the exact asymmetry L3 already fixed for `/day/[date]`'s date shape, one
+ * route over.
  */
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { urlHash } = await params;
+  if (!isValidUrlHash(urlHash)) {
+    notFound();
+  }
   const article = await getArticle(urlHash);
   if (article === null) {
     notFound();

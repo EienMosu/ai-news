@@ -125,6 +125,48 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     expect(getDay).not.toHaveBeenCalled();
   });
 
+  describe("a shape-invalid urlHash -- final review, N3", () => {
+    // `isValidUrlHash` (src/types/article.ts) is already enforced write-side by
+    // NormalizedArticleSchema; this pins the read-side use of the identical check, the same
+    // asymmetry L3 fixed for /day/[date]'s date shape. Asserting the call count, not just the
+    // eventual 404 status, is what actually proves the GetItem is skipped -- a page that still
+    // 404s AFTER calling getArticle for a missing hash would pass a status-only assertion just
+    // as well.
+    it("404s WITHOUT ever calling getArticle for a hash that is not 64 lowercase-hex characters", async () => {
+      let caught: unknown;
+      try {
+        await ArticlePage({ params: params("not-a-hash") });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(isHTTPAccessFallbackError(caught)).toBe(true);
+      expect(getArticle).not.toHaveBeenCalled();
+    });
+
+    it("404s WITHOUT calling getArticle for a hash that is the right length but contains an uppercase letter", async () => {
+      const upper = `A${HASH.slice(1)}`;
+
+      let caught: unknown;
+      try {
+        await ArticlePage({ params: params(upper) });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(isHTTPAccessFallbackError(caught)).toBe(true);
+      expect(getArticle).not.toHaveBeenCalled();
+    });
+
+    it("still calls getArticle for a well-formed hash", async () => {
+      vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null }));
+
+      await ArticlePage({ params: params(HASH) });
+
+      expect(getArticle).toHaveBeenCalledWith(HASH);
+    });
+  });
+
   describe("cluster siblings", () => {
     it("renders no siblings and does not call getDay when ingestDay is null", async () => {
       vi.mocked(getArticle).mockResolvedValue(
@@ -444,15 +486,17 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     // stripTags heuristic, which deliberately leaves `<model>`-shaped prose untouched in stored
     // summaries because it cannot always tell that prose apart from real markup after
     // entity-decoding. This story page renders the same two fields (`summary`, `whyItMatters`)
-    // the card does, plus `title`, and until this test existed, nothing pinned that half of the
-    // guarantee: switching either field to `dangerouslySetInnerHTML` left every other test in
-    // this file green (they all assert `textContent`, which a real dangerouslySetInnerHTML
-    // render of this exact fixture would still satisfy, since there is no unescaped `<` anywhere
-    // in the DEFANGED prose being rendered as visible text either way). Asserting
-    // `container.querySelector("script")` is null, not merely a text match, is what actually
-    // distinguishes "rendered as escaped text" from "rendered as parsed HTML" -- a card that
-    // ever renders either field via `dangerouslySetInnerHTML` turns this fixture's `<script>`
-    // text into a live `<script>` element; plain JSX text never can.
+    // the card does -- plus `title`, pinned separately below, since the sweep found `title` named
+    // in this same finding's text but not actually swept anywhere (final review, N2) -- and until
+    // this test existed, nothing pinned that half of the guarantee: switching either field to
+    // `dangerouslySetInnerHTML` left every other test in this file green (they all assert
+    // `textContent`, which a real dangerouslySetInnerHTML render of this exact fixture would
+    // still satisfy, since there is no unescaped `<` anywhere in the DEFANGED prose being
+    // rendered as visible text either way). Asserting `container.querySelector("script")` is
+    // null, not merely a text match, is what actually distinguishes "rendered as escaped text"
+    // from "rendered as parsed HTML" -- a card that ever renders either field via
+    // `dangerouslySetInnerHTML` turns this fixture's `<script>` text into a live `<script>`
+    // element; plain JSX text never can.
     it("renders bracketed prose and a defanged script tag as visible text in summary and whyItMatters, and creates no script element", async () => {
       const summary =
         "The <model> improved, unlike <script>alert(1)</script> which is prose quoted here.";
@@ -465,6 +509,21 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
       expect(container.querySelector("script")).toBeNull();
       expect(screen.getByTestId("summary").textContent).toBe(summary);
       expect(screen.getByTestId("why-it-matters").textContent).toBe(whyItMatters);
+    });
+
+    it("renders title's bracketed prose and a defanged script tag as visible text too, and creates no script element -- final review, N2", async () => {
+      // The story page's <h1> was never asserted against this payload on its own -- the test
+      // above only exercises summary/whyItMatters. Verified by mutation: switching the <h1> to
+      // dangerouslySetInnerHTML left all 25 other tests in this file green before this test
+      // existed.
+      const title =
+        "The <model> improved, unlike <script>alert(4)</script> which is prose quoted here.";
+      vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null, title }));
+
+      const { container } = render(await ArticlePage({ params: params(HASH) }));
+
+      expect(container.querySelector("script")).toBeNull();
+      expect(container.querySelector("h1")?.textContent).toBe(title);
     });
   });
 });
