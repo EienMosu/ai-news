@@ -47,6 +47,43 @@ function findPageFiles(dir: string): string[] {
   return found;
 }
 
+/**
+ * Whether `page` is a page that would ship WITHOUT the run-status line.
+ *
+ * Extracted from the filter it used to be inline, for one reason: the suite below runs against
+ * the real filesystem, which on a correct tree contains no offenders -- so breaking this
+ * predicate (returning `false` unconditionally, say) left that suite green. The guard that is
+ * now the only thing between a new page and a missing status line was itself unpinned. The
+ * fixture cases below pin it without touching the filesystem.
+ */
+export function isUngrouped(page: string): boolean {
+  return !page.startsWith(FEED_GROUP) && !ALLOWED_OUTSIDE_FEED_GROUP.includes(page);
+}
+
+describe("the offender predicate discriminates, independently of what is on disk", () => {
+  // The five evasion shapes the review actually tried against the real tree, plus the plain
+  // case. Each must be recognised as ungrouped -- Next routes all of them, and none of them
+  // passes through app/(feed)/layout.tsx.
+  it.each([
+    "app/plain/page.tsx",
+    "app/_private/page.tsx",
+    "app/[slug]/page.tsx",
+    "app/@slot/page.tsx",
+    "app/(.)intercepted/page.tsx",
+    "app/(other)/page.tsx",
+  ])("treats %s as ungrouped", (page) => {
+    expect(isUngrouped(page)).toBe(true);
+  });
+
+  it.each([
+    "app/(feed)/page.tsx",
+    "app/(feed)/design/page.tsx",
+    "app/(feed)/day/[date]/page.tsx",
+  ])("treats %s as grouped", (page) => {
+    expect(isUngrouped(page)).toBe(false);
+  });
+});
+
 describe("every app/**/page.tsx renders spec §8's run-status line, by construction", () => {
   it("lives under app/(feed)/, or is named on the explicit (and currently empty) allowlist", () => {
     const pages = findPageFiles(APP_DIR);
@@ -56,12 +93,6 @@ describe("every app/**/page.tsx renders spec §8's run-status line, by construct
     // burned by before.
     expect(pages.length).toBeGreaterThan(0);
 
-    const offenders = pages.filter((p) => {
-      const isInFeedGroup = p.startsWith(FEED_GROUP);
-      const isAllowlisted = ALLOWED_OUTSIDE_FEED_GROUP.includes(p);
-      return !isInFeedGroup && !isAllowlisted;
-    });
-
-    expect(offenders).toEqual([]);
+    expect(pages.filter(isUngrouped)).toEqual([]);
   });
 });
