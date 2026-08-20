@@ -3,6 +3,7 @@ import { DaySection } from "../../../../components/DaySection.js";
 import { dayStatusLine } from "../../../../components/FeedView.js";
 import { SectionNav } from "../../../../components/SectionNav.js";
 import { getDay } from "../../../../src/lib/feed/read.js";
+import { isValidDay } from "../../../../src/lib/search/range.js";
 
 // Same reason as the two feed routes and the story page: without this, Next prerenders the
 // route at build time, calling `getDay` (and hitting DynamoDB) with no TABLE_NAME set. Verified
@@ -18,24 +19,23 @@ interface DayPageProps {
   params: Promise<{ date: string }>;
 }
 
-/** The store's day key shape, `YYYY-MM-DD` -- nothing more. Task 7 Step 3: the date in the URL
- *  is a string we look up, never a date we compute from, so this is a shape check on the
- *  string itself, not a parse into a `Date` (which would accept things like `2026-2-1` or
- *  `2026-08-01T00:00:00Z` that are not this store's key format, and could shift under timezone
- *  arithmetic this page must never perform). Rejecting an obviously-malformed date here, before
- *  querying, also skips a DynamoDB read that could only ever come back empty. */
-const DAY_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * A single day, both verticals, at `/day/[date]` -- Task 7 Step 1. `getDay` is deliberately
  * unfiltered by section (see its doc comment in src/lib/feed/read.ts): a deep link to a date is
  * a link to that day, not to a vertical, so this renders `<SectionNav current={null} />` rather
  * than picking one section arbitrarily.
  *
- * A date this page cannot look up at all -- one that fails the `YYYY-MM-DD` shape check -- is a
- * real 404 via `notFound()`, never an empty page that looks broken. The shape check runs before
- * `getDay` is even called: a string like `"banana"` cannot possibly match a stored partition, so
- * querying for it would only ever waste a read.
+ * A date this page cannot look up at all -- one that fails `isValidDay` -- is a real 404 via
+ * `notFound()`, never an empty page that looks broken. `isValidDay` (src/lib/search/range.ts) is
+ * a full calendar check, not just a `YYYY-MM-DD` shape check: final review, L3 -- a plain regex
+ * accepts `"2026-02-30"` (four digits, two digits, two digits) as well-formed even though no
+ * February reaches the 30th, and this page's own comment used to claim the shape check alone
+ * "skips a DynamoDB read that could only ever come back empty," which was true of `"banana"` and
+ * false of a calendar-impossible-but-shape-valid date -- `/search` already exports `isValidDay`
+ * for exactly this reason ("reject a semantically impossible `?since=` before it ever reaches the
+ * day-walk"), and this page now shares that one calendar check rather than a second, weaker copy
+ * of it. The check still runs before `getDay` is even called, so a calendar-impossible date pays
+ * no `queryDay` and no `GetItem` -- see tests/feed/day-page.test.tsx for the call-count pin.
  *
  * A shape-valid date with **no articles and no `META#DAY` record** (`result.status === null`)
  * is also a 404 -- an unknown day, or one before the archive begins. This departs from the
@@ -52,7 +52,7 @@ const DAY_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export default async function DayPage({ params }: DayPageProps) {
   const { date } = await params;
-  if (!DAY_SHAPE.test(date)) {
+  if (!isValidDay(date)) {
     notFound();
   }
 

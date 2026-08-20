@@ -45,6 +45,7 @@ describe("the load-more step is ARCHIVE_STEP_DAYS, not DEFAULT_ARCHIVE_DAYS", ()
         basePath="/"
         days={2}
         results={[dayResult("2026-08-18"), dayResult("2026-08-17")]}
+        failedDays={0}
         now={new Date("2026-08-19T09:00:00.000Z")}
       />,
     );

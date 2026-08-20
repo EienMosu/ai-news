@@ -154,12 +154,12 @@ describe("getRecentDays", () => {
     expect(listDaysCall.args[0].input.Limit).toBe(MAX_ARCHIVE_DAYS);
   });
 
-  it("returns [] and issues no day queries when no day has ever ranked", async () => {
+  it("returns no results and no failures, and issues no day queries, when no day has ever ranked", async () => {
     ddb.on(QueryCommand).resolves({ Items: [] });
 
-    const days = await getRecentDays("ai", 7);
+    const outcome = await getRecentDays("ai", 7);
 
-    expect(days).toEqual([]);
+    expect(outcome).toEqual({ results: [], failedDays: 0 });
     expect(ddb.commandCalls(QueryCommand).filter((c) => c.args[0].input.IndexName === "feed-by-day"))
       .toHaveLength(0);
   });
@@ -184,11 +184,11 @@ describe("getRecentDays", () => {
       ],
     });
 
-    const days = await getRecentDays("design", 1);
+    const { results } = await getRecentDays("design", 1);
 
-    expect(days).toHaveLength(1);
-    expect(days[0]!.articles).toHaveLength(1);
-    expect(days[0]!.articles[0]!.urlHash).toBe("c".repeat(64));
+    expect(results).toHaveLength(1);
+    expect(results[0]!.articles).toHaveLength(1);
+    expect(results[0]!.articles[0]!.urlHash).toBe("c".repeat(64));
   });
 
   it("carries each day's own status/llmRanked/truncated through, from listDays' own record", async () => {
@@ -197,11 +197,40 @@ describe("getRecentDays", () => {
     });
     ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
 
-    const days = await getRecentDays("ai", 1);
+    const { results } = await getRecentDays("ai", 1);
 
-    expect(days).toEqual([
+    expect(results).toEqual([
       { day: "2020-01-01", articles: [], status: "partial", llmRankedInDay: 9, truncatedInDay: 2 },
     ]);
+  });
+
+  describe("coercing listDays' own unchecked cast -- final review, M4", () => {
+    // `listDays` (src/lib/store/query.ts) casts DynamoDB's raw Items straight to `DayMeta[]` with
+    // no field coercion at all. `getDay` already runs `status`/`llmRanked`/`truncated` through
+    // `memberOrNull`/`asNumberOrNull` for the exact same reason; before this fix, `getRecentDays`
+    // trusted `listDays`' cast verbatim, so a record missing `llmRanked` (or carrying an
+    // unrecognised `status`) reached `FeedResult` as `undefined`/the raw string, which is not
+    // `null` -- `FeedView`'s `llmRankedInDay !== null` guard let `undefined` straight through and
+    // rendered the literal string "undefined stories ranked across both sections."
+    it("returns llmRankedInDay/truncatedInDay null, never undefined, for a record missing those fields", async () => {
+      const { day: _day, llmRanked: _llmRanked, truncated: _truncated, ...rest } = dayMetaItem({ day: "2020-01-01" });
+      ddb.on(QueryCommand).resolves({ Items: [{ ...rest, day: "2020-01-01" }] });
+      ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+      const { results } = await getRecentDays("ai", 1);
+
+      expect(results[0]!.llmRankedInDay).toBeNull();
+      expect(results[0]!.truncatedInDay).toBeNull();
+    });
+
+    it("returns status null rather than trusting an unrecognised DayMeta.status value", async () => {
+      ddb.on(QueryCommand).resolves({ Items: [dayMetaItem({ day: "2020-01-01", status: "COMPLETE" })] });
+      ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+      const { results } = await getRecentDays("ai", 1);
+
+      expect(results[0]!.status).toBeNull();
+    });
   });
 
   it("keeps listDays' own newest-first order, regardless of which day's query resolves first", async () => {
@@ -220,8 +249,8 @@ describe("getRecentDays", () => {
       async (input: { ExpressionAttributeValues: Record<string, string> }) => {
         // The NEWEST day is the one that resolves LAST -- if the implementation ever assembled
         // its result array in completion order (e.g. pushing into an array as each promise
-        // settles) rather than relying on `Promise.all`'s positional guarantee, this would put
-        // 2020-01-03 at the end instead of the start.
+        // settles) rather than relying on `Promise.allSettled`'s positional guarantee, this would
+        // put 2020-01-03 at the end instead of the start.
         if (input.ExpressionAttributeValues[":d"] === "DAY#2020-01-03") await gate;
         return { Items: [] };
       },
@@ -231,8 +260,8 @@ describe("getRecentDays", () => {
     await new Promise((r) => setTimeout(r, 10));
     releaseNewest();
 
-    const days = await promise;
-    expect(days.map((d) => d.day)).toEqual(["2020-01-03", "2020-01-02", "2020-01-01"]);
+    const { results } = await promise;
+    expect(results.map((d) => d.day)).toEqual(["2020-01-03", "2020-01-02", "2020-01-01"]);
   });
 
   it("issues its per-day queries concurrently, not one after another", async () => {
@@ -255,8 +284,8 @@ describe("getRecentDays", () => {
         // Only the NEWEST day's query ever hangs. A sequential implementation (a `for` loop
         // awaiting each `queryDay` before starting the next) would never issue the other two
         // days' queries until this one resolves -- so `invoked` would still hold only one entry
-        // at the checkpoint below. A concurrent `Promise.all` issues all three `send()` calls
-        // synchronously, before any of them can resolve.
+        // at the checkpoint below. A concurrent `Promise.allSettled` issues all three `send()`
+        // calls synchronously, before any of them can resolve.
         if (day === "DAY#2020-01-03") await gate;
         return { Items: [] };
       },
@@ -269,6 +298,65 @@ describe("getRecentDays", () => {
 
     release();
     await promise;
+  });
+
+  describe("a rejected queryDay -- final review, M2", () => {
+    // `getDay` already wrote this rule down for its own two-read fan-out: a failed secondary read
+    // must not discard data that came back fine. Before this fix, `getRecentDays` used
+    // `Promise.all`, so a single throttled day's `queryDay` rejected the WHOLE call and blanked
+    // the entire home feed, discarding every other day's data that had already come back.
+    it("does not reject the whole call when one day's queryDay throws", async () => {
+      ddb.on(QueryCommand).resolves({ Items: [dayMetaItem({ day: "2020-01-01" })] });
+      ddb.on(QueryCommand, { IndexName: "feed-by-day" }).rejects(new Error("throttled"));
+
+      await expect(getRecentDays("ai", 1)).resolves.toBeDefined();
+    });
+
+    it("keeps the days that resolved and counts the one that failed, preserving newest-first order", async () => {
+      ddb.on(QueryCommand).resolves({
+        Items: [
+          dayMetaItem({ day: "2020-01-03" }),
+          dayMetaItem({ day: "2020-01-02" }),
+          dayMetaItem({ day: "2020-01-01" }),
+        ],
+      });
+      ddb.on(QueryCommand, { IndexName: "feed-by-day" }).callsFake(
+        (input: { ExpressionAttributeValues: Record<string, string> }) => {
+          if (input.ExpressionAttributeValues[":d"] === "DAY#2020-01-02") {
+            throw new Error("throttled");
+          }
+          return { Items: [] };
+        },
+      );
+
+      const outcome = await getRecentDays("ai", 3);
+
+      expect(outcome.failedDays).toBe(1);
+      expect(outcome.results.map((d) => d.day)).toEqual(["2020-01-03", "2020-01-01"]);
+    });
+
+    it("reports failedDays: 0 when nothing fails -- the count is exact, not just truthy", async () => {
+      ddb.on(QueryCommand).resolves({
+        Items: [dayMetaItem({ day: "2020-01-02" }), dayMetaItem({ day: "2020-01-01" })],
+      });
+      ddb.on(QueryCommand, { IndexName: "feed-by-day" }).resolves({ Items: [] });
+
+      const outcome = await getRecentDays("ai", 2);
+
+      expect(outcome.failedDays).toBe(0);
+    });
+
+    it("counts every failed day when all of them reject", async () => {
+      ddb.on(QueryCommand).resolves({
+        Items: [dayMetaItem({ day: "2020-01-02" }), dayMetaItem({ day: "2020-01-01" })],
+      });
+      ddb.on(QueryCommand, { IndexName: "feed-by-day" }).rejects(new Error("throttled"));
+
+      const outcome = await getRecentDays("ai", 2);
+
+      expect(outcome.failedDays).toBe(2);
+      expect(outcome.results).toEqual([]);
+    });
   });
 
   it("throws a clear error naming TABLE_NAME when it is not set", async () => {

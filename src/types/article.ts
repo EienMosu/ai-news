@@ -21,8 +21,23 @@ export const SOURCE_WEIGHTS: Record<Category, number> = {
 export const SECTIONS = ["ai", "design"] as const;
 export type Section = (typeof SECTIONS)[number];
 
+/**
+ * The exact shape of a valid `urlHash` -- a lowercase-hex sha256 digest, 64 characters, nothing
+ * else. Enforced on the write side by `NormalizedArticleSchema` below; exported here (final
+ * review, N3) so the read boundary can share the identical check rather than trust one implicitly:
+ * `app/(feed)/article/[urlHash]/page.tsx` rejects a shape-invalid `urlHash` before ever calling
+ * `getArticle`, the same asymmetry L3 already fixed for `/day/[date]`'s date shape -- a segment
+ * that cannot possibly match a stored key should not pay a `GetItem` to learn that.
+ */
+export const URL_HASH_SHAPE = /^[0-9a-f]{64}$/;
+
+/** True when `hash` is a well-formed `urlHash` -- see `URL_HASH_SHAPE`'s own doc comment. */
+export function isValidUrlHash(hash: string): boolean {
+  return URL_HASH_SHAPE.test(hash);
+}
+
 export const NormalizedArticleSchema = z.object({
-  urlHash: z.string().regex(/^[0-9a-f]{64}$/),
+  urlHash: z.string().regex(URL_HASH_SHAPE),
   url: z.httpUrl(),
   title: z.string().trim().min(1),
   summary: z.string(),

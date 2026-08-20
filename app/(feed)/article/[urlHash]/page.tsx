@@ -6,6 +6,7 @@ import { computeRecency } from "../../../../src/lib/core/score.js";
 import { relativeTime } from "../../../../src/lib/feed/format.js";
 import { getArticle, getDay } from "../../../../src/lib/feed/read.js";
 import { clusterSiblings, isRealCluster, isUnranked, type FeedArticle } from "../../../../src/lib/feed/shape.js";
+import { isValidUrlHash } from "../../../../src/types/article.js";
 
 // Same reason as app/page.tsx and app/design/page.tsx: without this, Next prerenders the route
 // at build time, calling `getArticle` (and, for an article with a real cluster, `getDay`)
@@ -38,9 +39,19 @@ interface ArticlePageProps {
  * A missing `urlHash` -- a stale link, a bad guess, a crawler probing dead URLs -- is a real
  * 404 via `notFound()`, not a rendered "not found" page of this component's own; a URL this
  * shareable needs the real HTTP status, not a 200 with sad text in it.
+ *
+ * `urlHash` is checked against `isValidUrlHash` (a lowercase-hex sha256 shape, exported from
+ * `src/types/article.ts` where the write-side schema already enforces it) BEFORE `getArticle` is
+ * ever called -- final review, N3. A segment that cannot possibly match a stored key (`/article/nope`,
+ * a truncated hash, a crawler's guess) used to pay a full base-table `GetItem` just to learn it
+ * does not exist -- the exact asymmetry L3 already fixed for `/day/[date]`'s date shape, one
+ * route over.
  */
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { urlHash } = await params;
+  if (!isValidUrlHash(urlHash)) {
+    notFound();
+  }
   const article = await getArticle(urlHash);
   if (article === null) {
     notFound();
@@ -133,16 +144,31 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         {/* Plain `<a>`, not `next/link`: this leaves the app for the original source, which is
          *  exactly the case `next/link`'s soft-navigation model does not apply to (decision 8).
          *  `rel="noopener noreferrer"` -- `target="_blank"` opens the source without handing it
-         *  a `window.opener` reference back into this app. */}
-        <a
-          href={article.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="original-link"
-          className="mt-6 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-neutral-700"
-        >
-          Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
-        </a>
+         *  a `window.opener` reference back into this app.
+         *
+         *  `article.url` is `""` when `toFeedArticle`'s `asHttpUrl` rejected the stored value --
+         *  missing, or not an absolute `http:`/`https:` URL (final review, L9). Rendering that
+         *  through unconditionally would be scheme-checked garbage in an `href` a reader can
+         *  click; the decision here is to render the article UNLINKED rather than drop it from
+         *  the page entirely, the same way a missing `imageUrl` or `whyItMatters` degrades one
+         *  block, not the whole card -- everything else about this article (title, summary,
+         *  score signals) is independently valid data, and a broken outbound link is not a
+         *  reason to hide it, only to stop offering a link that cannot be trusted. */}
+        {article.url !== "" ? (
+          <a
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="original-link"
+            className="mt-6 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-neutral-700"
+          >
+            Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
+          </a>
+        ) : (
+          <p data-testid="original-link-unavailable" className="mt-6 text-sm text-neutral-500">
+            Original source link unavailable.
+          </p>
+        )}
 
         <section className="mt-8">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">

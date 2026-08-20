@@ -180,14 +180,23 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const emptyArchiveOutcome: ArchiveSearchOutcome = { days: [], failedDays: 0 };
 
-  const [recentResults, archiveOutcome] = await Promise.all([
+  // Both halves now return a `{ days, failedDays }` outcome (final review, M2) rather than
+  // `searchRecentDays` returning a bare array that could reject wholesale: before this fix, one
+  // throttled recent-window day rejected the whole `searchRecentDays` call, which rejected THIS
+  // `Promise.all` too, discarding up to `MAX_ARCHIVE_SEARCH_DAYS` archive HTTP GETs that had
+  // already resolved successfully -- the exact inversion of the `allSettled` rule `getDay`
+  // (src/lib/feed/read.ts) wrote down, one level up from where `searchArchiveDays` already
+  // applied it. Neither half can reject on a per-day failure any more, so this `Promise.all` is
+  // safe again: it only ever rejects on a real configuration error (a missing `TABLE_NAME` or
+  // `BACKUP_REPO`), not on a single day's read.
+  const [recentOutcome, archiveOutcome] = await Promise.all([
     searchRecentDays(recentDays, scope, query),
     archiveRefused || archiveDays.length === 0
       ? Promise.resolve(emptyArchiveOutcome)
       : searchArchiveDays(archiveDays, scope, query),
   ]);
 
-  const results = [...recentResults, ...archiveOutcome.days];
+  const results = [...recentOutcome.days, ...archiveOutcome.days];
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -200,6 +209,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           That start date reaches more than {MAX_ARCHIVE_SEARCH_DAYS} days into the archive in
           one search, so the archive was not searched. Pick a "Since" date within the last{" "}
           {RECENT_WINDOW_DAYS + MAX_ARCHIVE_SEARCH_DAYS} days to include it.
+        </p>
+      ) : null}
+
+      {recentOutcome.failedDays > 0 ? (
+        <p data-testid="search-recent-failed" className="mb-4 text-sm text-amber-700">
+          {recentOutcome.failedDays} recent {recentOutcome.failedDays === 1 ? "day" : "days"}{" "}
+          could not be searched just now; the results below may be missing matches from{" "}
+          {recentOutcome.failedDays === 1 ? "that day" : "those days"}.
         </p>
       ) : null}
 

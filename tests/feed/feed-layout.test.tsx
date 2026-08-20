@@ -15,13 +15,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/lib/feed/read.js", () => ({ getRunStatus: vi.fn(), getArchive: vi.fn() }));
 
-import FeedLayout from "../../app/(feed)/layout.js";
+import FeedLayout, { dynamic } from "../../app/(feed)/layout.js";
 import { getArchive, getRunStatus } from "../../src/lib/feed/read.js";
 
 afterEach(() => {
   cleanup();
   vi.mocked(getRunStatus).mockReset();
   vi.mocked(getArchive).mockReset();
+});
+
+describe("FeedLayout dynamic export -- final review, N4", () => {
+  it("forces dynamic rendering, so no route in this group is statically prerendered at build time", () => {
+    // Every one of the five pages this layout wraps already pins this the same way (see e.g.
+    // tests/search/search-page.test.tsx's identical "dynamic export" describe block). The layout
+    // itself reads DynamoDB (via RunStatusLine) on every one of those routes and had no directive
+    // of its own until now -- it was relying on its children already being forced dynamic, which
+    // the reviewer showed is not a safety net `pnpm build` can be trusted to enforce for the
+    // layout's own read.
+    expect(dynamic).toBe("force-dynamic");
+  });
 });
 
 describe("FeedLayout (app/(feed)/layout.tsx)", () => {

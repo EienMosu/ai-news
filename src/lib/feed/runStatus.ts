@@ -112,6 +112,20 @@ const RANK_STATUS_LABEL: Record<RankStatus, string> = {
   truncated: "truncated",
 };
 
+/** The same unchecked `as DayMeta[]` cast that `rankStatusOrNull` above guards `llmStatus`
+ *  against also reaches `day` -- and until final review fix round 2's finding N1, nothing
+ *  coerced THAT one. `day` is template-interpolated directly (`llmLine` below), not looked up in
+ *  a `Record`, so a missing/non-string value did not throw or fall back to "unknown" the way a
+ *  bad `llmStatus` did -- it rendered the literal text "ranked through undefined", on all five
+ *  routes, since `RunStatusLine` is the one call site every page renders through. Same unchecked
+ *  source, same sink shape (a value reaching rendered text unchecked), the adjacent field left
+ *  unguarded -- exactly M4's own finding, one field over, in the one function that reads
+ *  `getArchive`'s `DayMeta` directly rather than through `getRecentDays`/`getDay`'s already-fixed
+ *  coercion. */
+function asDayOrNull(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+
 /**
  * The header's trailing "LLM ..." clause. `latestDay` carries three distinct states, not two:
  * `undefined` means the `getArchive(1)` read itself failed (fix round 1, F6 -- a secondary read
@@ -126,7 +140,8 @@ function llmLine(latestDay: DayMeta | null | undefined): string {
   if (latestDay === null) return "LLM no ranked day yet";
   const rankStatus = rankStatusOrNull(latestDay.llmStatus);
   const label = rankStatus !== null ? RANK_STATUS_LABEL[rankStatus] : "unknown";
-  return `LLM ${label} (ranked through ${latestDay.day})`;
+  const day = asDayOrNull(latestDay.day) ?? "an unknown day";
+  return `LLM ${label} (ranked through ${day})`;
 }
 
 export interface RunStatusSummary {

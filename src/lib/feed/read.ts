@@ -58,6 +58,18 @@ function requireTableName(): string {
 }
 
 /**
+ * `getRecentDays`'s outcome: the days that resolved, in `listDays`' own newest-first order, plus
+ * how many of the requested days could not be read at all. The same shape
+ * `searchArchiveDays`/`ArchiveSearchOutcome` (src/lib/search/read.ts) already uses for the
+ * identical fact on a different fan-out -- one vocabulary for "some of these parallel reads
+ * failed," not a second one invented for this caller.
+ */
+export interface RecentDaysOutcome {
+  results: FeedResult[];
+  failedDays: number;
+}
+
+/**
  * The home feed's day list, newest first: one entry per day `listDays(count)` names, each
  * carrying that day's `section`-filtered articles alongside the day totals `listDays` already
  * returned -- Task 7 Step 2. `count` is clamped to `MAX_ARCHIVE_DAYS` before being handed to
@@ -67,9 +79,19 @@ function requireTableName(): string {
  * limit -- a real cost and latency incident, not a wrong-but-cheap answer. `parseDaysParam`
  * remains the loud, tested boundary that shapes what a reader can request; this clamp is the
  * quiet backstop for every other caller. Every day's `queryDay` is issued **concurrently**
- * (`Promise.all`), not one after another: sequential reads would make the home page as slow as
- * the sum of every day's round trip, and concurrency is the actual requirement, not an
+ * (`Promise.allSettled`), not one after another: sequential reads would make the home page as
+ * slow as the sum of every day's round trip, and concurrency is the actual requirement, not an
  * optimisation on top of it.
+ *
+ * `Promise.allSettled`, not `Promise.all` -- final review, M2. `getDay` below already wrote this
+ * rule down for its own two-read fan-out: a failed secondary read must not discard data that came
+ * back fine. Before this fix, this function used `Promise.all`, so a single throttled day's
+ * `queryDay` (one Query out of up to `MAX_ARCHIVE_DAYS`) rejected the whole call and blanked the
+ * entire home feed -- discarding every other day's data that had already come back, with no
+ * `error.tsx` anywhere under `app/` to catch it, so the reader saw Next's default 500 page. A
+ * failed day is now dropped and counted in `failedDays`, exactly the way `searchArchiveDays`
+ * already drops and counts a failed archive day -- see that function's own doc comment for the
+ * fuller reasoning, which applies here unchanged.
  *
  * Deliberately reuses each day's own `DayMeta` (`status`, `llmRanked`, `truncated`) already
  * returned by the single `listDays` call rather than calling `getDay` per day, which would
@@ -77,29 +99,48 @@ function requireTableName(): string {
  * list and the day's articles are two different query shapes on purpose (one `Query` on
  * `META#DAY`'s partition, then N `Query`s on `feed-by-day`), never N pairs of both.
  *
- * `Promise.all` also keeps the array in `days`' own newest-first order regardless of which
- * day's `queryDay` happens to resolve first -- the array passed to `.map` fixes the order of
- * the returned promises, and `Promise.all` preserves that positional order in its result no
- * matter the completion order underneath.
+ * Those three `DayMeta` fields are run through the same two coercers (`memberOrNull`,
+ * `asNumberOrNull`) `getDay` already applies to `META#DAY`, not trusted via `listDays`' own
+ * unchecked `as DayMeta[]` cast (src/lib/store/query.ts) -- final review, M4. `listDays` is
+ * reused by three callers (`getRecentDays`, `getArchive`, `src/lambda/rank.ts`'s own internal
+ * bookkeeping) precisely because it is one query shape, so the cast itself is not this
+ * function's to fix; but this was the one caller that piped an uncoerced field straight into a
+ * union-typed `FeedResult` a component renders. A record missing `llmRanked` used to reach
+ * `FeedView` as `undefined`, which is not `null`, so `FeedView`'s `llmRankedInDay !== null` guard
+ * let it through and rendered the literal string "undefined stories ranked across both sections"
+ * -- the exact bug class Task 9 fix round 1 closed for `truncated` on the `getDay` path, still
+ * live here until now.
  *
- * Returns `FeedResult[]` (not a new interface) so each entry can be handed straight to
- * `FeedView`, one call per array element instead of once for the whole page.
+ * `Promise.allSettled` still keeps the array in `days`' own newest-first order regardless of
+ * which day's `queryDay` happens to resolve first, and regardless of which one rejects -- the
+ * array passed to `.map` fixes the order of the returned promises, and `allSettled` preserves
+ * that positional order in its result no matter the completion order underneath; a rejection
+ * removes an entry from the middle without reordering the rest.
  */
-export async function getRecentDays(section: Section, count: number): Promise<FeedResult[]> {
+export async function getRecentDays(section: Section, count: number): Promise<RecentDaysOutcome> {
   const table = requireTableName();
   const client = docClient();
   const days = await listDays(client, table, Math.min(count, MAX_ARCHIVE_DAYS));
 
-  return await Promise.all(days.map(async (day): Promise<FeedResult> => {
+  const settled = await Promise.allSettled(days.map(async (day): Promise<FeedResult> => {
     const items = await queryDay(client, table, day.day);
     return {
       articles: bySection(items.map(toFeedArticle), section),
       day: day.day,
-      status: day.status,
-      llmRankedInDay: day.llmRanked,
-      truncatedInDay: day.truncated,
+      status: memberOrNull(DAY_STATUSES, day.status),
+      llmRankedInDay: asNumberOrNull(day.llmRanked),
+      truncatedInDay: asNumberOrNull(day.truncated),
     };
   }));
+
+  const results: FeedResult[] = [];
+  let failedDays = 0;
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled") results.push(outcome.value);
+    else failedDays += 1;
+  }
+
+  return { results, failedDays };
 }
 
 /**

@@ -21,13 +21,20 @@ interface DesignPageProps {
 export default async function DesignPage({ searchParams }: DesignPageProps) {
   const { days: rawDays } = await searchParams;
   const days = parseDaysParam(rawDays);
-  const results = await getRecentDays("design", days);
+  const { results, failedDays } = await getRecentDays("design", days);
   const now = new Date();
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <SectionNav current="design" days={days} />
-      <FeedArchive section="design" results={results} now={now} days={days} basePath="/design" />
+      <FeedArchive
+        section="design"
+        results={results}
+        failedDays={failedDays}
+        now={now}
+        days={days}
+        basePath="/design"
+      />
     </main>
   );
 }

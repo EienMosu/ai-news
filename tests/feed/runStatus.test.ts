@@ -220,5 +220,16 @@ describe("summarizeRunStatus", () => {
       const line = summarizeRunStatus(baseStatus, dayMeta({ status: "partial" }), now).llmLine;
       expect(line).not.toContain("partial");
     });
+
+    it("final review N1: never renders the literal string 'undefined' for a day missing from the same unchecked cast", () => {
+      // The exact sibling of the "unrecognised llmStatus" test above, on the adjacent field in
+      // the same expression: `day` comes off the identical unchecked `as DayMeta[]` cast
+      // (src/lib/store/query.ts) but is template-interpolated directly rather than looked up in
+      // a Record, so a missing/non-string value used to reach the rendered line completely raw.
+      const malformed = dayMeta({ day: undefined as unknown as string });
+      expect(summarizeRunStatus(baseStatus, malformed, now).llmLine).toBe(
+        "LLM ok (ranked through an unknown day)",
+      );
+    });
   });
 });

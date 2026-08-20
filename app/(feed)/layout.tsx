@@ -1,6 +1,21 @@
 import type { ReactNode } from "react";
 import { RunStatusLine } from "../../components/RunStatusLine.js";
 
+// Final review, N4. Every one of the five pages this layout wraps already has its own
+// `export const dynamic = "force-dynamic"`, which is what has kept `pnpm build` from ever
+// statically prerendering any of them with no `TABLE_NAME` set. This layout reads DynamoDB too
+// (via `RunStatusLine`), on every one of those routes, and had no such directive of its own --
+// unlike the pages, it was relying entirely on ITS CHILDREN already being forced dynamic, not on
+// anything of its own. The reviewer proved that reliance does not generalise into a safety net:
+// `RunStatusLine`'s own `Promise.allSettled` (deliberately, so a transient read failure degrades
+// the status line rather than the page -- see that file's doc comment) swallows the throw a
+// misconfigured build would otherwise produce, so `pnpm build` does not fail loudly here the way
+// it does for a page missing this same directive; only `pnpm check:routes`' route-table
+// assertion would eventually catch a regression, and only because it happens to also check this.
+// Costs nothing to state explicitly rather than depend on a gate firing for a reason nobody
+// wrote down.
+export const dynamic = "force-dynamic";
+
 /**
  * Fix round 2. Renders spec §8's highest-value UI element -- the run-status line -- exactly
  * once, above every route in this group, instead of at each of the five call sites fix round 1
