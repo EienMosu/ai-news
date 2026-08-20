@@ -218,3 +218,26 @@ describe("GET /api/ingest", () => {
     expect(ddb.commandCalls(GetCommand)).toHaveLength(0);
   });
 });
+
+describe("an unreadable counter fails closed, and says why", () => {
+  it("returns 500 and logs enough to tell a throttle from a bug", async () => {
+    // Final-review follow-up F7: this branch used to return a bare 500 with no output at all,
+    // which made a DynamoDB throttle, an expired access key, a missing IAM grant and a genuine
+    // bug indistinguishable to whoever was debugging -- unlike the INGEST_SECRET branch right
+    // above it, which does log. Fails closed rather than open even though capture's atomic
+    // increment is the real ceiling: an unknown error is not a reason to start invoking.
+    ddb.on(GetCommand).rejects(Object.assign(new Error("Throughput exceeded"), {
+      name: "ProvisionedThroughputExceededException",
+    }));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await POST(postRequest(SECRET));
+
+    expect(res.status).toBe(500);
+    expect(lambda.calls()).toHaveLength(0);
+    const [msg, detail] = spy.mock.calls[0] ?? [];
+    expect(String(msg)).toContain("could not read the daily counter");
+    expect(detail).toMatchObject({ name: "ProvisionedThroughputExceededException" });
+    spy.mockRestore();
+  });
+});

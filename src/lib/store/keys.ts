@@ -9,6 +9,18 @@ export const LAST_RUN_SK = "A";
  *  already computes -- so the counter resets at local midnight along with everything else. */
 export const INGEST_META_PK = "META#INGEST";
 
+/** The day lock rank takes before ranking (`src/lambda/rank.ts`). Was an inline literal in two
+ *  places -- rank's own PutItem and the IAM condition that permits it -- which is the same
+ *  drift risk the review raised for META#INGEST, one file over. */
+export const DAY_LOCK_PK = "META#lock";
+
+/** Key PREFIXES, as distinct from whole keys. They exist because `infra/lib/functions.ts` scopes
+ *  each function's DynamoDB grant with a `LeadingKeys` condition, and those conditions were
+ *  spelling the prefixes out by hand: a rename here would have left the IAM policy pointing at
+ *  the old prefix, denying every write at runtime with the whole suite green. */
+export const ARTICLE_PK_PREFIX = "ART#";
+export const DAY_PARTITION_PREFIX = "DAY#";
+
 /** Bumped by any change to the urlHash normalization pipeline. Spec §4. */
 export const HASH_VERSION = 1;
 
@@ -23,6 +35,6 @@ export const SCHEMA_VERSION = 1;
  */
 export const INGEST_DAILY_CAP = 20;
 
-export const articleKey = (urlHash: string) => ({ pk: `ART#${urlHash}`, sk: ARTICLE_SK });
-export const dayPartition = (ingestDay: string) => `DAY#${ingestDay}`;
+export const articleKey = (urlHash: string) => ({ pk: `${ARTICLE_PK_PREFIX}${urlHash}`, sk: ARTICLE_SK });
+export const dayPartition = (ingestDay: string) => `${DAY_PARTITION_PREFIX}${ingestDay}`;
 export const ingestCounterKey = (ingestDay: string) => ({ pk: INGEST_META_PK, sk: ingestDay });

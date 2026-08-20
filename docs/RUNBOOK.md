@@ -247,6 +247,18 @@ Record whichever decision you make somewhere durable, then continue to step 1.
       secret returns `401`; any method other than `POST` returns `405` with an `Allow: POST`
       header.
 
+      **`429` once the day's cap is spent.** Spec §9: manual triggers are capped at **20 per
+      Istanbul day**, counted in `META#INGEST/<day>` and reset at local midnight. Scheduled
+      hourly capture is not counted and is never affected by the cap — only invocations carrying
+      the route's `{"manual":true}` payload are. The route refuses at the cap before invoking;
+      capture's own atomic conditional increment is the real ceiling, because two simultaneous
+      requests can both pass the route's read.
+
+      **`500` if the counter cannot be read**, which fails closed on purpose — an unknown error
+      is not a reason to start invoking. It logs `ingest: could not read the daily counter` with
+      the underlying error name, so a throttle, an expired access key and an IAM gap are
+      distinguishable in the Vercel function logs.
+
     ⚠️ **This key is invisible to CDK, permanently.** Because it's minted outside the stack,
     `cdk diff` will never mention it, before or after it exists. If a future change ever forces
     replacement of the `VercelReader` user construct (renaming it, changing an ID in the
@@ -332,7 +344,9 @@ otherwise, and repeat that same decision if it does.
 - **Manual ingest trigger:** `POST /api/ingest` with header `x-ingest-secret: <INGEST_SECRET>`.
   As of Task 9, this is also a **Vercel runtime requirement** (`INGEST_SECRET` as a secret,
   `CAPTURE_FUNCTION_NAME` as a plain variable, see step 10) — capture-only, never rank; see
-  spec §2.
+  spec §2. Responses: `202` accepted, `401` wrong/missing secret, `405` wrong method,
+  **`429` day's cap of 20 spent**, `500` counter unreadable or a variable unset. The cap
+  applies to manual triggers only — hourly scheduled capture is unaffected.
 - Table, both function, and the Vercel IAM user's physical names are all CDK-generated (none
   is hardcoded to what its logical ID suggests). The stack outputs all four — see step 4. If
   you've lost them, `aws cloudformation describe-stacks --stack-name AiNewsStack --query

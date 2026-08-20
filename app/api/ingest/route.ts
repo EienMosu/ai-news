@@ -118,9 +118,25 @@ export async function POST(request: Request): Promise<Response> {
   if (!table) throw new Error("TABLE_NAME environment variable is not set");
 
   const ingestDay = istanbulDay(new Date());
-  const counter = await docClient().send(
-    new GetCommand({ TableName: table, Key: ingestCounterKey(ingestDay) }),
-  );
+  // Fails closed on an unreadable counter, and says so. Without the log a throttle, an expired
+  // access key, a missing IAM grant and a genuine bug all surfaced as the same bare 500 -- the
+  // one branch in this route that gave the operator nothing to go on, unlike the INGEST_SECRET
+  // check above it. Closed rather than open even though capture's atomic increment is the real
+  // ceiling (so failing open could not breach the cap): an unknown error is not a reason to
+  // start invoking.
+  let counter;
+  try {
+    counter = await docClient().send(
+      new GetCommand({ TableName: table, Key: ingestCounterKey(ingestDay) }),
+    );
+  } catch (e) {
+    console.error("ingest: could not read the daily counter", {
+      ingestDay,
+      name: e instanceof Error ? e.name : "unknown",
+      message: e instanceof Error ? e.message : String(e),
+    });
+    return new Response(null, { status: 500 });
+  }
   const count = typeof counter.Item?.count === "number" ? counter.Item.count : 0;
   if (count >= INGEST_DAILY_CAP) {
     return new Response(null, { status: 429 });
