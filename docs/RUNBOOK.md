@@ -184,6 +184,29 @@ Record whichever decision you make somewhere durable, then continue to step 1.
     persisting it somewhere you'd then have to secure separately anyway, so the stack only
     creates the user the key belongs to, and minting the key is left to this manual step.
 
+    **The variable names, which nothing else in this repo records.** The AWS SDK finds the key
+    by name, so these three are not free choices: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+    and `AWS_REGION` (`eu-central-1`). Without the region the SDK throws "Region is missing"
+    rather than defaulting to anything. Verified 2026-08-20: **Vercel accepts all three names**
+    — it does not reserve the `AWS_` prefix — so no in-code renaming or explicit-credential
+    plumbing is needed.
+
+    **Vercel scopes variables per environment.** Production, Preview and Development are
+    separate lists. Setting a variable on Production alone leaves every preview deployment
+    without it, failing exactly as if it had never been set — tick Production **and** Preview.
+
+    **Do not use the "Redeploy" button the toast offers after saving a variable** unless the
+    production branch is the one you want rebuilt. It rebuilds the current production
+    deployment; if the app lives on an unmerged branch, that rebuilds a branch with no app in
+    it and reproduces the original failure. Open the pull request instead and let Vercel build
+    the branch preview, which picks the new variables up on its first run.
+
+    Marking the four non-credential variables "Sensitive" is harmless — the cost is only that
+    you cannot read them back in the dashboard afterwards, and all four are recoverable from
+    `describe-stacks` at any time. Nothing in this app reads any variable at build time (every
+    data route is `force-dynamic`; a build with `TABLE_NAME` unset produces the correct route
+    table), so only runtime availability matters.
+
     **Also set in Vercel's environment variables (not secrets — none of these are credentials):**
     `TABLE_NAME` (the `TableName` output from step 4) and, as of Task 8's `/search`,
     **`BACKUP_REPO`** (`EienMosu/ai-news` — the default at `infra/bin/ai-news.ts:23`, which
