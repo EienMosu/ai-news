@@ -159,6 +159,22 @@ describe("Functions", () => {
     expect(JSON.stringify(upd.Condition)).toContain("ART#");
   });
 
+  it("grants capture an UpdateItem scoped to META#INGEST only, for spec §9's per-day cap", () => {
+    // Its own statement, distinct from the ART#* UpdateItem grant asserted above -- capture has
+    // TWO UpdateItem statements once this is wired up, and this test finds the ingest-counter
+    // one specifically rather than assuming `.find()`'s first match (which stays the ART#*
+    // grant, asserted by the "key prefixes" test above).
+    const doc = capturePolicyDocument();
+    const updateStatements = doc.Statement.filter((s: any) => String(s.Action).includes("UpdateItem"));
+    expect(updateStatements).toHaveLength(2);
+    const ingestCounter = updateStatements.find((s: any) =>
+      JSON.stringify(s.Condition).includes("META#INGEST"))!;
+    expect(ingestCounter).toBeDefined();
+    // Not the ART#* article grant re-purposed -- this condition must be scoped to META#INGEST
+    // alone, or a compromised capture role could UpdateItem any article through it too.
+    expect(JSON.stringify(ingestCounter.Condition)).not.toContain("ART#");
+  });
+
   it("scopes the rank function's PutItem to META#DAY and META#lock only", () => {
     const doc = rankPolicyDocument();
     const put = doc.Statement.find((s: any) =>

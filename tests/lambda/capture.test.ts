@@ -1,6 +1,6 @@
 import { UpdateCommand, PutCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { mockClient } from "aws-sdk-client-mock";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ddb = mockClient(DynamoDBDocumentClient);
 
@@ -20,6 +20,10 @@ const article = (n: number) => ({
 
 beforeEach(() => {
   ddb.reset();
+  // Needed from here on: the new tests below assert on captureAll's OWN call count (e.g. "never
+  // called"), and vi.fn() call history is not cleared automatically between tests in this file
+  // -- it would otherwise keep accumulating across every earlier test's handler() calls.
+  vi.clearAllMocks();
   process.env.TABLE_NAME = "t";
   vi.mocked(captureAll).mockResolvedValue({
     articles: [article(1), article(2)],
@@ -29,6 +33,20 @@ beforeEach(() => {
     errors: [{ source: "reddit-ml", message: "HTTP 429" }],
   });
 });
+
+// A couple of tests below fake the clock to pin `istanbulDay` to a known value, so a
+// META#INGEST assertion can name the exact sort key rather than pattern-matching it. Real
+// timers must come back afterwards or a fake system time leaks into every later test in this
+// file -- same discipline tests/lambda/rank.test.ts uses for the same reason.
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/** True for any UpdateCommand call whose Key targets the spec §9 ingest counter, never an
+ *  article write (`ART#...`). Filtering on the real call's Key, not on a mock-library input
+ *  matcher, so these assertions don't depend on aws-sdk-client-mock's own partial-match rules. */
+const isIngestCounterCall = (c: { args: [{ input: { Key?: unknown } }] }) =>
+  (c.args[0].input.Key as { pk?: string } | undefined)?.pk === "META#INGEST";
 
 describe("capture handler", () => {
   it("writes every captured article", async () => {
@@ -77,6 +95,54 @@ describe("capture handler", () => {
     const out = await handler();
     expect(out.itemsWritten).toBe(2);
     expect(out.itemsFailed).toBe(0);
+  });
+
+  // Spec §9's per-day /api/ingest cap. This first test is the single most important one in
+  // the whole change: EventBridge's hourly schedule invokes capture with no payload at all (or
+  // an empty `{}`), never `{ manual: true }`. If that path were ever miscounted against the
+  // cap, 20 scheduled runs would exhaust it and silently stop hourly capture for the rest of
+  // the day -- RSS has no history endpoint, so a missed window is permanent data loss.
+  it("the scheduled path -- no event, and an event without `manual` -- never touches META#INGEST and captures normally", async () => {
+    await handler();
+    await handler({});
+
+    const ingestCalls = ddb.commandCalls(UpdateCommand).filter(isIngestCounterCall);
+    expect(ingestCalls).toHaveLength(0);
+
+    // Both calls still ran the real capture pipeline -- 2 articles written per call.
+    expect(vi.mocked(captureAll)).toHaveBeenCalledTimes(2);
+    expect(ddb.commandCalls(UpdateCommand)).toHaveLength(4);
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(2);
+  });
+
+  it("a manual trigger under the cap reserves a slot with an atomic ADD and still captures normally", async () => {
+    const out = await handler({ manual: true });
+
+    const ingestCalls = ddb.commandCalls(UpdateCommand).filter(isIngestCounterCall);
+    expect(ingestCalls).toHaveLength(1);
+    expect(ingestCalls[0]!.args[0].input.UpdateExpression).toBe("ADD #count :one");
+
+    expect(vi.mocked(captureAll)).toHaveBeenCalledTimes(1);
+    expect(out.itemsWritten).toBe(2);
+  });
+
+  it("a manual trigger already at the day's cap skips capture entirely -- no fetch, no article writes, no META#lastRun", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-20T12:00:00Z")); // 15:00 Europe/Istanbul -> ingestDay 2026-08-20
+
+    const err = new Error("The conditional request failed");
+    err.name = "ConditionalCheckFailedException";
+    ddb.on(UpdateCommand, { Key: { pk: "META#INGEST", sk: "2026-08-20" } }).rejects(err);
+
+    const out = await handler({ manual: true });
+
+    expect(out.itemsWritten).toBe(0);
+    expect(out.itemsFailed).toBe(0);
+    // captureAll never ran at all -- this is the real ceiling, not a write that happens and is
+    // then discarded.
+    expect(vi.mocked(captureAll)).not.toHaveBeenCalled();
+    expect(ddb.commandCalls(UpdateCommand).filter((c) => !isIngestCounterCall(c))).toHaveLength(0);
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(0);
   });
 });
 

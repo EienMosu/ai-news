@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildDayMetaPut, buildLastRunPut } from "../../src/lib/store/meta.js";
+import { buildDayMetaPut, buildIngestCounterIncrement, buildLastRunPut } from "../../src/lib/store/meta.js";
 import type { DayMeta } from "../../src/lib/store/meta.js";
+import { INGEST_DAILY_CAP } from "../../src/lib/store/keys.js";
 
 describe("buildDayMetaPut", () => {
   it("sorts days lexicographically by using the ISO date as the sort key", () => {
@@ -55,5 +56,36 @@ describe("buildLastRunPut", () => {
     expect(item.perSourceCounts.venturebeat).toBe(0);
     expect(item.filtered.venturebeat).toBe(7);
     expect(item.quarantined).toEqual({});
+  });
+});
+
+describe("buildIngestCounterIncrement", () => {
+  it("keys the counter as META#INGEST / <ingestDay>, its own item apart from META#lastRun", () => {
+    const cmd = buildIngestCounterIncrement("t", "2026-08-20");
+    expect(cmd.Key).toEqual({ pk: "META#INGEST", sk: "2026-08-20" });
+  });
+
+  it("uses an atomic ADD, not a read-then-write increment", () => {
+    const cmd = buildIngestCounterIncrement("t", "2026-08-20");
+    expect(cmd.UpdateExpression).toBe("ADD #count :one");
+    expect(cmd.ExpressionAttributeValues).toMatchObject({ ":one": 1 });
+  });
+
+  it("conditions the increment on the stored count against INGEST_DAILY_CAP, or its absence", () => {
+    // This is the atomic ceiling itself -- spec §9. Two simultaneous callers that both pass the
+    // route's own advisory read still only let INGEST_DAILY_CAP of them through here, because
+    // DynamoDB evaluates this condition against the item's CURRENT value before the ADD lands.
+    const cmd = buildIngestCounterIncrement("t", "2026-08-20");
+    expect(cmd.ConditionExpression).toBe("attribute_not_exists(#count) OR #count < :cap");
+    expect(cmd.ExpressionAttributeValues).toMatchObject({ ":cap": INGEST_DAILY_CAP });
+    expect(cmd.ExpressionAttributeNames).toEqual({ "#count": "count" });
+  });
+
+  it("pins the cap at 20 -- spec §9's chosen number, not an arbitrary placeholder that could drift", () => {
+    // Not a money guard -- capture is idempotent and costs fractions of a cent -- purely a
+    // bound on nuisance from a leaked /api/ingest secret. Every other test in this describe
+    // block asserts against the INGEST_DAILY_CAP symbol, so a change to its value would sail
+    // through them unnoticed; this is the one place the literal number itself is pinned.
+    expect(INGEST_DAILY_CAP).toBe(20);
   });
 });

@@ -178,6 +178,20 @@ export class Functions extends Construct {
       resources: [props.table.tableArn],
       conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#lastRun"] } },
     }));
+    // Spec §9's per-day /api/ingest cap: capture's real ceiling is an atomic conditional
+    // UpdateItem (ADD) against META#INGEST/<ingestDay> (src/lib/store/meta.ts's
+    // buildIngestCounterIncrement) -- without this statement that write is denied at runtime,
+    // with every local test green, because it does not fall under the ART#* grant above. Its
+    // own statement, not folded into that one: META#INGEST is a different key prefix than the
+    // articles this role otherwise writes, and widening ART#* to also cover it would blur which
+    // statement a future reader traces a given write back to. No corresponding grant on
+    // `vercel` below -- the route only ever reads this item (GetItem, already covered by the
+    // Vercel reader's existing table-wide grant), never writes it.
+    this.capture.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["dynamodb:UpdateItem"],
+      resources: [props.table.tableArn],
+      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#INGEST"] } },
+    }));
 
     this.rank.addToRolePolicy(new iam.PolicyStatement({
       actions: ["dynamodb:UpdateItem"],

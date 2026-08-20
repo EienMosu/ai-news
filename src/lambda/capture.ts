@@ -3,7 +3,7 @@ import { istanbulDay } from "../lib/core/day.js";
 import { computeScore } from "../lib/core/score.js";
 import { captureAll } from "../lib/ingest/capture.js";
 import { buildCaptureUpdate } from "../lib/store/articles.js";
-import { buildLastRunPut } from "../lib/store/meta.js";
+import { buildIngestCounterIncrement, buildLastRunPut } from "../lib/store/meta.js";
 import { docClient } from "../lib/store/client.js";
 
 export interface CaptureSummary {
@@ -13,14 +13,59 @@ export interface CaptureSummary {
   durationMs: number;
 }
 
-export async function handler(_event?: unknown): Promise<CaptureSummary> {
+/**
+ * Spec §9's real ceiling on the per-day /api/ingest cap: an atomic conditional `ADD` against
+ * `META#INGEST/<ingestDay>` (see buildIngestCounterIncrement). Two simultaneous manual triggers
+ * can both pass the route's own advisory read, so this -- not the route -- is the guarantee.
+ *
+ * Returns `true` when the slot was reserved (capture should proceed) and `false` when the day's
+ * cap is already spent (`ConditionalCheckFailedException` -- genuine contention with the cap
+ * itself, nothing is wrong). Any other failure is rethrown rather than silently allowed through
+ * or silently refused: an ambiguous DynamoDB error here is only ever reachable from a MANUAL
+ * trigger (see the `event?.manual` guard at the call site), so rethrowing cannot affect the
+ * hourly scheduled path at all.
+ */
+async function reserveManualIngestSlot(
+  client: ReturnType<typeof docClient>,
+  table: string,
+  ingestDay: string,
+): Promise<boolean> {
+  try {
+    await client.send(new UpdateCommand(buildIngestCounterIncrement(table, ingestDay)));
+    return true;
+  } catch (e) {
+    if (e instanceof Error && e.name === "ConditionalCheckFailedException") return false;
+    throw e;
+  }
+}
+
+export async function handler(event?: { manual?: boolean }): Promise<CaptureSummary> {
   const startedAt = new Date();
   const table = process.env.TABLE_NAME;
   if (!table) throw new Error("TABLE_NAME is not set");
 
   const client = docClient();
-  const result = await captureAll({ now: startedAt, fetchText: fetchText });
   const ingestDay = istanbulDay(startedAt);
+
+  // Only a MANUAL trigger (the /api/ingest route -- spec §9) ever touches META#INGEST. The
+  // hourly EventBridge schedule invokes with no payload at all (or an empty `{}`), so
+  // `event?.manual` is always falsy on that path and this block never runs there. Getting this
+  // guard wrong is the single most important failure mode in this change: a cap of 20 counted
+  // against the SCHEDULED path too would stop hourly capture within the day, and RSS has no
+  // history endpoint to recover a missed window from -- see
+  // tests/lambda/capture.test.ts's "scheduled path" test.
+  if (event?.manual) {
+    const reserved = await reserveManualIngestSlot(client, table, ingestDay);
+    if (!reserved) {
+      console.warn("manual ingest capped for the day; skipping capture", { ingestDay });
+      return {
+        ingestDay, itemsWritten: 0, itemsFailed: 0,
+        durationMs: Date.now() - startedAt.getTime(),
+      };
+    }
+  }
+
+  const result = await captureAll({ now: startedAt, fetchText: fetchText });
   const nowIso = startedAt.toISOString();
 
   let itemsWritten = 0;

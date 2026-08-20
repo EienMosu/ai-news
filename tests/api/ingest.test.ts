@@ -11,6 +11,7 @@
 // un-hoisted variable from inside the factory would hit the temporal-dead-zone, not the value
 // this file assigns it.
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,14 +24,17 @@ vi.mock("node:crypto", async (importOriginal) => {
 });
 
 import { GET, POST } from "../../app/api/ingest/route.js";
+import { INGEST_DAILY_CAP } from "../../src/lib/store/keys.js";
 
 const lambda = mockClient(LambdaClient);
+const ddb = mockClient(DynamoDBDocumentClient);
 
 // Not exported by route.ts (nothing outside the route needs it) -- kept in sync by hand with
 // the literal in app/api/ingest/route.ts's `SECRET_HEADER`.
 const SECRET_HEADER = "x-ingest-secret";
 const SECRET = "the-real-shared-secret-value";
 const FUNCTION_NAME = "ai-news-capture-fn";
+const TABLE_NAME = "t";
 
 function postRequest(secret?: string): Request {
   const headers = new Headers();
@@ -40,15 +44,22 @@ function postRequest(secret?: string): Request {
 
 beforeEach(() => {
   lambda.reset();
+  ddb.reset();
   mocks.timingSafeEqual.mockClear();
   process.env.INGEST_SECRET = SECRET;
   process.env.CAPTURE_FUNCTION_NAME = FUNCTION_NAME;
+  process.env.TABLE_NAME = TABLE_NAME;
   lambda.on(InvokeCommand).resolves({ StatusCode: 202 });
+  // Default: no META#INGEST item exists yet for today, so the day's count reads as 0 --
+  // comfortably under the cap, matching every pre-existing test's expectation of a plain 202.
+  ddb.on(GetCommand).resolves({});
 });
 
 afterEach(() => {
   delete process.env.INGEST_SECRET;
   delete process.env.CAPTURE_FUNCTION_NAME;
+  delete process.env.TABLE_NAME;
+  vi.useRealTimers();
 });
 
 describe("POST /api/ingest", () => {
@@ -67,12 +78,27 @@ describe("POST /api/ingest", () => {
     expect(call.InvocationType).toBe("Event");
   });
 
+  it("sends {\"manual\":true} as the invocation payload -- the only signal capture has to tell " +
+     "this trigger apart from the hourly schedule for spec §9's per-day cap", async () => {
+    await POST(postRequest(SECRET));
+
+    const call = lambda.commandCalls(InvokeCommand)[0]!.args[0].input;
+    expect(call.Payload).toBe(JSON.stringify({ manual: true }));
+  });
+
   it("returns 401 and invokes nothing for a wrong secret of the SAME length as the real one", async () => {
     const wrong = "x".repeat(SECRET.length);
     const res = await POST(postRequest(wrong));
 
     expect(res.status).toBe(401);
     expect(lambda.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  it("never reads the ingest counter for a wrong secret -- the secret check runs to completion first", async () => {
+    const wrong = "x".repeat(SECRET.length);
+    await POST(postRequest(wrong));
+
+    expect(ddb.commandCalls(GetCommand)).toHaveLength(0);
   });
 
   it("returns 401, not 500, for a wrong secret of a DIFFERENT length -- the crash fact #1 found", async () => {
@@ -120,6 +146,55 @@ describe("POST /api/ingest", () => {
     await expect(POST(postRequest(SECRET))).rejects.toThrow("CAPTURE_FUNCTION_NAME");
     expect(lambda.commandCalls(InvokeCommand)).toHaveLength(0);
   });
+
+  it("throws naming TABLE_NAME when it is missing, only after the secret already matched", async () => {
+    delete process.env.TABLE_NAME;
+
+    await expect(POST(postRequest(SECRET))).rejects.toThrow("TABLE_NAME");
+    expect(lambda.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  describe("spec §9's per-day ingest cap", () => {
+    it("returns 429 and invokes nothing once the day's count has reached INGEST_DAILY_CAP", async () => {
+      ddb.on(GetCommand).resolves({ Item: { pk: "META#INGEST", sk: "irrelevant", count: INGEST_DAILY_CAP } });
+
+      const res = await POST(postRequest(SECRET));
+
+      expect(res.status).toBe(429);
+      expect(lambda.commandCalls(InvokeCommand)).toHaveLength(0);
+    });
+
+    it("still allows the request one BELOW the cap -- proves >=, not a fencepost >", async () => {
+      ddb.on(GetCommand).resolves({ Item: { pk: "META#INGEST", sk: "irrelevant", count: INGEST_DAILY_CAP - 1 } });
+
+      const res = await POST(postRequest(SECRET));
+
+      expect(res.status).toBe(202);
+      expect(lambda.commandCalls(InvokeCommand)).toHaveLength(1);
+    });
+
+    it("treats a missing count on an existing item the same as zero, not as already capped", async () => {
+      // A malformed or partially-written item must fail toward "allow" here -- the route's read
+      // is advisory (see the doc comment on POST), and capture's own atomic increment is the
+      // actual ceiling regardless of what this read concludes.
+      ddb.on(GetCommand).resolves({ Item: { pk: "META#INGEST", sk: "irrelevant" } });
+
+      const res = await POST(postRequest(SECRET));
+
+      expect(res.status).toBe(202);
+    });
+
+    it("reads today's Istanbul-day counter by the shared key builder, not an inline string", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-20T12:00:00Z")); // 15:00 Europe/Istanbul -> 2026-08-20
+
+      await POST(postRequest(SECRET));
+
+      const call = ddb.commandCalls(GetCommand)[0]!.args[0].input;
+      expect(call.TableName).toBe(TABLE_NAME);
+      expect(call.Key).toEqual({ pk: "META#INGEST", sk: "2026-08-20" });
+    });
+  });
 });
 
 describe("GET /api/ingest", () => {
@@ -136,5 +211,10 @@ describe("GET /api/ingest", () => {
   it("never touches the Lambda client", async () => {
     await GET();
     expect(lambda.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  it("never touches DynamoDB", async () => {
+    await GET();
+    expect(ddb.commandCalls(GetCommand)).toHaveLength(0);
   });
 });
