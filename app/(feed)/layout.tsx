@@ -1,0 +1,45 @@
+import type { ReactNode } from "react";
+import { RunStatusLine } from "../../components/RunStatusLine.js";
+
+/**
+ * Fix round 2. Renders spec §8's highest-value UI element -- the run-status line -- exactly
+ * once, above every route in this group, instead of at each of the five call sites fix round 1
+ * added individually. This is the route-group layout fix round 1's F7 costed out and declined
+ * for that round; the coordinator's fix round 2 asked for it specifically because presence
+ * tests (fix round 1's F1 fix) only protect a call site that already exists -- they say nothing
+ * about a SIXTH page added later with no call site at all. A layout that every grouped route is
+ * forced through by Next's own routing, plus the structural test in
+ * `tests/structure/page-groups.test.ts` that fails if a `page.tsx` exists outside this group and
+ * isn't explicitly allowlisted, is what actually closes that hole -- no page under `(feed)` can
+ * render without going through this layout first, by construction, not by a convention someone
+ * has to remember.
+ *
+ * `app/(feed)/` is a route GROUP: the parenthesised segment is stripped from the URL, so `/`,
+ * `/design`, `/day/[date]`, `/article/[urlHash]` and `/search` are unchanged -- verified via
+ * `pnpm build`'s route table and `pnpm check:routes`, both of which must show the same six
+ * routes as before this move.
+ *
+ * The ROOT layout (`app/layout.tsx`) is untouched, on purpose: it still performs no data read,
+ * so `/_not-found` and `/_global-error` (which render through the root layout, not this one)
+ * stay in `scripts/check-routes.ts`'s `EXPECTED_STATIC` exactly as before. This group layout
+ * sits BETWEEN the root layout and the five pages, so only routes that actually pass through it
+ * -- the five feed/search/article/day routes -- pick up the read; the two Next-internal pages
+ * never do.
+ *
+ * `now` is computed here, once, for this layout's own render -- not threaded down from a page,
+ * since a layout and the page it wraps are separate Server Component render passes with no
+ * shared instant Next provides. A few milliseconds' difference between this and a page's own
+ * `now` is not the hazard the "one `now` per render" rule (see `format.ts`) protects against;
+ * that rule is about not calling `new Date()` twice inside the SAME component's own render pass,
+ * and this layout and its child page are not the same render pass.
+ */
+export default async function FeedLayout({ children }: { children: ReactNode }) {
+  const now = new Date();
+
+  return (
+    <>
+      {await RunStatusLine({ now })}
+      {children}
+    </>
+  );
+}

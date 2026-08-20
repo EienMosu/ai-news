@@ -344,9 +344,9 @@ and needs no pagination in v1. If sources are added, re-check this bound before 
 
 | Pattern | Query | Round trips |
 |---|---|---|
-| Latest complete day | `META#DAY` desc limit 1, then GSI1 on that day | 2 |
+| Home feed, N day sections | `META#DAY` desc limit N, then one GSI1 Query per day, concurrent | 1 + N |
 | Archive calendar | `META#DAY` desc limit 60 | 1 |
-| Specific day | GSI1 `DAY#<date>` desc | 1 |
+| Specific day | GSI1 `DAY#<date>` desc, plus `META#DAY`/`<date>` | 2, issued together |
 | Category filter | client-side over the fetched day | 0 |
 | Cluster expansion | client-side over the fetched day | 0 |
 | Search | see §8 | 1 |
@@ -354,6 +354,27 @@ and needs no pagination in v1. If sources are added, re-check this bound before 
 The `META#DAY` item is written **last**, after all articles. Readers therefore never
 observe a partially-written day, and a run that dies mid-way leaves a day marked
 `partial` rather than silently truncated.
+
+> **[revised]** "Specific day" was originally one round trip — the GSI query alone. It now
+> also reads that day's `META#DAY` record, because a `/day/<date>` page that cannot see the
+> record cannot tell a finished day from one whose run died mid-write, nor an empty day from
+> a date before the archive begins. That distinction is the entire reason `META#DAY` is
+> written last, so a reader that ignores it discards the guarantee this section just made.
+> The two reads are issued together with `Promise.allSettled`, so the added cost is ~0.5 RCU
+> and no added latency, and a transient failure on the metadata read degrades the page to
+> "status unknown" instead of killing it. The record is fetched by key rather than through
+> `listDays`, which reaches only 30 days back and would silently miss an older archived day.
+
+> **[revised]** "Latest complete day" was a two-round-trip pattern: find the newest day whose
+> status is `complete`, then Query it. The home feed no longer works that way. It renders **N
+> day sections** (7 by default, up to 30), reading the newest N `META#DAY` records in one Query
+> and then Querying each day's partition concurrently — `1 + N` round trips, 8 at the default.
+>
+> The "prefer complete" preference is gone deliberately, not by accident. It existed to pick the
+> one best day to show; seven days each labelled with its own status tells a reader more than one
+> day picked silently. `getLatestCompleteDay` was deleted once nothing called it. Only days with
+> a `META#DAY` record appear at all, and that record is written last, so a day still being
+> captured cannot leak into the feed unranked.
 
 ---
 
@@ -554,6 +575,38 @@ EventBridge.
 >    one Query serves both and the nav switches a client-side filter — the same mechanism §4
 >    already specifies for the category filter, at zero additional round trips.
 >
+> > **[revised]** Point 3 above describes an architecture the implementation did not take, and
+> > is left in place so the change is visible rather than silently overwritten. The verticals
+> > are separate **routes** (`/` and `/design`), not a client-side filter over one fetched day,
+> > so switching verticals costs a fresh read of the day rather than zero. Points 1 and 2 are
+> > unaffected and are the reasons that actually carry the decision.
+> >
+> > To be accurate about how this happened: the routes were specified by the implementation
+> > plan, and no filter-versus-routes trade was weighed while building it. What follows is the
+> > case for keeping them, not a record of a deliberation.
+> >
+> > A client-side filter needs the filter state in the browser, which makes the feed a client
+> > component and pulls the card tree across that boundary. Separate routes also give each
+> > vertical a real URL to link, bookmark and share, which a filter chip does not.
+> >
+> > What it costs: one `Query` per day rendered, plus the `META#DAY` list. **Not free** — §2's
+> > table is explicit that on-demand DynamoDB has no free tier, and this revision originally
+> > claimed otherwise, which is the misconception this document corrects in two other places.
+> > At ~264 items/day of ~1.5 KB, an eventually-consistent Query reads ~400 KB — 0.5 RRU per
+> > 4 KB, so ≈ 50 RRU **per full day section**. The ~$0.00001-per-page-view figure first written
+> > here assumed the feed rendered one day; it renders seven. Up to ~350 RRU at the default and
+> > ~1,500 RRU at `?days=30` — "up to", because a day still being captured holds far fewer items
+> > (78 on 2026-08-19 against 264 on the 18th).
+> >
+> > Stating the rate so all three figures are checkable rather than merely consistent: at
+> > eu-central-1's on-demand read price of ~$0.15 per million read request units, 50 RRU is
+> > $0.0000074, 350 is $0.000052, and 1,500 is $0.00022. The single-day figure above reads
+> > $0.00001 because one significant figure rounds $0.0000074 **up**; scaling that rounded
+> > number by 7 and 30 would give $0.00007 and $0.0003, which are further from the truth than
+> > the rounding they preserve. Still negligible in dollars, which remains a different claim
+> > from free. If traffic ever makes it matter, the fix is caching the day, not merging the
+> > verticals.
+>
 > **The day-section count is per vertical.** `META#DAY.articleCount` is the total across both,
 > so a header reading "23 stories" under the AI nav must be computed from the filtered list,
 > not read from the meta item. Showing the combined count on a filtered feed would be a number
@@ -631,14 +684,33 @@ day one** — the value of a backup is entirely in it having run before it was n
 
 | Range | Source | Cost |
 |---|---|---|
-| Last 30 days | GSI1, one Query per day partition | ~30 queries |
-| Older | the NDJSON exports | one HTTP GET per month, filtered in memory, zero DynamoDB reads |
+| Last 30 days | GSI1, one Query per day partition | ~30 queries, ~1,500 RRU (~$0.0002) per search |
+| Older | the NDJSON exports | one HTTP GET **per day**, filtered in memory, zero DynamoDB reads |
 
 > **[revised]** The original plan — query GSI1 across a date range and filter in the route
 > handler — does not scale. A Query needs one exact partition key value, so a year-long
 > search is 365 queries reading ~6,800 RCU, and a `FilterExpression` would not help:
 > filters are applied *after* the read, so they cost the same capacity. The backup
 > artifact doubles as the deep-search index, so one mechanism serves both needs.
+
+> **[revised]** "One HTTP GET per month" described an artifact that does not exist.
+> `src/lib/rank/backup.ts` writes **one file per day** — `archive/<day>.ndjson` — so a month is
+> ~31 GETs, not one. Measured: `archive/2026-08-18.ndjson` is 269 KB for 264 articles, ~1 KB
+> each. A year would therefore be 365 requests and ~98 MB, which does not fit a Vercel Hobby
+> function's 60-second cap or its memory, so the original sentence understated the deep-search
+> cost by a factor of ~30.
+>
+> The intent survives the correction: **search the archive a month at a time.** One month is
+> ~31 concurrent GETs and ~8 MB, which is comfortable. A range longer than that is refused with
+> a message asking the reader to narrow it, rather than silently truncating results — a search
+> that quietly returns part of the archive is worse than one that says it will not run.
+>
+> The backup repository is **public**, verified against the unauthenticated GitHub API, so the
+> archive branch needs no token. That matters: the deep-search path must never be a reason to
+> put a credential in the web app.
+>
+> Not fixed here: adding monthly rollups to the backup would restore the original one-GET-per-
+> month shape and is the right long-term answer. It is Lambda work, outside the UI plan.
 
 Queries must handle `LastEvaluatedKey`. DynamoDB's 1 MB page limit applies before
 filtering, and unhandled pagination silently returns partial results.

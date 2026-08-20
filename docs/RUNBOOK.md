@@ -184,6 +184,69 @@ Record whichever decision you make somewhere durable, then continue to step 1.
     persisting it somewhere you'd then have to secure separately anyway, so the stack only
     creates the user the key belongs to, and minting the key is left to this manual step.
 
+    **The variable names, which nothing else in this repo records.** The AWS SDK finds the key
+    by name, so these three are not free choices: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+    and `AWS_REGION` (`eu-central-1`). Without the region the SDK throws "Region is missing"
+    rather than defaulting to anything. Verified 2026-08-20: **Vercel accepts all three names**
+    — it does not reserve the `AWS_` prefix — so no in-code renaming or explicit-credential
+    plumbing is needed.
+
+    **Vercel scopes variables per environment.** Production, Preview and Development are
+    separate lists. Setting a variable on Production alone leaves every preview deployment
+    without it, failing exactly as if it had never been set — tick Production **and** Preview.
+
+    **Do not use the "Redeploy" button the toast offers after saving a variable** unless the
+    production branch is the one you want rebuilt. It rebuilds the current production
+    deployment; if the app lives on an unmerged branch, that rebuilds a branch with no app in
+    it and reproduces the original failure. Open the pull request instead and let Vercel build
+    the branch preview, which picks the new variables up on its first run.
+
+    Marking the four non-credential variables "Sensitive" is harmless — the cost is only that
+    you cannot read them back in the dashboard afterwards, and all four are recoverable from
+    `describe-stacks` at any time. Nothing in this app reads any variable at build time (every
+    data route is `force-dynamic`; a build with `TABLE_NAME` unset produces the correct route
+    table), so only runtime availability matters.
+
+    **Also set in Vercel's environment variables (not secrets — none of these are credentials):**
+    `TABLE_NAME` (the `TableName` output from step 4) and, as of Task 8's `/search`,
+    **`BACKUP_REPO`** (`EienMosu/ai-news` — the default at `infra/bin/ai-news.ts:23`, which
+    `infra/lib/functions.ts` then passes to the Lambdas; reused verbatim. If you ever override
+    it with `-c backupRepo=…` at deploy time, Vercel must be changed to match, or search will
+    read one repository while the Lambdas write another). `src/lib/search/archive.ts` reads it at
+    request time to build the `raw.githubusercontent.com` URL for a search that reaches past the
+    last 30 days; it needs no token (the repo is public), but it does need this one variable to
+    exist. Left unset, an ordinary search still works — only `?since=` requests reaching into the
+    archive fail, with `BACKUP_REPO environment variable is not set`, which makes the gap easy to
+    miss until someone actually widens a search.
+
+    **As of Task 9's `/api/ingest` (`app/api/ingest/route.ts`), two more variables, one of each
+    kind:**
+
+    - **`CAPTURE_FUNCTION_NAME`** — the same value as `$CAPTURE_FN` (the `CaptureFunctionName`
+      output from step 4), not a credential, set as a plain environment variable the same as
+      `TABLE_NAME`/`BACKUP_REPO`. The route reads it at request time and invokes exactly that
+      function, asynchronously, on a valid request — never the rank function, and nothing here
+      re-derives or validates which function the name points at (that only matters at the IAM
+      layer: `VercelReaderUserName`'s `lambda:InvokeFunction` grant is scoped to the capture
+      function's ARN alone, so pointing this at the wrong function name 403s rather than
+      ranking).
+    - **`INGEST_SECRET`** — **set this one as a Vercel *secret*, not a plain variable**: unlike
+      the three above, this genuinely is a credential — anyone who has it can trigger capture
+      (never ranking; see spec §2) at will. Generate a long random string yourself (there is no
+      CDK/CLI step that produces one; nothing in this stack knows or needs to know its value).
+      Same handling as the GitHub PAT and the Vercel access key above: don't write it to a file,
+      echo it to this terminal, or paste it into a chat window or an agent. Left unset, the route
+      returns `500` and logs `INGEST_SECRET environment variable is not set` — it never falls
+      back to accepting any request as authenticated.
+
+      **Whoever calls this route must send the secret in a header literally named
+      `x-ingest-secret`** — this exact string, lowercase, is not derivable from any spec, plan,
+      or CDK output; it exists only in `app/api/ingest/route.ts`'s own source and this line.
+      `POST https://<vercel-domain>/api/ingest` with that header set to the `INGEST_SECRET`
+      value returns `202` and triggers one asynchronous capture invoke; a wrong or missing
+      secret returns `401`; any method other than `POST` returns `405` with an `Allow: POST`
+      header.
+
     ⚠️ **This key is invisible to CDK, permanently.** Because it's minted outside the stack,
     `cdk diff` will never mention it, before or after it exists. If a future change ever forces
     replacement of the `VercelReader` user construct (renaming it, changing an ID in the
@@ -262,8 +325,14 @@ otherwise, and repeat that same decision if it does.
   and regional prefixes like `eu.` carry a 10% pricing premium. Access is already granted and
   verified `ACTIVE`/invokable in `eu-central-1` — you do not need to request it for this
   account.
-- **Backup target:** GitHub repo `EienMosu/ai-news`, path `archive/<day>.ndjson`.
+- **Backup target:** GitHub repo `EienMosu/ai-news`, path `archive/<day>.ndjson`. As of Task 8,
+  this is also a **Vercel runtime requirement** (`BACKUP_REPO`, see step 10) — the web app's
+  `/search` route reads it too, not only the Lambdas.
 - **GitHub token parameter:** `/ai-news/github-token` (SecureString, `eu-central-1`).
+- **Manual ingest trigger:** `POST /api/ingest` with header `x-ingest-secret: <INGEST_SECRET>`.
+  As of Task 9, this is also a **Vercel runtime requirement** (`INGEST_SECRET` as a secret,
+  `CAPTURE_FUNCTION_NAME` as a plain variable, see step 10) — capture-only, never rank; see
+  spec §2.
 - Table, both function, and the Vercel IAM user's physical names are all CDK-generated (none
   is hardcoded to what its logical ID suggests). The stack outputs all four — see step 4. If
   you've lost them, `aws cloudformation describe-stacks --stack-name AiNewsStack --query

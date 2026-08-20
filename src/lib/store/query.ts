@@ -72,19 +72,3 @@ export async function listDays(
   }));
   return (out.Items ?? []) as DayMeta[];
 }
-
-/**
- * The feed's entry point. Readers never compute a date — they follow this pointer. Spec §4.
- *
- * Falls back to the newest day of ANY status when no complete day is in the window. A single
- * transient write failure marks a day `partial` and nothing retries it, so preferring
- * "complete" without a fallback means a run of unlucky days makes the site show NOTHING —
- * a worse outcome than showing a day that is 199 articles out of 200. The caller gets the
- * status and can say so in the UI.
- */
-export async function getLatestCompleteDay(
-  client: DynamoDBDocumentClient, tableName: string,
-): Promise<DayMeta | null> {
-  const days = await listDays(client, tableName, 30);
-  return days.find((d) => d.status === "complete") ?? days[0] ?? null;
-}

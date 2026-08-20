@@ -8,7 +8,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],
+    "lib": ["ES2023"],
     "outDir": "dist"
   },
-  "include": ["src", "tests", "scripts", "infra"]
+  "include": ["src", "tests", "scripts", "infra", "next.config.ts", "vitest.config.ts"],
+  "//": "lib is pinned to ES2023 with no DOM on purpose. TypeScript includes DOM by default when lib is unset, so until this line existed a Lambda could reference document or window and typecheck clean -- verified by planting document.title in src/lambda/capture.ts. This config covers the Lambdas, the CDK app and the Node scripts; JSX files are excluded here; components go to tsconfig.app.json and .tsx tests to tsconfig.test.json, and pnpm typecheck runs all three. A .ts file that imports a .tsx will fail here with TS6142 -- make it a .tsx test instead.",
+  "exclude": ["**/*.tsx"]
 }
