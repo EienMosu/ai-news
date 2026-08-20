@@ -1,5 +1,8 @@
 import Link from "next/link";
-import type { FeedArticle } from "../src/lib/feed/shape.js";
+import {
+  deduplicateStories,
+  type FeedArticle,
+} from "../src/lib/feed/shape.js";
 import { ArticleCard } from "./ArticleCard.js";
 
 export interface DaySectionProps {
@@ -14,7 +17,7 @@ export interface DaySectionProps {
 /**
  * One day's worth of cards. Presentational only -- no data fetching.
  *
- * The header count is `articles.length`, the array this component is actually rendering --
+ * The header count is `stories.length`, the de-duplicated array this component actually renders --
  * never `META#DAY.articleCount`, and never a `FeedResult`'s `llmRankedInDay`/`truncatedInDay`.
  * All three of those are day totals across BOTH sections (ai + design), because ranking and
  * corroboration run once per day, not once per vertical (see the doc comment on `FeedResult`
@@ -28,6 +31,8 @@ export interface DaySectionProps {
  * other same-page anchor would.
  */
 export function DaySection({ day, articles, now }: DaySectionProps) {
+  const stories = deduplicateStories(articles);
+
   return (
     <section className="mb-8">
       <header className="mb-3 flex items-baseline justify-between">
@@ -35,12 +40,12 @@ export function DaySection({ day, articles, now }: DaySectionProps) {
           <Link href={`/day/${day}`} className="hover:underline">{day}</Link>
         </h2>
         <span className="text-sm text-neutral-500">
-          {articles.length} {articles.length === 1 ? "story" : "stories"}
+          {stories.length} {stories.length === 1 ? "story" : "stories"}
         </span>
       </header>
 
       <div className="flex flex-col gap-4">
-        {articles.map((article) => (
+        {stories.map((article) => (
           <ArticleCard key={article.urlHash} article={article} now={now} />
         ))}
       </div>

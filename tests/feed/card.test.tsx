@@ -217,10 +217,10 @@ describe("ArticleCard", () => {
 });
 
 describe("DaySection", () => {
-  it("shows the count of the articles it is actually rendering", () => {
+  it("shows the count of the unique stories it is actually rendering", () => {
     const items = [
-      raw({ pk: `ART#${"a".repeat(64)}` }),
-      raw({ pk: `ART#${"b".repeat(64)}` }),
+      raw({ pk: `ART#${"a".repeat(64)}`, clusterId: "2026-08-18#a" }),
+      raw({ pk: `ART#${"b".repeat(64)}`, clusterId: "2026-08-18#b" }),
     ].map(toFeedArticle);
     render(<DaySection day="2026-08-18" articles={items} now={NOW} />);
     expect(screen.getByText("2 stories")).toBeTruthy();
@@ -234,12 +234,32 @@ describe("DaySection", () => {
 
   it("renders one card per article, preserving the given (score) order", () => {
     const items = [
-      raw({ pk: `ART#${"a".repeat(64)}`, title: "First" }),
-      raw({ pk: `ART#${"b".repeat(64)}`, title: "Second" }),
+      raw({ pk: `ART#${"a".repeat(64)}`, title: "First", clusterId: "2026-08-18#a" }),
+      raw({ pk: `ART#${"b".repeat(64)}`, title: "Second", clusterId: "2026-08-18#b" }),
     ].map(toFeedArticle);
     const { container } = render(<DaySection day="2026-08-18" articles={items} now={NOW} />);
     const titles = Array.from(container.querySelectorAll("h3")).map((h) => h.textContent);
     expect(titles).toEqual(["First", "Second"]);
+  });
+
+  it("renders one card per real story cluster and keeps the highest-ranked representative", () => {
+    const items = [
+      raw({ title: "Primary coverage", score: 900, pk: `ART#${"a".repeat(64)}` }),
+      raw({ title: "Duplicate coverage", score: 800, pk: `ART#${"b".repeat(64)}` }),
+      raw({
+        title: "Different story",
+        score: 700,
+        clusterId: "2026-08-18#other",
+        pk: `ART#${"c".repeat(64)}`,
+      }),
+    ].map(toFeedArticle);
+
+    render(<DaySection day="2026-08-18" articles={items} now={NOW} />);
+
+    expect(screen.getByText("2 stories")).toBeTruthy();
+    expect(screen.getByText("Primary coverage")).toBeTruthy();
+    expect(screen.queryByText("Duplicate coverage")).toBeNull();
+    expect(screen.getByText("Different story")).toBeTruthy();
   });
 
   it("shows the day string in the header", () => {
