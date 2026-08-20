@@ -10,6 +10,13 @@ import { Construct } from "constructs";
 // Imported, never re-typed. Two independent string literals for the same model drift apart
 // on the next model bump and the drift shows up as an IAM denial, not a compile error.
 import { RANK_MODEL } from "../../src/lib/rank/model.js";
+// The key prefixes below are imported, not spelled out: every LeadingKeys condition in this file
+// is the IAM half of a key the code builds in src/lib/store/keys.ts. Spelling them here by hand
+// meant a rename in one place denied every write at runtime with the whole suite green -- the
+// drift the final review raised for META#INGEST, which turned out to have four siblings.
+import {
+  ARTICLE_PK_PREFIX, DAY_LOCK_PK, DAY_META_PK, DAY_PARTITION_PREFIX, INGEST_META_PK, LAST_RUN_PK,
+} from "../../src/lib/store/keys.js";
 
 const BARE_MODEL = RANK_MODEL.replace(/^global\./, "");
 
@@ -171,12 +178,12 @@ export class Functions extends Construct {
     this.capture.addToRolePolicy(new iam.PolicyStatement({
       actions: ["dynamodb:UpdateItem"],
       resources: [props.table.tableArn],
-      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["ART#*"] } },
+      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": [`${ARTICLE_PK_PREFIX}*`] } },
     }));
     this.capture.addToRolePolicy(new iam.PolicyStatement({
       actions: ["dynamodb:PutItem"],
       resources: [props.table.tableArn],
-      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#lastRun"] } },
+      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": [LAST_RUN_PK] } },
     }));
     // Spec §9's per-day /api/ingest cap: capture's real ceiling is an atomic conditional
     // UpdateItem (ADD) against META#INGEST/<ingestDay> (src/lib/store/meta.ts's
@@ -190,18 +197,18 @@ export class Functions extends Construct {
     this.capture.addToRolePolicy(new iam.PolicyStatement({
       actions: ["dynamodb:UpdateItem"],
       resources: [props.table.tableArn],
-      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#INGEST"] } },
+      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": [INGEST_META_PK] } },
     }));
 
     this.rank.addToRolePolicy(new iam.PolicyStatement({
       actions: ["dynamodb:UpdateItem"],
       resources: [props.table.tableArn],
-      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["ART#*"] } },
+      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": [`${ARTICLE_PK_PREFIX}*`] } },
     }));
     this.rank.addToRolePolicy(new iam.PolicyStatement({
       actions: ["dynamodb:PutItem"],
       resources: [props.table.tableArn],
-      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#DAY", "META#lock"] } },
+      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": [DAY_META_PK, DAY_LOCK_PK] } },
     }));
     this.rank.addToRolePolicy(new iam.PolicyStatement({
       // Query against the index needs the index ARN — spec §9 says "table ARN only", which is
@@ -209,7 +216,7 @@ export class Functions extends Construct {
       // queryDay/dayHasArticles both query IndexName "feed-by-day" on gsi1pk = "DAY#<day>".
       actions: ["dynamodb:Query"],
       resources: [`${props.table.tableArn}/index/feed-by-day`],
-      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DAY#*"] } },
+      conditions: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": [`${DAY_PARTITION_PREFIX}*`] } },
     }));
     this.rank.addToRolePolicy(new iam.PolicyStatement({
       // Distinct from the Query above: src/lib/store/query.ts's `listDays` (the multi-day gap
@@ -221,7 +228,7 @@ export class Functions extends Construct {
       // logs "gap check failed" rather than failing the handler.
       actions: ["dynamodb:Query"],
       resources: [props.table.tableArn],
-      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["META#DAY"] } },
+      conditions: { "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": [DAY_META_PK] } },
     }));
 
     // --- Bedrock, profile-scoped ---

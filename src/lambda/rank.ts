@@ -12,6 +12,7 @@ import { buildRankUpdate } from "../lib/store/articles.js";
 import { buildDayMetaPut } from "../lib/store/meta.js";
 import { dayHasArticles, listDays, queryDay } from "../lib/store/query.js";
 import { docClient } from "../lib/store/client.js";
+import { DAY_LOCK_PK } from "../lib/store/keys.js";
 
 export interface RankSummary {
   day: string;
@@ -181,7 +182,7 @@ export async function handler(
   try {
     await client.send(new PutCommand({
       TableName: table,
-      Item: { pk: "META#lock", sk: day, runId, expiresAt: lockExpiry },
+      Item: { pk: DAY_LOCK_PK, sk: day, runId, expiresAt: lockExpiry },
       ConditionExpression: "attribute_not_exists(pk) OR expiresAt < :now",
       ExpressionAttributeValues: { ":now": runId },
     }));
