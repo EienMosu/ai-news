@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bySection,
   clusterSiblings,
+  deduplicateStories,
   hasCorroboration,
   isUnranked,
   toFeedArticle,
@@ -148,6 +149,121 @@ describe("clusterSiblings", () => {
     ];
     const subject = toFeedArticle(subjectRaw); // same urlHash as items[0], distinct object
     expect(clusterSiblings(items, subject).map((a) => a.title)).toEqual(["B"]);
+  });
+});
+
+describe("deduplicateStories", () => {
+  it("keeps only the highest-ranked article from a real story cluster", () => {
+    const items = [
+      raw({ title: "Primary coverage", score: 900, pk: `ART#${"a".repeat(64)}` }),
+      raw({ title: "Duplicate coverage", score: 800, pk: `ART#${"b".repeat(64)}` }),
+      raw({
+        title: "Different story",
+        score: 700,
+        clusterId: "2026-08-18#other",
+        pk: `ART#${"c".repeat(64)}`,
+      }),
+    ].map(toFeedArticle);
+
+    expect(deduplicateStories(items).map((article) => article.title)).toEqual([
+      "Primary coverage",
+      "Different story",
+    ]);
+  });
+
+  it("never collapses missing or __self__ cluster ids", () => {
+    const items = [
+      raw({ title: "Unranked A", clusterId: undefined, pk: `ART#${"a".repeat(64)}` }),
+      raw({ title: "Unranked B", clusterId: undefined, pk: `ART#${"b".repeat(64)}` }),
+      raw({ title: "Singleton A", clusterId: "__self__:shared", pk: `ART#${"c".repeat(64)}` }),
+      raw({ title: "Singleton B", clusterId: "__self__:shared", pk: `ART#${"d".repeat(64)}` }),
+    ].map(toFeedArticle);
+
+    expect(deduplicateStories(items)).toHaveLength(4);
+  });
+
+  it("fuzzy-collapses near-identical unclustered titles from different sources", () => {
+    const items = [
+      raw({
+        title: "OpenAI launches GPT-6 model for developers",
+        clusterId: null,
+        source: "techcrunch",
+        pk: `ART#${"a".repeat(64)}`,
+      }),
+      raw({
+        title: "OpenAI launches GPT 6 model for developers!",
+        clusterId: "__self__:b",
+        source: "verge",
+        pk: `ART#${"b".repeat(64)}`,
+      }),
+    ].map(toFeedArticle);
+
+    expect(deduplicateStories(items).map((article) => article.title)).toEqual([
+      "OpenAI launches GPT-6 model for developers",
+    ]);
+  });
+
+  it("does not fuzzy-collapse different model numbers", () => {
+    const items = [
+      raw({
+        title: "OpenAI launches GPT-6 model for developers",
+        clusterId: null,
+        source: "techcrunch",
+      }),
+      raw({
+        title: "OpenAI launches GPT-7 model for developers",
+        clusterId: null,
+        source: "verge",
+        pk: `ART#${"b".repeat(64)}`,
+      }),
+    ].map(toFeedArticle);
+
+    expect(deduplicateStories(items)).toHaveLength(2);
+  });
+
+  it("does not fuzzy-collapse a one-token product-name change", () => {
+    const items = [
+      raw({
+        title: "Google launches Gemini Nano model for Android developers",
+        clusterId: null,
+        source: "techcrunch",
+      }),
+      raw({
+        title: "Google launches Gemma Nano model for Android developers",
+        clusterId: null,
+        source: "verge",
+        pk: `ART#${"b".repeat(64)}`,
+      }),
+    ].map(toFeedArticle);
+
+    expect(deduplicateStories(items)).toHaveLength(2);
+  });
+
+  it("does not fuzzy-collapse same-source, cross-section, stale, or short generic titles", () => {
+    const base = {
+      title: "OpenAI launches GPT-6 model for developers",
+      clusterId: null,
+      source: "techcrunch",
+    };
+    const variants = [
+      raw({ ...base, pk: `ART#${"a".repeat(64)}` }),
+      raw({ ...base, pk: `ART#${"b".repeat(64)}` }),
+      raw({ ...base, source: "verge", section: "design", pk: `ART#${"c".repeat(64)}` }),
+      raw({
+        ...base,
+        source: "verge",
+        publishedAt: "2026-08-10T09:00:00.000Z",
+        pk: `ART#${"d".repeat(64)}`,
+      }),
+      raw({
+        title: "OpenAI model update",
+        clusterId: null,
+        source: "verge",
+        pk: `ART#${"e".repeat(64)}`,
+      }),
+    ].map(toFeedArticle);
+
+    expect(deduplicateStories(variants)).toHaveLength(5);
   });
 });
 

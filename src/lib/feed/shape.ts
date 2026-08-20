@@ -171,6 +171,96 @@ export function isRealCluster(clusterId: string | null): boolean {
   return clusterId !== null && !clusterId.startsWith("__self__:");
 }
 
+const TITLE_STOP_WORDS = new Set([
+  "a", "an", "and", "at", "by", "for", "from", "in", "is", "of", "on", "the", "to", "with",
+]);
+const FUZZY_TITLE_MIN_TOKENS = 4;
+const FUZZY_TITLE_MIN_OVERLAP = 4;
+const FUZZY_TITLE_DICE_THRESHOLD = 0.9;
+const FUZZY_PUBLISHED_AT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+function titleTokens(title: string): Set<string> {
+  const words = title.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return new Set(words.filter((word) => !TITLE_STOP_WORDS.has(word)));
+}
+
+function numericTokens(tokens: Set<string>): string[] {
+  return [...tokens].filter((token) => /^\d+$/.test(token)).sort();
+}
+
+function sameNumbers(left: Set<string>, right: Set<string>): boolean {
+  const a = numericTokens(left);
+  const b = numericTokens(right);
+  return a.length === b.length && a.every((token, index) => token === b[index]);
+}
+
+function publishedCloseTogether(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return false;
+  const a = Date.parse(left);
+  const b = Date.parse(right);
+  return (
+    Number.isFinite(a) &&
+    Number.isFinite(b) &&
+    Math.abs(a - b) <= FUZZY_PUBLISHED_AT_WINDOW_MS
+  );
+}
+
+function areLikelySameUnclusteredStory(left: FeedArticle, right: FeedArticle): boolean {
+  if (
+    left.source === "" ||
+    right.source === "" ||
+    left.source === right.source ||
+    left.section === null ||
+    left.section !== right.section
+  ) {
+    return false;
+  }
+  if (!publishedCloseTogether(left.publishedAt, right.publishedAt)) return false;
+
+  const a = titleTokens(left.title);
+  const b = titleTokens(right.title);
+  if (
+    a.size < FUZZY_TITLE_MIN_TOKENS ||
+    b.size < FUZZY_TITLE_MIN_TOKENS ||
+    !sameNumbers(a, b)
+  ) {
+    return false;
+  }
+
+  let overlap = 0;
+  for (const token of a) if (b.has(token)) overlap += 1;
+  const dice = (2 * overlap) / (a.size + b.size);
+  return overlap >= FUZZY_TITLE_MIN_OVERLAP && dice >= FUZZY_TITLE_DICE_THRESHOLD;
+}
+
+/**
+ * Keeps one card per story while preserving the caller's score order. Ranked real clusters
+ * are authoritative. Missing and `__self__:` cluster ids use a conservative title fallback:
+ * only different sources in the same section, within three days, with high token overlap and
+ * identical numeric markers can collapse. The first article remains the representative because
+ * day queries are score-descending.
+ */
+export function deduplicateStories(articles: FeedArticle[]): FeedArticle[] {
+  const seenClusters = new Set<string>();
+  const unclusteredRepresentatives: FeedArticle[] = [];
+  return articles.filter((article) => {
+    const clusterId = article.clusterId;
+    if (clusterId !== null && isRealCluster(clusterId)) {
+      if (seenClusters.has(clusterId)) return false;
+      seenClusters.add(clusterId);
+      return true;
+    }
+
+    if (
+      unclusteredRepresentatives.some((kept) => areLikelySameUnclusteredStory(kept, article))
+    ) {
+      return false;
+    }
+    unclusteredRepresentatives.push(article);
+    return true;
+  });
+}
+
 /**
  * The other articles covering the same story as `article`, never including `article` itself.
  *
