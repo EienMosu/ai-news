@@ -13,6 +13,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/lib/feed/read.js", () => ({
   getDay: vi.fn(),
+  // `app/day/[date]/page.tsx` now also renders `RunStatus`, which calls `getRunStatus` --
+  // this file's tests are about `getDay`/date handling and never customise this, so it stays a
+  // fixed `null` (the "pipeline never ran" case) for every test rather than being reset per-test.
+  getRunStatus: vi.fn(async () => null),
 }));
 
 import DayPage from "../../app/day/[date]/page.js";

@@ -1,4 +1,5 @@
 import { DaySection } from "../../components/DaySection.js";
+import { RunStatus } from "../../components/RunStatus.js";
 import { SectionNav } from "../../components/SectionNav.js";
 import { istanbulDay } from "../../src/lib/core/day.js";
 import { parseQueryParam, parseSectionParam, parseSinceParam, type SearchScope } from "../../src/lib/search/params.js";
@@ -161,6 +162,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   if (query === "") {
     return (
       <main className="mx-auto max-w-2xl px-4 py-8">
+        {await RunStatus({ now })}
         <SectionNav current={null} />
         <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
         <SearchForm query={query} scope={scope} since={since} today={today} />
@@ -191,6 +193,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
+      {await RunStatus({ now })}
       <SectionNav current={null} />
       <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
       <SearchForm query={query} scope={scope} since={since} today={today} />

@@ -18,6 +18,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/lib/feed/read.js", () => ({
   getRecentDays: vi.fn(),
+  // Both pages now also render `RunStatus`, which calls `getRunStatus` -- this file's tests
+  // are about the `getRecentDays`/`?days=` seam and never customise this, so it stays a fixed
+  // `null` (the "pipeline never ran" case) for every test.
+  getRunStatus: vi.fn(async () => null),
 }));
 
 import DesignPage from "../../app/design/page.js";

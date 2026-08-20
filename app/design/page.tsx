@@ -1,4 +1,5 @@
 import { FeedArchive } from "../../components/FeedArchive.js";
+import { RunStatus } from "../../components/RunStatus.js";
 import { SectionNav } from "../../components/SectionNav.js";
 import { parseDaysParam } from "../../src/lib/feed/days.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
@@ -26,6 +27,7 @@ export default async function DesignPage({ searchParams }: DesignPageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
+      {await RunStatus({ now })}
       <SectionNav current="design" days={days} />
       <FeedArchive section="design" results={results} now={now} days={days} basePath="/design" />
     </main>

@@ -14,6 +14,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../src/lib/feed/read.js", () => ({
   getArticle: vi.fn(),
   getDay: vi.fn(),
+  // `app/article/[urlHash]/page.tsx` now also renders `RunStatus`, which calls `getRunStatus`
+  // -- this file's tests are about the article/cluster logic and never customise this, so it
+  // stays a fixed `null` (the "pipeline never ran" case) for every test.
+  getRunStatus: vi.fn(async () => null),
 }));
 
 import ArticlePage from "../../app/article/[urlHash]/page.js";

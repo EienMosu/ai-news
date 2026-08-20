@@ -17,6 +17,9 @@ importers:
       '@aws-sdk/client-dynamodb':
         specifier: ^3.1112.0
         version: 3.1112.0
+      '@aws-sdk/client-lambda':
+        specifier: ^3.1112.0
+        version: 3.1114.0
       '@aws-sdk/client-ssm':
         specifier: ^3.1112.0
         version: 3.1112.0
@@ -157,6 +160,10 @@ packages:
 
   '@aws-sdk/client-dynamodb@3.1112.0':
     resolution: {integrity: sha512-Dborj6oKxgV9htN0jpdqGA9mTVOAPtYrrNI9ro67JNojtqIp1qHkdTkz1RkVi5Um2meV0qKVvhxLXRsI/S9RYQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-lambda@3.1114.0':
+    resolution: {integrity: sha512-P+sjJ1zNOSF9L63h7OSmpKLP+v12bUh/oaeHBzz2MjZC7b91TWUz5Q6VKoPDRKYdDgTQeGhjQvH2rYD21QytEg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-scheduler@3.1112.0':
@@ -1980,6 +1987,17 @@ snapshots:
       '@aws-sdk/credential-provider-node': 3.972.80
       '@aws-sdk/dynamodb-codec': 3.973.43
       '@aws-sdk/middleware-endpoint-discovery': 3.972.29
+      '@aws-sdk/types': 3.974.4
+      '@smithy/core': 3.33.2
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.2
+      '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/client-lambda@3.1114.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.8
+      '@aws-sdk/credential-provider-node': 3.972.80
       '@aws-sdk/types': 3.974.4
       '@smithy/core': 3.33.2
       '@smithy/fetch-http-handler': 5.7.2

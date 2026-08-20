@@ -19,6 +19,13 @@ vi.mock("../../src/lib/search/read.js", () => ({
   searchArchiveDays: vi.fn(),
 }));
 
+// `app/search/page.tsx` now also renders `RunStatus`, which calls `getRunStatus` from a
+// different module than the one above -- this file's tests are about search itself and never
+// customise this, so it stays a fixed `null` (the "pipeline never ran" case) for every test.
+vi.mock("../../src/lib/feed/read.js", () => ({
+  getRunStatus: vi.fn(async () => null),
+}));
+
 import SearchPage, { dynamic } from "../../app/search/page.js";
 import { toFeedArticle, type FeedArticle } from "../../src/lib/feed/shape.js";
 import { MAX_ARCHIVE_SEARCH_DAYS, RECENT_WINDOW_DAYS, subtractDays } from "../../src/lib/search/range.js";
