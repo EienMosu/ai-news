@@ -2,43 +2,110 @@
 //
 // Opt-in per file -- see the docblock in tests/feed/card.test.tsx for why: this file needs a
 // DOM and explicit `afterEach(cleanup)` because `test.globals` is false project-wide.
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { SectionNav } from "../../components/SectionNav.js";
+import { SECTION_LABEL, SectionNav } from "../../components/SectionNav.js";
+import { SECTIONS } from "../../src/types/article.js";
 
 afterEach(cleanup);
 
+const TAGLINE = "Each day’s news, ranked by importance, not recency.";
+
 describe("SectionNav", () => {
-  it("renders both section links with the right hrefs", () => {
-    render(<SectionNav current={null} />);
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/");
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
+  describe("the brand block", () => {
+    it("renders the wordmark 'The Slow Wire'", () => {
+      render(<SectionNav current={null} />);
+      expect(screen.getByTestId("brand").textContent).toContain("The Slow Wire");
+    });
+
+    it("renders the tagline with the exact apparatus copy", () => {
+      render(<SectionNav current={null} />);
+      expect(screen.getByTestId("tagline").textContent).toBe(TAGLINE);
+    });
+
+    it("renders the masthead as the page's <h1> when asHeading is true (the default)", () => {
+      render(<SectionNav current={null} />);
+      const heading = screen.getByRole("heading", { level: 1 });
+      expect(heading.textContent).toBe("The Slow Wire");
+    });
+
+    it("renders the masthead as a <p>, not a heading, when asHeading is false", () => {
+      render(<SectionNav current={null} asHeading={false} />);
+      expect(screen.queryByRole("heading")).toBeNull();
+      expect(screen.getByTestId("brand").textContent).toContain("The Slow Wire");
+    });
+
+    it("hides the brand mark svg from assistive tech", () => {
+      const { container } = render(<SectionNav current={null} />);
+      const mark = container.querySelector("svg");
+      expect(mark).not.toBeNull();
+      expect(mark?.getAttribute("aria-hidden")).toBe("true");
+    });
   });
 
-  it("marks the AI link current via aria-current when current is 'ai'", () => {
-    render(<SectionNav current="ai" />);
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
-  });
+  describe("the section switch", () => {
+    it("renders exactly one link per SECTIONS entry", () => {
+      render(<SectionNav current={null} />);
+      const nav = screen.getByRole("navigation", { name: "Sections" });
+      expect(within(nav).getAllByRole("link")).toHaveLength(SECTIONS.length);
+    });
 
-  it("does not mark the Design link current when current is 'ai'", () => {
-    render(<SectionNav current="ai" />);
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
-  });
+    it("labels every switch link from the SECTION_LABEL map, in SECTIONS order", () => {
+      render(<SectionNav current={null} />);
+      const nav = screen.getByRole("navigation", { name: "Sections" });
+      const links = within(nav).getAllByRole("link");
+      SECTIONS.forEach((section, i) => {
+        expect(links[i]?.textContent).toBe(SECTION_LABEL[section]);
+      });
+    });
 
-  it("marks the Design link current via aria-current when current is 'design'", () => {
-    render(<SectionNav current="design" />);
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBe("page");
-  });
+    it("every SECTIONS entry has a SECTION_LABEL entry -- so a new section cannot ship unlabelled", () => {
+      for (const section of SECTIONS) {
+        expect(SECTION_LABEL[section]).toBeTruthy();
+      }
+    });
 
-  it("does not mark the AI link current when current is 'design'", () => {
-    render(<SectionNav current="design" />);
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
-  });
+    it("renders both section links with the right hrefs", () => {
+      render(<SectionNav current={null} />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/");
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
+    });
 
-  it("marks neither link current when current is null", () => {
-    render(<SectionNav current={null} />);
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    it("carries data-field on each switch link matching its own section", () => {
+      render(<SectionNav current="ai" />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("data-field")).toBe("ai");
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("data-field")).toBe(
+        "design",
+      );
+    });
+
+    it("marks the AI link current via aria-current when current is 'ai'", () => {
+      render(<SectionNav current="ai" />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
+    });
+
+    it("does not mark the Design link current when current is 'ai'", () => {
+      render(<SectionNav current="ai" />);
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    });
+
+    it("marks the Design link current via aria-current when current is 'design'", () => {
+      render(<SectionNav current="design" />);
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBe(
+        "page",
+      );
+    });
+
+    it("does not mark the AI link current when current is 'design'", () => {
+      render(<SectionNav current="design" />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
+    });
+
+    it("marks neither link current when current is null", () => {
+      render(<SectionNav current={null} />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    });
   });
 
   describe("carrying `?days=` across a vertical switch -- fix round 1, F9", () => {
@@ -63,7 +130,7 @@ describe("SectionNav", () => {
   });
 
   describe("the Search entry point -- Task 8 fix round 1, finding 7", () => {
-    it("renders a Search link alongside the two vertical links", () => {
+    it("renders a Search link alongside the section switch", () => {
       render(<SectionNav current="ai" />);
       expect(screen.getByRole("link", { name: "Search" })).toBeTruthy();
     });
