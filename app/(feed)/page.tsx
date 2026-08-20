@@ -1,8 +1,7 @@
-import { FeedArchive } from "../components/FeedArchive.js";
-import { RunStatusLine } from "../components/RunStatusLine.js";
-import { SectionNav } from "../components/SectionNav.js";
-import { parseDaysParam } from "../src/lib/feed/days.js";
-import { getRecentDays } from "../src/lib/feed/read.js";
+import { FeedArchive } from "../../components/FeedArchive.js";
+import { SectionNav } from "../../components/SectionNav.js";
+import { parseDaysParam } from "../../src/lib/feed/days.js";
+import { getRecentDays } from "../../src/lib/feed/read.js";
 
 // Without this, Next statically prerenders this page at build time -- it calls `getRecentDays`,
 // which hits DynamoDB during `pnpm build` and fails with "TABLE_NAME environment variable is
@@ -41,7 +40,6 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      {await RunStatusLine({ now })}
       <SectionNav current="ai" days={days} />
       <FeedArchive section="ai" results={results} now={now} days={days} basePath="/" />
     </main>

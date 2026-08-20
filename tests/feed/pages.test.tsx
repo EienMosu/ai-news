@@ -16,19 +16,16 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Fix round 2: `RunStatusLine` moved out of these two pages entirely, into
+// `app/(feed)/layout.tsx` (see tests/feed/feed-layout.test.tsx and
+// tests/structure/page-groups.test.ts) -- neither page calls `getRunStatus`/`getArchive` any
+// more, so this mock no longer needs to stub them.
 vi.mock("../../src/lib/feed/read.js", () => ({
   getRecentDays: vi.fn(),
-  // Both pages now also render `RunStatusLine`, which calls `getRunStatus`/`getArchive` -- this
-  // file's tests are about the `getRecentDays`/`?days=` seam and never customise either, so
-  // they stay fixed at "pipeline never ran"/"no ranked day yet" for every test. Fix round 1,
-  // F1: presence of the rendered line itself IS pinned below, in its own dedicated test per
-  // page -- removing either page's `{await RunStatusLine({ now })}` call site must fail it.
-  getRunStatus: vi.fn(async () => null),
-  getArchive: vi.fn(async () => []),
 }));
 
-import DesignPage from "../../app/design/page.js";
-import Home from "../../app/page.js";
+import DesignPage from "../../app/(feed)/design/page.js";
+import Home from "../../app/(feed)/page.js";
 import type { FeedResult } from "../../src/lib/feed/read.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
 
@@ -162,11 +159,15 @@ describe("Home (app/page.tsx)", () => {
     expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design?days=14");
   });
 
-  it("fix round 1 F1: renders the run-status line -- spec §8's highest-value element must actually be on the page", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
-    render(await Home({ searchParams: searchParams() }));
-    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
-  });
+  // Fix round 1's F1 presence assertion lived here; fix round 2 removed it. `Home` alone no
+  // longer renders `RunStatusLine` at all -- that call site moved to `app/(feed)/layout.tsx`,
+  // which this test imports the bare page component around, never through Next's real routing.
+  // Asserting `run-status-empty` here would now assert something this page genuinely doesn't
+  // do, which is a worse gap than the one it used to fill: a passing-but-untrue test. The
+  // presence guarantee now lives in two other places that actually can give it:
+  // tests/feed/feed-layout.test.tsx (the layout renders RunStatusLine) and
+  // tests/structure/page-groups.test.ts (every page.tsx, including this one, is forced under
+  // that layout or is on an explicit, empty-by-default allowlist).
 });
 
 describe("DesignPage (app/design/page.tsx)", () => {
@@ -227,9 +228,6 @@ describe("DesignPage (app/design/page.tsx)", () => {
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
   });
 
-  it("fix round 1 F1: renders the run-status line -- spec §8's highest-value element must actually be on the page", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
-    render(await DesignPage({ searchParams: searchParams() }));
-    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
-  });
+  // See the identical note at the end of the `Home` describe block above -- the same removal,
+  // same reason, same replacement.
 });

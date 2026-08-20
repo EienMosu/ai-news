@@ -1,17 +1,16 @@
-import { DaySection } from "../../components/DaySection.js";
-import { RunStatusLine } from "../../components/RunStatusLine.js";
-import { SectionNav } from "../../components/SectionNav.js";
-import { istanbulDay } from "../../src/lib/core/day.js";
-import { parseQueryParam, parseSectionParam, parseSinceParam, type SearchScope } from "../../src/lib/search/params.js";
+import { DaySection } from "../../../components/DaySection.js";
+import { SectionNav } from "../../../components/SectionNav.js";
+import { istanbulDay } from "../../../src/lib/core/day.js";
+import { parseQueryParam, parseSectionParam, parseSinceParam, type SearchScope } from "../../../src/lib/search/params.js";
 import {
   MAX_ARCHIVE_SEARCH_DAYS,
   RECENT_WINDOW_DAYS,
   exceedsArchiveBoundForRange,
   splitSearchRange,
   subtractDays,
-} from "../../src/lib/search/range.js";
-import { searchArchiveDays, searchRecentDays, type ArchiveSearchOutcome } from "../../src/lib/search/read.js";
-import type { Section } from "../../src/types/article.js";
+} from "../../../src/lib/search/range.js";
+import { searchArchiveDays, searchRecentDays, type ArchiveSearchOutcome } from "../../../src/lib/search/read.js";
+import type { Section } from "../../../src/types/article.js";
 
 // Without this, Next prerenders the route at build time, and a search actually reaching
 // searchRecentDays would call DynamoDB with no TABLE_NAME set -- same reason as every other
@@ -162,7 +161,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   if (query === "") {
     return (
       <main className="mx-auto max-w-2xl px-4 py-8">
-        {await RunStatusLine({ now })}
         <SectionNav current={null} />
         <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
         <SearchForm query={query} scope={scope} since={since} today={today} />
@@ -193,7 +191,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      {await RunStatusLine({ now })}
       <SectionNav current={null} />
       <h1 className="mb-4 text-xl font-bold text-neutral-900">Search</h1>
       <SearchForm query={query} scope={scope} since={since} today={today} />

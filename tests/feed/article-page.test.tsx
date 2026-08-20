@@ -11,19 +11,16 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { isHTTPAccessFallbackError } from "next/dist/client/components/http-access-fallback/http-access-fallback.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Fix round 2: `RunStatusLine` moved out of this page entirely, into
+// `app/(feed)/layout.tsx` (see tests/feed/feed-layout.test.tsx and
+// tests/structure/page-groups.test.ts) -- the page itself no longer calls
+// `getRunStatus`/`getArchive`, so this mock no longer needs to stub them.
 vi.mock("../../src/lib/feed/read.js", () => ({
   getArticle: vi.fn(),
   getDay: vi.fn(),
-  // `app/article/[urlHash]/page.tsx` now also renders `RunStatusLine`, which calls
-  // `getRunStatus`/`getArchive` -- this file's tests are about the article/cluster logic and
-  // never customise either, so they stay fixed at "pipeline never ran"/"no ranked day yet" for
-  // every test. Fix round 1, F1: presence of the rendered line itself IS pinned below, in its
-  // own dedicated test.
-  getRunStatus: vi.fn(async () => null),
-  getArchive: vi.fn(async () => []),
 }));
 
-import ArticlePage from "../../app/article/[urlHash]/page.js";
+import ArticlePage from "../../app/(feed)/article/[urlHash]/page.js";
 import { getArticle, getDay } from "../../src/lib/feed/read.js";
 import { toArticleDetail, toFeedArticle } from "../../src/lib/feed/shape.js";
 
@@ -408,11 +405,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     });
   });
 
-  it("fix round 1 F1: renders the run-status line -- spec §8's highest-value element must actually be on the page", async () => {
-    vi.mocked(getArticle).mockResolvedValue(detail());
-
-    render(await ArticlePage({ params: params(HASH) }));
-
-    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
-  });
+  // Fix round 1's F1 presence assertion lived here; fix round 2 removed it -- `ArticlePage`
+  // alone no longer renders `RunStatusLine` (see the note on the mock above). The presence
+  // guarantee now lives in tests/feed/feed-layout.test.tsx and tests/structure/page-groups.test.ts.
 });

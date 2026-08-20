@@ -19,18 +19,12 @@ vi.mock("../../src/lib/search/read.js", () => ({
   searchArchiveDays: vi.fn(),
 }));
 
-// `app/search/page.tsx` now also renders `RunStatusLine`, which calls
-// `getRunStatus`/`getArchive` from a different module than the one above -- this file's tests
-// are about search itself and never customise either, so they stay fixed at "pipeline never
-// ran"/"no ranked day yet" for every test. Fix round 1, F1: presence of the rendered line
-// itself IS pinned below, in both of this page's return branches -- the blank-query early
-// return and the results branch are separate `return`s, so each needs its own assertion.
-vi.mock("../../src/lib/feed/read.js", () => ({
-  getRunStatus: vi.fn(async () => null),
-  getArchive: vi.fn(async () => []),
-}));
+// Fix round 2: `RunStatusLine` moved out of this page entirely, into
+// `app/(feed)/layout.tsx` (see tests/feed/feed-layout.test.tsx and
+// tests/structure/page-groups.test.ts) -- the page no longer imports anything from
+// `src/lib/feed/read.js` at all, so this file no longer mocks that module.
 
-import SearchPage, { dynamic } from "../../app/search/page.js";
+import SearchPage, { dynamic } from "../../app/(feed)/search/page.js";
 import { toFeedArticle, type FeedArticle } from "../../src/lib/feed/shape.js";
 import { MAX_ARCHIVE_SEARCH_DAYS, RECENT_WINDOW_DAYS, subtractDays } from "../../src/lib/search/range.js";
 import type { ArchiveSearchOutcome, DayMatches } from "../../src/lib/search/read.js";
@@ -112,10 +106,8 @@ describe("SearchPage -- blank query (decision 7)", () => {
     expect(screen.queryByTestId("search-empty")).toBeNull();
   });
 
-  it("fix round 1 F1: renders the run-status line on the blank-query early return -- a separate `return` from the results branch", async () => {
-    render(await SearchPage({ searchParams: searchParams() }));
-    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
-  });
+  // Fix round 1's F1 presence assertion (blank-query branch) lived here; fix round 2 removed
+  // it -- see the note on the mock above.
 });
 
 describe("SearchPage -- reads searchParams as a Promise (Next 15+ trap)", () => {
@@ -343,12 +335,8 @@ describe("SearchPage -- rendering results", () => {
     expect(recent.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("fix round 1 F1: renders the run-status line on the results branch -- a separate `return` from the blank-query one", async () => {
-    vi.mocked(searchRecentDays).mockResolvedValue([]);
-    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
-    render(await SearchPage({ searchParams: searchParams({ q: "story" }) }));
-    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
-  });
+  // Fix round 1's F1 presence assertion (results branch) lived here; fix round 2 removed it --
+  // see the note on the mock above.
 });
 
 describe("SearchPage -- since input min/max (fix round 1, finding 8)", () => {

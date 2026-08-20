@@ -2,12 +2,15 @@ import { getArchive, getRunStatus } from "../src/lib/feed/read.js";
 import { SOURCE_STATE_CLASS, SOURCE_STATE_LABEL, summarizeRunStatus } from "../src/lib/feed/runStatus.js";
 
 export interface RunStatusLineProps {
-  /** The instant to render "last run Xh ago" against. Threaded down from the page, never read
+  /** The instant to render "last run Xh ago" against. Threaded down from the caller, never read
    *  internally (`Date.now()`/argless `new Date()`) -- this project's purity rule for anything
    *  a test needs to hold still (see `relativeTime`'s own doc comment in `format.ts`, and
-   *  `ArticleCard`/`DaySection`'s identical `now` prop). Every call site already computes one
-   *  `now` for its own time-dependent rendering; this reuses it rather than taking a second,
-   *  independent instant that could drift from the page's own by a render tick. */
+   *  `ArticleCard`/`DaySection`'s identical `now` prop), and what makes this component's own
+   *  tests (`tests/feed/feed-layout.test.tsx`) able to hold "4h ago" still instead of depending
+   *  on whenever the suite happens to run. As of fix round 2 the one caller is
+   *  `app/(feed)/layout.tsx`, which computes its own `now` for this -- a layout and the page it
+   *  wraps are separate Server Component render passes with no shared instant Next provides, so
+   *  there is no page `now` to reuse here the way fix round 1's per-page call sites did. */
   now: Date;
 }
 
@@ -32,34 +35,38 @@ export interface RunStatusLineProps {
  * degrades to "status unavailable"; `getArchive(1)` failing degrades only the "LLM ..." clause
  * (see `llmLine`'s doc comment in `runStatus.ts`), leaving the per-source summary intact.
  *
- * It is embedded in the five routes that already read data and are already `force-dynamic`
- * (`/`, `/design`, `/day/[date]`, `/article/[urlHash]`, `/search`), not in `app/layout.tsx`.
- * `app/layout.tsx` today performs no data read and wraps every route including the default
- * `/_not-found` and `/_global-error` pages, which `pnpm check:routes` asserts are statically
- * prerendered (`scripts/check-routes.ts`'s `EXPECTED_STATIC`). A data read in the layout would
- * make those pages dynamic too -- correctly, since Next infers dynamic rendering from the read
- * itself, not from a directive -- which would require loosening or rewriting that gate for a
- * benefit (showing ingest health on a 404 page) nobody asked for. Rendering from the pages
- * keeps the protected static set exactly as it is and adds no read cost to routes that were
- * never part of the reading experience this component serves. (Fix round 1, F7 considered a
- * route-group layout, `app/(feed)/layout.tsx`, as a way to de-duplicate the six call sites
- * without touching the root layout; see the Task 9 report for why it was not taken this round.)
+ * Rendered exactly once, from `app/(feed)/layout.tsx` (fix round 2) -- NOT from `app/layout.tsx`
+ * (the root layout) and NOT from each of the five pages individually (fix round 1's original
+ * shape). `app/(feed)/` is a route GROUP wrapping the five data-reading routes (`/`, `/design`,
+ * `/day/[date]`, `/article/[urlHash]`, `/search`); the parenthesised segment is stripped from
+ * the URL, so none of their paths changed. The root layout stays untouched on purpose: it still
+ * performs no data read, so `/_not-found` and `/_global-error` (which render through the root
+ * layout, never the group layout) stay in `scripts/check-routes.ts`'s `EXPECTED_STATIC` exactly
+ * as before.
+ *
+ * Fix round 1 originally called this from all five pages individually and relied on a presence
+ * test per page to catch a call site being deleted. Fix round 2 found the actual gap in that
+ * shape: a presence test only fires when a call site that EXISTS is removed -- it has nothing to
+ * say about a SIXTH page added later with no call site at all, and the review proved exactly
+ * that (`app/zzscratchroute/page.tsx`, no `RunStatusLine`, every gate green). The route-group
+ * layout closes it structurally: a page cannot render without passing through its enclosing
+ * layout, so the only way to skip this component is to live outside `app/(feed)/` entirely --
+ * which `tests/structure/page-groups.test.ts` asserts nothing does, apart from a small,
+ * explicitly-commented allowlist.
  *
  * `getRunStatus` returns `null` for exactly one case -- the pipeline has never run -- rendered
  * as a plain statement rather than folded into any of spec §8's five per-source states: there
  * is no source data to classify yet.
  *
- * Every call site writes `{await RunStatusLine({ now })}`, never `<RunStatusLine now={now} />`.
- * Both are valid JSX and Next's real RSC renderer accepts either -- but
- * `@testing-library/react`'s `render()` uses the plain client reconciler, which cannot resolve
- * an async function component left unresolved inside a tree (confirmed: React logs
+ * The one call site (`app/(feed)/layout.tsx`) writes `{await RunStatusLine({ now })}`, never
+ * `<RunStatusLine now={now} />`. Both are valid JSX and Next's real RSC renderer accepts either
+ * -- but `@testing-library/react`'s `render()` uses the plain client reconciler, which cannot
+ * resolve an async function component left unresolved inside a tree (confirmed: React logs
  * "`<RunStatusLine>` is an async Client Component. Only Server Components can be async at the
- * moment" and the page renders as an empty `<div />`). Awaiting it explicitly, the same way
- * every page already awaits `getDay`/`getArticle`/`getRecentDays` before building its returned
- * JSX, resolves it to a plain element before the parent page's own `render(await Page(...))`
- * test ever sees it -- identical output in production, but renderable in this suite's tests
- * too. Fix round 1, F1 pins that every page actually does this, on the page's own test file --
- * see the presence assertions added there.
+ * moment" and the page renders as an empty `<div />`). Awaiting it explicitly resolves it to a
+ * plain element before the layout's own `render(await FeedLayout({ children }))` test ever sees
+ * it (`tests/feed/feed-layout.test.tsx`) -- identical output in production, but renderable in
+ * this suite's tests too.
  */
 export async function RunStatusLine({ now }: RunStatusLineProps) {
   const [statusResult, archiveResult] = await Promise.allSettled([getRunStatus(), getArchive(1)]);

@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { RunStatusLine } from "../../../components/RunStatusLine.js";
-import { ScoreSignals } from "../../../components/ScoreSignals.js";
-import { SectionNav } from "../../../components/SectionNav.js";
-import { computeRecency } from "../../../src/lib/core/score.js";
-import { relativeTime } from "../../../src/lib/feed/format.js";
-import { getArticle, getDay } from "../../../src/lib/feed/read.js";
-import { clusterSiblings, isRealCluster, isUnranked, type FeedArticle } from "../../../src/lib/feed/shape.js";
+import { ScoreSignals } from "../../../../components/ScoreSignals.js";
+import { SectionNav } from "../../../../components/SectionNav.js";
+import { computeRecency } from "../../../../src/lib/core/score.js";
+import { relativeTime } from "../../../../src/lib/feed/format.js";
+import { getArticle, getDay } from "../../../../src/lib/feed/read.js";
+import { clusterSiblings, isRealCluster, isUnranked, type FeedArticle } from "../../../../src/lib/feed/shape.js";
 
 // Same reason as app/page.tsx and app/design/page.tsx: without this, Next prerenders the route
 // at build time, calling `getArticle` (and, for an article with a real cluster, `getDay`)
@@ -78,7 +77,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      {await RunStatusLine({ now })}
       <SectionNav current={null} />
 
       <article>

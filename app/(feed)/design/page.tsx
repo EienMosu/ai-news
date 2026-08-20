@@ -1,8 +1,7 @@
-import { FeedArchive } from "../../components/FeedArchive.js";
-import { RunStatusLine } from "../../components/RunStatusLine.js";
-import { SectionNav } from "../../components/SectionNav.js";
-import { parseDaysParam } from "../../src/lib/feed/days.js";
-import { getRecentDays } from "../../src/lib/feed/read.js";
+import { FeedArchive } from "../../../components/FeedArchive.js";
+import { SectionNav } from "../../../components/SectionNav.js";
+import { parseDaysParam } from "../../../src/lib/feed/days.js";
+import { getRecentDays } from "../../../src/lib/feed/read.js";
 
 // See app/page.tsx for why this is required: without it, `pnpm build` prerenders this route
 // statically, calling `getRecentDays` (and hitting DynamoDB) at build time with no TABLE_NAME
@@ -27,7 +26,6 @@ export default async function DesignPage({ searchParams }: DesignPageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      {await RunStatusLine({ now })}
       <SectionNav current="design" days={days} />
       <FeedArchive section="design" results={results} now={now} days={days} basePath="/design" />
     </main>
