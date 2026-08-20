@@ -87,8 +87,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const recency = computeRecency(article.publishedAt, article.firstSeenAt, now);
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
-      <SectionNav current={null} />
+    <main data-field={article.section ?? "ai"} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <div className="mx-auto max-w-3xl">
+      <SectionNav current={null} asHeading={false} />
 
       <article>
         {article.imageUrl !== null ? (
@@ -99,9 +100,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           />
         ) : null}
 
-        <h1 className="text-2xl font-bold text-neutral-900">{article.title}</h1>
+        <h1 className="text-2xl font-bold text-current">{article.title}</h1>
 
-        <p data-testid="meta" className="mt-2 text-sm text-neutral-500">
+        <p data-testid="meta" className="mt-2 text-sm opacity-75">
           {article.sourceName !== "" ? `${article.sourceName} · ` : null}
           <time dateTime={article.publishedAt ?? undefined}>
             {relativeTime(article.publishedAt, now)}
@@ -133,13 +134,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         {article.whyItMatters !== null ? (
           <p
             data-testid="why-it-matters"
-            className="mt-4 border-l-2 border-neutral-300 pl-3 text-lg italic text-neutral-800"
+            className="mt-4 border-l border-current/35 pl-4 font-[family-name:var(--font-text)] text-[1.0625rem] italic leading-[1.55]"
           >
             {article.whyItMatters}
           </p>
         ) : null}
 
-        <p data-testid="summary" className="mt-4 text-neutral-700">{article.summary}</p>
+        <p data-testid="summary" className="mt-4 opacity-85">{article.summary}</p>
 
         {/* Plain `<a>`, not `next/link`: this leaves the app for the original source, which is
          *  exactly the case `next/link`'s soft-navigation model does not apply to (decision 8).
@@ -160,18 +161,18 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             target="_blank"
             rel="noopener noreferrer"
             data-testid="original-link"
-            className="mt-6 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-neutral-700"
+            className="mt-6 inline-block rounded bg-[var(--color-paper)] px-4 py-2 text-sm font-semibold text-[var(--field)] no-underline hover:opacity-85"
           >
             Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
           </a>
         ) : (
-          <p data-testid="original-link-unavailable" className="mt-6 text-sm text-neutral-500">
+          <p data-testid="original-link-unavailable" className="mt-6 text-sm opacity-75">
             Original source link unavailable.
           </p>
         )}
 
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide opacity-75">
             Ranking signals
           </h2>
           {/* `isUnranked` (scoreVersion === "v1-degraded") means the model never scored this
@@ -182,11 +183,10 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
            *  leaving a reader to infer "the ranking was never really performed" from a blank
            *  LLM-importance row alone. Fix round 1, finding F2. */}
           {isUnranked(article) ? (
-            <p
-              data-testid="ranking-degraded"
-              className="mt-1 text-xs font-medium uppercase tracking-wide text-amber-600"
-            >
-              New since last ranking -- these signals are not a real score yet
+            <p data-testid="ranking-degraded" className="mt-3">
+              <span className="stamp">
+                New since last ranking — these signals are not a real score yet
+              </span>
             </p>
           ) : null}
           <div className="mt-2">
@@ -203,7 +203,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
         {siblings.length > 0 ? (
           <section data-testid="siblings" className="mt-8">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="text-sm font-semibold uppercase tracking-wide opacity-75">
               Also covered by
             </h2>
             <ul className="mt-2 flex flex-col gap-1.5">
@@ -216,7 +216,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                 <li key={sibling.urlHash}>
                   <Link
                     href={`/article/${sibling.urlHash}`}
-                    className="text-sm text-neutral-700 underline hover:text-neutral-900"
+                    className="text-sm opacity-85 underline hover:text-current"
                   >
                     {sibling.sourceName !== "" ? sibling.sourceName : sibling.title}
                   </Link>
@@ -226,6 +226,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           </section>
         ) : null}
       </article>
+      </div>
     </main>
   );
 }

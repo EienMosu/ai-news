@@ -4,87 +4,108 @@ import { relativeTime } from "../src/lib/feed/format.js";
 
 export interface ArticleCardProps {
   article: FeedArticle;
-  /** The instant to render relative times against. Threaded down from the page, never read
-   *  internally (`Date.now()`/argless `new Date()`), so a render is reproducible in a test. */
   now: Date;
+  /** Position within its day, 1-based. Rank order is the information this product exists to
+   *  produce, so the number is content, not ornament. */
+  rank?: number;
+  /** The day's top entry. It leaves the paper and sits on the field instead — rank shows as
+   *  ground, never as a larger headline, so every entry keeps one type size. */
+  lead?: boolean;
 }
 
 /**
- * One story's card. Presentational only -- no data fetching, no `server-only` import, no
- * import from `read.ts`. Built imageless-and-rationale-less first: spec §7 and the live data
- * agree that `imageUrl` is absent on a large share of items (HN, research papers, several RSS
- * feeds) and `whyItMatters` is absent on every article of a degraded day, so those two blocks
- * are additive enhancements that simply don't render when the data isn't there -- never a
- * placeholder box, never a broken image icon.
+ * One entry in the day's file.
  *
- * The whole card is one link to the story's own detail page (`/article/[urlHash]`), never to
- * the source URL directly -- spec §7: the detail page is what this app adds over the raw feed,
- * so the outbound link to the source lives there, not here.
+ * Not a card: a row on the sheet. Cards would make every entry the same weight and hide the
+ * ranking inside an order nobody can see, which is the arrangement this design refuses.
  *
- * `summary` and `whyItMatters` are rendered as plain JSX text, never `dangerouslySetInnerHTML`.
- * That is deliberate, not an oversight: the ingest pipeline's `stripTags` heuristic
- * (src/lib/ingest/fetchers/rss.ts) intentionally leaves bracketed prose like `<model>` or
- * `<think>` untouched in stored summaries, because it cannot tell that prose apart from real
- * markup after entity-decoding. Rendering as text is what makes that safe: React escapes text
- * content, so `<model>` displays as the literal characters a reader expects and a stray
- * `<script>` in a summary can never become a live DOM node.
+ * `whyItMatters` sits ABOVE the scraped summary. It is the only line on the page the product
+ * wrote itself, and putting the borrowed text first buries the thing that makes this more than
+ * an RSS reader.
+ *
+ * The thumbnail is optional and fixed-size, and the row's layout does not depend on it: spec §7
+ * notes `imageUrl` is absent on a large share of items, so a layout that reserves a hero slot
+ * per entry ships a page full of holes. The bare row is the design; the image is an addition to
+ * it.
  */
-export function ArticleCard({ article, now }: ArticleCardProps) {
-  // `hasCorroboration` is a type predicate, so inside the true branch the compiler knows
-  // `corroborationToday` is a number -- no assertion, and no way for a later change in
-  // shape.ts to loosen the guarantee without breaking this line.
+export function ArticleCard({ article, now, rank, lead = false }: ArticleCardProps) {
   const others = hasCorroboration(article) ? article.corroborationToday - 1 : 0;
   const showCorroboration = others > 0;
 
   return (
     <Link
       href={`/article/${article.urlHash}`}
-      className="block rounded-lg border border-neutral-200 p-4 no-underline transition-colors hover:border-neutral-400"
+      data-lead={lead ? "" : undefined}
+      className={[
+        "group relative block no-underline transition-[background-color,color] duration-200",
+        lead
+          ? "-mx-4 px-4 py-5 sm:-mx-7 sm:px-7"
+          : "border-t border-[color-mix(in_oklab,var(--color-ink)_14%,transparent)] py-5 first:border-t-0",
+      ].join(" ")}
+      style={lead ? { background: "var(--field)", color: "var(--on-field)" } : undefined}
     >
-      <article>
+      <article className="flex gap-4 sm:gap-6">
+        {rank !== undefined ? (
+          <span
+            aria-hidden="true"
+            data-numeric
+            className="apparatus mt-[0.35rem] w-6 shrink-0 opacity-70 sm:w-8"
+          >
+            {String(rank).padStart(2, "0")}
+          </span>
+        ) : null}
+
+        <div className="min-w-0 flex-1">
+          <h3
+            className="font-[family-name:var(--font-display)] text-[1.0625rem] font-semibold leading-[1.25] tracking-[-0.011em] underline-offset-[0.22em] group-hover:underline sm:text-[1.1875rem]"
+            style={{ textWrap: "balance" }}
+          >
+            {article.title}
+          </h3>
+
+          {/* `sourceName` is coerced to "" (never undefined/null) when a stored item is missing
+              it, so the separator has to share the same condition or a degraded entry prints a
+              leading dot with nothing before it. */}
+          <p data-testid="meta" className="apparatus mt-2 opacity-70">
+            {article.sourceName !== "" ? `${article.sourceName} · ` : null}
+            <time dateTime={article.publishedAt ?? undefined}>
+              {relativeTime(article.publishedAt, now)}
+            </time>
+          </p>
+
+          {isUnranked(article) ? (
+            <p data-testid="unranked-marker" className="mt-3">
+              <span className="stamp">New since last ranking</span>
+            </p>
+          ) : null}
+
+          {article.whyItMatters !== null ? (
+            <p
+              data-testid="why-it-matters"
+              className="mt-3 border-l border-current pl-3 font-[family-name:var(--font-text)] text-[0.9375rem] italic leading-[1.5]"
+            >
+              {article.whyItMatters}
+            </p>
+          ) : null}
+
+          <p className="mt-3 max-w-[68ch] font-[family-name:var(--font-text)] text-[0.9375rem] leading-[1.6] opacity-80">
+            {article.summary}
+          </p>
+
+          {showCorroboration ? (
+            <p data-testid="corroboration" className="apparatus mt-3 opacity-70">
+              Also covered by {others} {others === 1 ? "other" : "others"}
+            </p>
+          ) : null}
+        </div>
+
         {article.imageUrl !== null ? (
           <img
             src={article.imageUrl}
             alt=""
             loading="lazy"
-            className="mb-3 h-40 w-full rounded object-cover"
+            className="mt-1 hidden h-20 w-20 shrink-0 object-cover sm:block"
           />
-        ) : null}
-
-        <h3 className="text-lg font-semibold text-neutral-900">{article.title}</h3>
-
-        {/* `sourceName` is coerced to "" (never undefined/null) when a stored item is missing
-         *  it -- see `asString` in shape.ts -- so a fully degraded article reaches this line
-         *  with an empty string. The separator is part of the same conditional as the name
-         *  itself, so a missing name never leaves a bare leading "·" with nothing before it. */}
-        <p data-testid="meta" className="mt-1 text-sm text-neutral-500">
-          {article.sourceName !== "" ? `${article.sourceName} · ` : null}
-          <time dateTime={article.publishedAt ?? undefined}>
-            {relativeTime(article.publishedAt, now)}
-          </time>
-        </p>
-
-        {isUnranked(article) ? (
-          <p
-            data-testid="unranked-marker"
-            className="mt-1 text-xs font-medium uppercase tracking-wide text-amber-600"
-          >
-            New since last ranking
-          </p>
-        ) : null}
-
-        <p className="mt-2 text-sm text-neutral-700">{article.summary}</p>
-
-        {article.whyItMatters !== null ? (
-          <p data-testid="why-it-matters" className="mt-2 text-sm italic text-neutral-600">
-            {article.whyItMatters}
-          </p>
-        ) : null}
-
-        {showCorroboration ? (
-          <p data-testid="corroboration" className="mt-2 text-xs text-neutral-400">
-            Also covered by {others} {others === 1 ? "other" : "others"}
-          </p>
         ) : null}
       </article>
     </Link>

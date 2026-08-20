@@ -53,7 +53,20 @@ export default async function FeedLayout({ children }: { children: ReactNode }) 
 
   return (
     <>
-      {await RunStatusLine({ now })}
+      {/* A rail, not an orphan. This renders above <main>, outside every page's container, so it
+          supplies its own: full-bleed field with an inner width matching the pages' max-w-3xl, or
+          it sits jammed against the viewport edge while the content below is centred. The live
+          mono readout across the top is the Illoca move in the pinned direction — the surface
+          telling you the state of the thing it is showing you.
+
+          It is ink, not the field's colour, and deliberately so. This layout renders above the
+          page, so it cannot know which vertical is below it: painting it `var(--field)` gave the
+          design feed a blue bar over a vermilion page. Guessing was the wrong repair — the run
+          status is a fact about the pipeline, not about the vertical you happen to be reading, so
+          sitting outside both colour worlds is what it actually means. */}
+      <div className="bg-[var(--color-ink)] px-5 py-2.5 text-[var(--color-paper)] sm:px-8">
+        <div className="mx-auto max-w-3xl">{await RunStatusLine({ now })}</div>
+      </div>
       {children}
     </>
   );

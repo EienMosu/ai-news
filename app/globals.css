@@ -1,1 +1,229 @@
 @import "tailwindcss";
+
+/*
+  THE DAY'S DOSSIER — the world, in one place.
+
+  Two colour worlds, one per vertical: the AI feed is drenched ink blue, the design feed
+  vermilion. Switching verticals changes world rather than filtering a list. Every component
+  therefore has to survive on either field, which is why nothing below hard-codes a field colour:
+  a route sets --field once on <main data-field>, and everything else derives.
+
+  Status never depends on hue. Spec §8 talks in amber and red, but red is invisible on the
+  vermilion field, so state ships as a STAMP — a boxed, letterspaced mono word — and the word is
+  the signal. Colour-blind readers and the vermilion vertical get the same information.
+*/
+
+/*
+  These live in :root, NOT in @theme. Tailwind 4 emits @theme variables only when a generated
+  utility references them, so declaring the fields there left `--color-field-ai` undefined at
+  runtime -- which made `--field` invalid, which made every `background: var(--field)` fall
+  through to transparent. The lead entry's inversion silently did nothing, and the served
+  stylesheet proved it: :root carried Tailwind's own palette and none of these. Raw custom
+  properties belong in :root; @theme is for generating classes, which none of these do.
+*/
+:root {
+  --color-ink: #151512;
+  --color-ink-soft: #4a473c;
+  --color-paper: #efe9dc;
+  --color-paper-edge: #ded6c4;
+
+  /* The two worlds. Deep enough that bone type clears 4.5:1 at the softest step the design
+     uses (0.70) -- measured, not judged: AI 5.83:1, design 4.89:1. */
+  --color-field-ai: #16307f;
+  --color-field-design: #7e2412;
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-text: var(--font-literata), Georgia, serif;
+  --font-apparatus: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* Overwritten per vertical by [data-field]; the AI world is the default. */
+  --field: var(--color-field-ai);
+  --on-field: #f3eee2;
+}
+
+[data-field="design"] {
+  --field: var(--color-field-design);
+  --on-field: #f6ece7;
+}
+
+html {
+  background: var(--field);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--field);
+  color: var(--on-field);
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+  Browser surfaces. The parts nobody draws still carry the design, and shipping the defaults here
+  is the difference between a page that was built and one that was assembled.
+*/
+::selection {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+[data-surface="paper"] ::selection {
+  background: var(--field);
+  color: var(--on-field);
+}
+:root {
+  accent-color: var(--field);
+  caret-color: currentColor;
+  scrollbar-color: color-mix(in oklab, var(--on-field) 42%, transparent) transparent;
+  scrollbar-width: thin;
+}
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+
+/* Every digit in this product sits in a column somewhere. */
+[data-numeric],
+.apparatus {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.apparatus {
+  font-family: var(--font-apparatus);
+  font-size: 0.6875rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/*
+  The stamp. One form, used for every state the reader must not miss: a day's ranking status, an
+  imputed value, an article the model never scored. It reads as pressed-on rather than styled-in,
+  which is the point — these are marks the system makes about itself.
+*/
+.stamp {
+  font-family: var(--font-apparatus);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.25em 0.5em 0.2em;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  white-space: nowrap;
+  display: inline-block;
+  line-height: 1;
+}
+.stamp[data-weight="loud"] {
+  background: currentColor;
+}
+.stamp[data-weight="loud"] > span {
+  /* The label has to invert against whatever ground the stamp landed on. */
+  color: var(--stamp-knockout, var(--color-paper));
+  mix-blend-mode: normal;
+}
+
+/*
+  The paper panel. A sheet laid on the field, with a faint graph tint — the drafting-canvas move
+  from Illoca, kept faint enough that prose sits on it comfortably.
+*/
+[data-surface="paper"] {
+  background-color: var(--color-paper);
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-ink) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-ink) 5%, transparent) 1px, transparent 1px);
+  background-size: 1.5rem 1.5rem;
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+  THE ONE AUTHORED MOMENT.
+
+  Every route is server-rendered per request against DynamoDB, so there is a real wait to fill —
+  and the honest thing to show during it is the product's own mechanism: the day being counted,
+  then stamped. Not a spinner, which would say only "something is happening".
+
+  Pure CSS, by necessity and to its benefit: this app ships no client components, so the counter
+  is a strip of digits translated under a window with `steps()` timing. Three columns running at
+  different rates read as a counter racing rather than three clocks in sync.
+
+  It never claims a figure it does not have. The loader has no data yet, so the digits cycle and
+  the stamp says what is happening — the real count lands with the real page.
+*/
+.odo {
+  display: inline-flex;
+  overflow: hidden;
+  height: 1em;
+  line-height: 1;
+  vertical-align: -0.06em;
+}
+.odo > i {
+  display: block;
+  font-style: normal;
+  animation: odo-roll var(--dur, 900ms) steps(10, end) infinite;
+}
+.odo > i::before {
+  content: "0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";
+  white-space: pre;
+  display: block;
+}
+@keyframes odo-roll {
+  to {
+    transform: translateY(-10em);
+  }
+}
+
+.land {
+  animation: land 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+@keyframes land {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.5rem) rotate(-2.4deg) scale(1.06);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(0) rotate(-1.1deg) scale(0.995);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(-1.1deg) scale(1);
+  }
+}
+
+/* Skeleton rules fill in rather than pulse: a bar sweeping left to right reads as reading. */
+.rule-fill {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-ink) 16%, transparent) 0%,
+    color-mix(in oklab, var(--color-ink) 16%, transparent) 40%,
+    color-mix(in oklab, var(--color-ink) 6%, transparent) 55%,
+    color-mix(in oklab, var(--color-ink) 16%, transparent) 70%
+  );
+  background-size: 260% 100%;
+  animation: rule-sweep 1.6s ease-in-out infinite;
+}
+@keyframes rule-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}

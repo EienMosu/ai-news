@@ -64,22 +64,24 @@ export default async function DayPage({ params }: DayPageProps) {
   const now = new Date();
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <div className="mx-auto max-w-3xl">
       <SectionNav current={null} />
 
       {result.llmRankedInDay !== null ? (
-        <p data-testid="day-status" className="mb-4 text-xs text-neutral-500">
+        <p data-testid="day-status" className="mb-4 text-xs opacity-75">
           {dayStatusLine(result.status, result.llmRankedInDay, result.truncatedInDay, date)}
         </p>
       ) : null}
 
       {result.articles.length === 0 ? (
-        <p data-testid="day-empty" className="text-neutral-600">
+        <p data-testid="day-empty" className="opacity-80">
           This day ranked but produced no stories in either vertical.
         </p>
       ) : (
         <DaySection day={date} articles={result.articles} now={now} />
       )}
+      </div>
     </main>
   );
 }

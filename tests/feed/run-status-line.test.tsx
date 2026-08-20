@@ -149,7 +149,7 @@ describe("RunStatusLine", () => {
     expect(screen.getByTestId("run-status-summary").textContent).toContain("2/2 sources");
   });
 
-  it("names a quarantined source explicitly, in amber, even though it also produced items", async () => {
+  it("names a quarantined source explicitly, stamped, even though it also produced items", async () => {
     // The anthropic case spec §8 names by name: one degenerate title a day must never be
     // hidden, and must never be worded as a fault either.
     vi.mocked(getRunStatus).mockResolvedValue({
@@ -161,11 +161,15 @@ describe("RunStatusLine", () => {
 
     render(await RunStatusLine({ now: NOW }));
 
-    const item = screen.getByText("anthropic: parser or schema drift");
-    expect(item.className).toContain("text-amber-600");
+    const item = screen.getByText("anthropic: parser or schema drift").closest("li");
+    // Was an amber-class assertion. The claim is unchanged -- spec §8 says this one
+    // degenerate title a day must never be hidden and never worded as a fault -- but it is
+    // now carried by a stamp, at full weight, so it survives both colour worlds.
+    expect(item?.className).toBe("opacity-100");
+    expect(item?.querySelector(".stamp")).not.toBeNull();
   });
 
-  it("names a quiet source in grey, worded as quiet rather than any kind of failure", async () => {
+  it("presses a quiet source softer than a fault, worded as quiet rather than any failure", async () => {
     vi.mocked(getRunStatus).mockResolvedValue({
       ...baseStatus,
       filtered: { alistapart: 3 },
@@ -174,8 +178,12 @@ describe("RunStatusLine", () => {
 
     render(await RunStatusLine({ now: NOW }));
 
-    const item = screen.getByText("alistapart: quiet");
-    expect(item.className).toBe("text-neutral-400");
+    // Was `toBe("text-neutral-400")`. State left hue behind in the redesign -- one vertical is
+    // drenched vermilion, where amber and red cannot be seen -- so the claim is now asserted
+    // against the stamp's weight and its word, which is strictly more than a colour carried.
+    const item = screen.getByText("alistapart: quiet").closest("li");
+    expect(item?.className).toBe("opacity-70");
+    expect(item?.querySelector(".stamp")).not.toBeNull();
   });
 
   it("never renders a red/rose/danger class, even for a dead source", async () => {
@@ -187,8 +195,10 @@ describe("RunStatusLine", () => {
 
     render(await RunStatusLine({ now: NOW }));
 
-    const item = screen.getByText("deadsource: no items");
-    expect(item.className).not.toMatch(/red|rose|danger/i);
+    const item = screen.getByText("deadsource: no items").closest("li");
+    expect(item?.className).not.toMatch(/red|rose|danger|amber|orange/i);
+    // And the positive half of the same claim: it is still surfaced, as a stamp, not dropped.
+    expect(item?.querySelector(".stamp")).not.toBeNull();
   });
 
   it("labels a fetch-failure source distinctly from a dead one", async () => {

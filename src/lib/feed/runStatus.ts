@@ -53,19 +53,26 @@ export const SOURCE_STATE_LABEL: Record<Exclude<SourceState, "healthy">, string>
 };
 
 /**
- * Tailwind color class per non-healthy state. `fetchFailed` and `dead` are spec §8's two rows
- * that "turn red on two consecutive runs" -- but `getRunStatus` (src/lib/feed/read.ts) reads a
- * single `META#lastRun` item, with no record of the run before it. There is no second data point
- * here to check "two consecutive" against, so both render amber, the same as `drift`, rather
- * than inventing a red state this layer cannot actually verify -- see components/RunStatusLine.tsx
- * and the Task 9 report for the fuller reasoning. `quiet` is grey, never amber: spec §8 is
+ * Stamp weight per non-healthy state -- deliberately NOT a colour.
+ *
+ * Spec §8 describes these states in amber and red, and this design cannot use either: one of the
+ * two verticals is drenched vermilion, where a red or amber warning is invisible, and the other
+ * is drenched ink blue, where amber is the only thing on the page that glows. So state ships as a
+ * STAMP whose WORD is the signal (`SOURCE_STATE_LABEL` below), and this map only decides how hard
+ * the stamp is pressed. That is strictly more information than a hue: it survives both fields,
+ * both themes, and colour-blind readers.
+ *
+ * `fetchFailed` and `dead` are §8's two rows that "turn red on two consecutive runs" -- but
+ * `getRunStatus` reads a single `META#lastRun` item with no record of the run before it, so there
+ * is no second data point to check "two consecutive" against. They render at the same weight as
+ * `drift` rather than inventing an escalation this layer cannot verify. `quiet` stays soft: §8 is
  * explicit that a reliably-quiet source (`alistapart`) is not a fault.
  */
 export const SOURCE_STATE_CLASS: Record<Exclude<SourceState, "healthy">, string> = {
-  quiet: "text-neutral-400",
-  drift: "text-amber-600",
-  fetchFailed: "text-amber-600",
-  dead: "text-amber-600",
+  quiet: "opacity-70",
+  drift: "opacity-100",
+  fetchFailed: "opacity-100",
+  dead: "opacity-100",
 };
 
 /**

@@ -72,7 +72,7 @@ export function FeedView({ section, result, now }: FeedViewProps) {
 
   if (day === null) {
     return (
-      <p data-testid="feed-empty-no-day" className="text-neutral-600">
+      <p data-testid="feed-empty-no-day" className="font-[family-name:var(--font-text)] text-[1.0625rem] italic opacity-80">
         The pipeline has not produced a ranked day yet. Check back soon.
       </p>
     );
@@ -81,13 +81,21 @@ export function FeedView({ section, result, now }: FeedViewProps) {
   return (
     <>
       {llmRankedInDay !== null ? (
-        <p data-testid="day-status" className="mb-4 text-xs text-neutral-500">
-          {dayStatusLine(status, llmRankedInDay, truncatedInDay, day)}
+        <p
+          data-testid="day-status"
+          className="apparatus mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 opacity-70"
+          data-numeric
+        >
+          {/* Labelled because the number beside it in the sheet header is a DIFFERENT scope --
+              that one counts this vertical, this one totals both. Unlabelled, 93 above 72 reads
+              as an arithmetic error rather than two facts. */}
+          <span className="stamp shrink-0">Day total</span>
+          <span>{dayStatusLine(status, llmRankedInDay, truncatedInDay, day)}</span>
         </p>
       ) : null}
 
       {articles.length === 0 ? (
-        <p data-testid="feed-empty-section" className="text-neutral-600">
+        <p data-testid="feed-empty-section" className="font-[family-name:var(--font-text)] text-[1.0625rem] italic opacity-80">
           No {SECTION_LABELS[section]} stories for {day}.
         </p>
       ) : (
