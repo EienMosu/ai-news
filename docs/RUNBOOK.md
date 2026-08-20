@@ -184,6 +184,18 @@ Record whichever decision you make somewhere durable, then continue to step 1.
     persisting it somewhere you'd then have to secure separately anyway, so the stack only
     creates the user the key belongs to, and minting the key is left to this manual step.
 
+    **Import the Vercel project only AFTER the app exists on the production branch.**
+    Vercel detects the framework once, at import time, and stores it in Project Settings; it
+    does not re-detect on later deploys. Importing while `main` has no `next` dependency leaves
+    the preset on "Other" permanently, and every later deploy then runs `pnpm run build`
+    (the Next build succeeds, route table and all) and afterwards fails with:
+
+        Error: No Output Directory named "public" found after the Build completed.
+
+    That message names a static-site problem and gives no hint that the preset is wrong. Fix:
+    Settings → Build & Deployment → **Framework Preset → Next.js**, clear any manual Output
+    Directory override, then redeploy. Cost us one deploy on 2026-08-20.
+
     **The variable names, which nothing else in this repo records.** The AWS SDK finds the key
     by name, so these three are not free choices: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
     and `AWS_REGION` (`eu-central-1`). Without the region the SDK throws "Region is missing"
