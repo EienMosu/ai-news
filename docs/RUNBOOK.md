@@ -186,8 +186,10 @@ Record whichever decision you make somewhere durable, then continue to step 1.
 
     **Also set in Vercel's environment variables (not secrets — none of these are credentials):**
     `TABLE_NAME` (the `TableName` output from step 4) and, as of Task 8's `/search`,
-    **`BACKUP_REPO`** (`EienMosu/ai-news` — the same value `infra/lib/functions.ts` passes to
-    the Lambdas as `BACKUP_REPO`, reused verbatim). `src/lib/search/archive.ts` reads it at
+    **`BACKUP_REPO`** (`EienMosu/ai-news` — the default at `infra/bin/ai-news.ts:23`, which
+    `infra/lib/functions.ts` then passes to the Lambdas; reused verbatim. If you ever override
+    it with `-c backupRepo=…` at deploy time, Vercel must be changed to match, or search will
+    read one repository while the Lambdas write another). `src/lib/search/archive.ts` reads it at
     request time to build the `raw.githubusercontent.com` URL for a search that reaches past the
     last 30 days; it needs no token (the repo is public), but it does need this one variable to
     exist. Left unset, an ordinary search still works — only `?since=` requests reaching into the

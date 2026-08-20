@@ -14,7 +14,8 @@
     "synth": "cdk synth",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "start": "next start"
+    "start": "next start",
+    "check:routes": "node --experimental-strip-types --import ./scripts/register-ts-extension-resolve-hook.mjs scripts/check-routes.ts"
   },
   "keywords": [],
   "author": "",
