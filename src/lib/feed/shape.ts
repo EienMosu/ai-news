@@ -8,9 +8,16 @@ import { DEGRADED_SCORE_VERSION } from "../core/score.js";
  */
 export interface FeedArticle {
   urlHash: string;
+  /** `""` when the stored value is missing or is not an absolute `http:`/`https:` URL -- see
+   *  `asHttpUrl`. Becomes an `<a href>` on the story page (`app/(feed)/article/[urlHash]/page.tsx`),
+   *  which renders that link only when this is non-empty and shows an unlinked notice otherwise,
+   *  rather than handing a browser a scheme it should never navigate to on a click. */
   url: string;
   title: string;
   summary: string;
+  /** `null` when the stored value is missing or is not an absolute `http:`/`https:` URL -- see
+   *  `asHttpUrl`. Becomes an `<img src>`; the existing `!== null` render guard (already required
+   *  for the common "no image" case) is what keeps a rejected value from ever reaching the DOM. */
   imageUrl: string | null;
   source: string;
   sourceName: string;
@@ -47,6 +54,35 @@ const memberOrNull = <T extends string>(values: readonly T[], v: unknown): T | n
   typeof v === "string" && (values as readonly string[]).includes(v) ? (v as T) : null;
 
 /**
+ * `null` unless `v` is a string that parses as an absolute URL with an `http:`/`https:` scheme --
+ * the read-boundary counterpart to `NormalizedArticleSchema`'s `z.httpUrl()` (src/types/article.ts),
+ * for the two fields that become a DOM attribute a browser will act on: `url` (an `<a href>`) and
+ * `imageUrl` (an `<img src>`). Final review, L9: `category`/`section` were already re-validated
+ * here with the stated rationale that "an unchecked cast would let a bad write silently mislabel
+ * an article" -- `url`/`imageUrl` got a bare string coercion instead, even though a scheme other
+ * than http(s) reaching either attribute is a worse outcome than a mislabelled category. Not
+ * exploitable through ordinary ingest (the Zod schema constrains both at the write side), but
+ * `fetchArchiveDay` (src/lib/search/archive.ts) is a second writer's worth of data -- NDJSON off
+ * unauthenticated `raw.githubusercontent.com` -- that reaches `toFeedArticle` with no schema
+ * validation at all, so this is the only check either field gets on that path.
+ *
+ * `new URL(v)` throws on a relative path or an unparseable string (caught, returns `null`); it
+ * does NOT throw on `javascript:alert(1)` or `data:text/html,...` -- those parse fine and are
+ * rejected by the explicit protocol check instead, which is why the check cannot be "does this
+ * throw" alone.
+ */
+function asHttpUrl(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  let protocol: string;
+  try {
+    protocol = new URL(v).protocol;
+  } catch {
+    return null;
+  }
+  return protocol === "http:" || protocol === "https:" ? v : null;
+}
+
+/**
  * Turns a raw item from the `feed-by-day` GSI into the shape the UI renders.
  *
  * `urlHash` is not a projected attribute -- it is recovered from `pk`, which DynamoDB always
@@ -57,10 +93,10 @@ const memberOrNull = <T extends string>(values: readonly T[], v: unknown): T | n
 export function toFeedArticle(item: Record<string, unknown>): FeedArticle {
   return {
     urlHash: String(item.pk ?? "").slice("ART#".length),
-    url: asString(item.url),
+    url: asHttpUrl(item.url) ?? "",
     title: asString(item.title),
     summary: asString(item.summary),
-    imageUrl: asStringOrNull(item.imageUrl),
+    imageUrl: asHttpUrl(item.imageUrl),
     source: asString(item.source),
     sourceName: asString(item.sourceName),
     category: memberOrNull(CATEGORIES, item.category),

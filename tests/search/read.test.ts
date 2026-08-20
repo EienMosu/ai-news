@@ -64,18 +64,19 @@ describe("searchRecentDays", () => {
         rawArticle({ pk: `ART#${HASH_B}`, title: "Nothing relevant here" }),
       ],
     });
-    const results = await searchRecentDays(["2026-08-18"], "ai", "claude");
-    expect(results).toHaveLength(1);
-    expect(results[0]!.articles).toHaveLength(1);
-    expect(results[0]!.articles[0]!.urlHash).toBe(HASH_A);
+    const outcome = await searchRecentDays(["2026-08-18"], "ai", "claude");
+    expect(outcome.days).toHaveLength(1);
+    expect(outcome.days[0]!.articles).toHaveLength(1);
+    expect(outcome.days[0]!.articles[0]!.urlHash).toBe(HASH_A);
   });
 
   it("returns a day with its matching articles when the query hits", async () => {
     ddb.on(QueryCommand).resolves({ Items: [rawArticle()] });
-    const results = await searchRecentDays(["2026-08-18"], "ai", "claude");
-    expect(results).toEqual([
-      { day: "2026-08-18", articles: [expect.objectContaining({ urlHash: HASH_A })] },
-    ]);
+    const outcome = await searchRecentDays(["2026-08-18"], "ai", "claude");
+    expect(outcome).toEqual({
+      days: [{ day: "2026-08-18", articles: [expect.objectContaining({ urlHash: HASH_A })] }],
+      failedDays: 0,
+    });
   });
 
   it("filters by section when given a real Section, not 'both'", async () => {
@@ -85,9 +86,9 @@ describe("searchRecentDays", () => {
         rawArticle({ pk: `ART#${HASH_B}`, section: "design" }),
       ],
     });
-    const results = await searchRecentDays(["2026-08-18"], "ai", "claude");
-    expect(results[0]!.articles).toHaveLength(1);
-    expect(results[0]!.articles[0]!.urlHash).toBe(HASH_A);
+    const outcome = await searchRecentDays(["2026-08-18"], "ai", "claude");
+    expect(outcome.days[0]!.articles).toHaveLength(1);
+    expect(outcome.days[0]!.articles[0]!.urlHash).toBe(HASH_A);
   });
 
   it("does not filter by section when scope is 'both'", async () => {
@@ -97,14 +98,57 @@ describe("searchRecentDays", () => {
         rawArticle({ pk: `ART#${HASH_B}`, section: "design" }),
       ],
     });
-    const results = await searchRecentDays(["2026-08-18"], "both", "claude");
-    expect(results[0]!.articles).toHaveLength(2);
+    const outcome = await searchRecentDays(["2026-08-18"], "both", "claude");
+    expect(outcome.days[0]!.articles).toHaveLength(2);
   });
 
   it("drops a day entirely when it has zero matches, rather than returning an empty entry", async () => {
     ddb.on(QueryCommand).resolves({ Items: [rawArticle({ title: "Nothing relevant here" })] });
-    const results = await searchRecentDays(["2026-08-18"], "ai", "claude");
-    expect(results).toHaveLength(0);
+    const outcome = await searchRecentDays(["2026-08-18"], "ai", "claude");
+    expect(outcome.days).toHaveLength(0);
+  });
+
+  describe("a rejected queryDay -- final review, M2", () => {
+    // The mirror of searchArchiveDays' own "a rejected fetchArchiveDay" tests below: this
+    // function used to use Promise.all, so a single day's queryDay rejecting (a throttled
+    // partition, say) rejected the whole call and discarded every other day's matches that had
+    // already resolved -- the inversion of the allSettled rule getDay (src/lib/feed/read.ts)
+    // wrote down, applied here for the first time.
+    it("does not reject the whole call when one day's queryDay throws", async () => {
+      ddb.on(QueryCommand).rejects(new Error("throttled"));
+      await expect(searchRecentDays(["2026-08-18"], "ai", "claude")).resolves.toBeDefined();
+    });
+
+    it("keeps the days that resolved and counts the one that failed", async () => {
+      ddb.on(QueryCommand).callsFake((input: { ExpressionAttributeValues: Record<string, string> }) => {
+        if (input.ExpressionAttributeValues[":d"] === "DAY#2026-08-17") {
+          throw new Error("throttled");
+        }
+        return { Items: [rawArticle({ title: "Claude ships an agent SDK" })] };
+      });
+
+      const outcome = await searchRecentDays(
+        ["2026-08-18", "2026-08-17", "2026-08-16"], "ai", "claude",
+      );
+
+      expect(outcome.failedDays).toBe(1);
+      expect(outcome.days.map((d) => d.day)).toEqual(["2026-08-18", "2026-08-16"]);
+    });
+
+    it("reports failedDays: 0 when nothing fails -- the count is exact, not just truthy", async () => {
+      ddb.on(QueryCommand).resolves({ Items: [] });
+      const outcome = await searchRecentDays(["2026-08-18", "2026-08-17"], "ai", "claude");
+      expect(outcome.failedDays).toBe(0);
+    });
+
+    it("counts every failed day when all of them reject", async () => {
+      ddb.on(QueryCommand).rejects(new Error("throttled"));
+      const outcome = await searchRecentDays(
+        ["2026-08-18", "2026-08-17", "2026-08-16"], "ai", "claude",
+      );
+      expect(outcome.failedDays).toBe(3);
+      expect(outcome.days).toEqual([]);
+    });
   });
 });
 

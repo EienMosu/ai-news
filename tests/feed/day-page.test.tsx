@@ -174,17 +174,27 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
     expect(screen.queryByTestId("day-status")).toBeNull();
   });
 
-  it("passes a calendar-impossible but shape-valid date to getDay verbatim -- fix round 1, F4", async () => {
-    // Task 7 Step 3: "a string we look up, never a date we compute from" had zero test
-    // pressure -- inserting `new Date(raw).toISOString().slice(0, 10)` left every other test in
-    // this file green, since `2026-08-18` round-trips to itself through that transform and the
-    // runner's own TZ offset happens to hide the drift on ordinary dates too. `2026-02-30` does
-    // not exist on any calendar: `new Date("2026-02-30")` is `Invalid Date`, and
-    // `.toISOString()` on it throws, which is what actually kills a `Date`-based implementation
-    // regardless of the runner's timezone. `getDay` never sees anything but the raw shape-valid
-    // string.
-    await expect(DayPage({ params: params("2026-02-30") })).rejects.toThrow();
-    expect(getDay).toHaveBeenCalledWith("2026-02-30");
+  it("404s a calendar-impossible but shape-valid date WITHOUT ever calling getDay -- final review, L3", async () => {
+    // This test used to assert the opposite (`getDay` called with "2026-02-30" verbatim) back
+    // when this page validated only `/^\d{4}-\d{2}-\d{2}$/`: that regex accepts "2026-02-30" as
+    // well-formed (four digits, two digits, two digits) even though no February reaches the
+    // 30th, so the page paid a `queryDay` and a `GetItem` before 404ing -- verified live against
+    // production (`/day/2026-02-30` -> 404 AFTER both reads). `isValidDay`
+    // (src/lib/search/range.ts) is a full calendar check that still constructs no `Date`
+    // anywhere in it -- Task 7 Step 3's "a string we look up, never a date we compute from"
+    // holds exactly as strongly as it did when this test pinned the opposite call, and the point
+    // of this fix is that the read never happens at all for a date like this one. Asserting the
+    // call count, not just the eventual 404 status, is what actually pins that the skip happens
+    // -- a page that still 404s AFTER calling getDay for an empty/absent day would pass a
+    // status-only assertion just as well.
+    let caught: unknown;
+    try {
+      await DayPage({ params: params("2026-02-30") });
+    } catch (err) {
+      caught = err;
+    }
+    expect(isHTTPAccessFallbackError(caught)).toBe(true);
+    expect(getDay).not.toHaveBeenCalled();
   });
 
   it("uses the literal date string for the DaySection header, never a value derived from getDay's own (possibly stale) day field", async () => {

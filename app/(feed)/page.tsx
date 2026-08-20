@@ -30,18 +30,28 @@ interface HomeProps {
  * `getRecentDays` issues exactly one `listDays` call plus one `queryDay` per day, all
  * concurrently -- see its doc comment in src/lib/feed/read.ts. Both feed pages read the same
  * days via `getRecentDays`, differing only by `bySection` inside it -- the two verticals are
- * sibling nav destinations, not a filter over one combined list.
+ * sibling nav destinations, not a filter over one combined list. `getRecentDays` degrades a
+ * single day's failure rather than the whole call (final review, M2), so `failedDays` -- how
+ * many of the requested days could not be read -- is threaded through to `FeedArchive` alongside
+ * `results`, which is only ever the days that DID resolve.
  */
 export default async function Home({ searchParams }: HomeProps) {
   const { days: rawDays } = await searchParams;
   const days = parseDaysParam(rawDays);
-  const results = await getRecentDays("ai", days);
+  const { results, failedDays } = await getRecentDays("ai", days);
   const now = new Date();
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <SectionNav current="ai" days={days} />
-      <FeedArchive section="ai" results={results} now={now} days={days} basePath="/" />
+      <FeedArchive
+        section="ai"
+        results={results}
+        failedDays={failedDays}
+        now={now}
+        days={days}
+        basePath="/"
+      />
     </main>
   );
 }

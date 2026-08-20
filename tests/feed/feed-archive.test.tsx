@@ -35,7 +35,7 @@ const NOW = new Date("2026-08-18T12:00:00.000Z");
 describe("FeedArchive", () => {
   it("shows the no-ranked-day-at-all message when no days are returned", () => {
     const { container } = render(
-      <FeedArchive section="ai" results={[]} now={NOW} days={7} basePath="/" />,
+      <FeedArchive section="ai" results={[]} failedDays={0} now={NOW} days={7} basePath="/" />,
     );
     expect(container.querySelector('[data-testid="feed-empty-no-day"]')).not.toBeNull();
   });
@@ -49,7 +49,7 @@ describe("FeedArchive", () => {
           dayResult({ day: "2026-08-18", articles }),
           dayResult({ day: "2026-08-17", articles }),
         ]}
-        now={NOW}
+        failedDays={0} now={NOW}
         days={7}
         basePath="/"
       />,
@@ -70,7 +70,7 @@ describe("FeedArchive", () => {
           dayResult({ day: "2026-08-18", articles: [] }),
           dayResult({ day: "2026-08-17", articles }),
         ]}
-        now={NOW}
+        failedDays={0} now={NOW}
         days={7}
         basePath="/design"
       />,
@@ -83,35 +83,85 @@ describe("FeedArchive", () => {
 
   it("shows a load-more link when exactly `days` days came back and the cap has not been reached", () => {
     const results = Array.from({ length: 7 }, (_, i) => dayResult({ day: `2026-08-${18 - i}` }));
-    render(<FeedArchive section="ai" results={results} now={NOW} days={7} basePath="/" />);
+    render(<FeedArchive section="ai" results={results} failedDays={0} now={NOW} days={7} basePath="/" />);
     const link = screen.getByTestId("load-more-days");
     expect(link.getAttribute("href")).toBe("/?days=14");
   });
 
   it("uses basePath for the load-more link, so the design page never links back to /", () => {
     const results = Array.from({ length: 7 }, (_, i) => dayResult({ day: `2026-08-${18 - i}` }));
-    render(<FeedArchive section="design" results={results} now={NOW} days={7} basePath="/design" />);
+    render(<FeedArchive section="design" results={results} failedDays={0} now={NOW} days={7} basePath="/design" />);
     expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/design?days=14");
   });
 
   it("clamps the load-more link's target to MAX_ARCHIVE_DAYS rather than overshooting it", () => {
     const days = MAX_ARCHIVE_DAYS - 2;
     const results = Array.from({ length: days }, (_, i) => dayResult({ day: `d${i}` }));
-    render(<FeedArchive section="ai" results={results} now={NOW} days={days} basePath="/" />);
+    render(<FeedArchive section="ai" results={results} failedDays={0} now={NOW} days={days} basePath="/" />);
     expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe(`/?days=${MAX_ARCHIVE_DAYS}`);
   });
 
   it("omits the load-more link once `days` has already reached MAX_ARCHIVE_DAYS", () => {
     const results = Array.from({ length: MAX_ARCHIVE_DAYS }, (_, i) => dayResult({ day: `d${i}` }));
     render(
-      <FeedArchive section="ai" results={results} now={NOW} days={MAX_ARCHIVE_DAYS} basePath="/" />,
+      <FeedArchive section="ai" results={results} failedDays={0} now={NOW} days={MAX_ARCHIVE_DAYS} basePath="/" />,
     );
     expect(screen.queryByTestId("load-more-days")).toBeNull();
   });
 
   it("omits the load-more link when fewer days came back than were requested -- the archive is exhausted", () => {
     const results = [dayResult({ day: "2026-08-18" }), dayResult({ day: "2026-08-17" })];
-    render(<FeedArchive section="ai" results={results} now={NOW} days={7} basePath="/" />);
+    render(<FeedArchive section="ai" results={results} failedDays={0} now={NOW} days={7} basePath="/" />);
     expect(screen.queryByTestId("load-more-days")).toBeNull();
+  });
+
+  describe("failedDays -- final review, M2", () => {
+    it("shows a failure notice, and no failure notice at all when failedDays is zero", () => {
+      const results = [dayResult({ day: "2026-08-18" })];
+      const { container } = render(
+        <FeedArchive section="ai" results={results} failedDays={0} now={NOW} days={7} basePath="/" />,
+      );
+      expect(container.querySelector('[data-testid="feed-days-failed"]')).toBeNull();
+    });
+
+    it("shows a failure notice naming the count when one or more days could not be loaded", () => {
+      const results = [dayResult({ day: "2026-08-18" })];
+      render(
+        <FeedArchive section="ai" results={results} failedDays={2} now={NOW} days={7} basePath="/" />,
+      );
+      expect(screen.getByTestId("feed-days-failed").textContent).toContain("2 days");
+    });
+
+    it("still renders the days that did resolve alongside the failure notice", () => {
+      const articles = [toFeedArticle(rawArticle())];
+      const results = [dayResult({ day: "2026-08-18", articles })];
+      render(
+        <FeedArchive section="ai" results={results} failedDays={1} now={NOW} days={7} basePath="/" />,
+      );
+      expect(screen.getByRole("heading", { level: 2, name: "2026-08-18" })).toBeTruthy();
+      expect(screen.getByTestId("feed-days-failed")).toBeTruthy();
+    });
+
+    it("shows the failure notice, not the no-ranked-day-at-all message, when every requested day failed", () => {
+      // Distinct from `results.length === 0 && failedDays === 0` (no day has ever ranked): here
+      // days were requested and at least one genuinely exists, but every one of them failed to
+      // read just now -- a different fact, and the no-day message would misstate it.
+      const { container } = render(
+        <FeedArchive section="ai" results={[]} failedDays={3} now={NOW} days={7} basePath="/" />,
+      );
+      expect(container.querySelector('[data-testid="feed-empty-no-day"]')).toBeNull();
+      expect(screen.getByTestId("feed-days-failed").textContent).toContain("3 days");
+    });
+
+    it("still shows a load-more link when a failed day, not history's own end, accounts for the shortfall", () => {
+      // 6 results + 1 failedDays = 7 requested -- history is not exhausted, one read just failed.
+      // Before this fix, `moreMayExist` compared only `results.length === days` (6 !== 7), which
+      // would have hidden the link even though a real 7th day exists and simply failed to load.
+      const results = Array.from({ length: 6 }, (_, i) => dayResult({ day: `2026-08-${18 - i}` }));
+      render(
+        <FeedArchive section="ai" results={results} failedDays={1} now={NOW} days={7} basePath="/" />,
+      );
+      expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=14");
+    });
   });
 });

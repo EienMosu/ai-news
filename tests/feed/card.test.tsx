@@ -59,6 +59,16 @@ describe("ArticleCard", () => {
     expect(img?.getAttribute("loading")).toBe("lazy");
   });
 
+  it("renders no img element when the stored imageUrl is not a valid http(s) address -- final review, L9", () => {
+    // `toFeedArticle` (src/lib/feed/shape.ts) coerces a non-http(s) imageUrl to `null` at the
+    // read boundary; this card's own existing `!== null` guard (already required for the
+    // ordinary "no image" case) is what keeps a rejected value from ever reaching an `<img src>`
+    // -- no new render logic here, just the coercion feeding the guard that already existed.
+    const article = toFeedArticle(raw({ imageUrl: "javascript:alert(1)" }));
+    const { container } = render(<ArticleCard article={article} now={NOW} />);
+    expect(container.querySelector("img")).toBeNull();
+  });
+
   it("renders no rationale element at all when whyItMatters is null", () => {
     // A structural check (no [data-testid="why-it-matters"] element), not a text-content
     // check -- textContent-not-contains would hold trivially even for a mutant that always
@@ -173,6 +183,21 @@ describe("ArticleCard", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("<model>");
     expect(container.textContent).toContain("<script>alert(1)</script>");
+  });
+
+  it("renders whyItMatters' bracketed prose and a defanged script tag as visible text too, and creates no script element -- sibling of the summary test above", () => {
+    // Final review, M1's sibling sweep: this card's own doc comment claims BOTH `summary` AND
+    // `whyItMatters` are "rendered as plain JSX text, never dangerouslySetInnerHTML" -- but until
+    // this test existed, only `summary` had a DOM-asserting test proving it. Switching
+    // `whyItMatters` alone to `dangerouslySetInnerHTML` left all 20 tests in this file green
+    // (verified by mutation), the exact same vacuous-check shape the review found one level up,
+    // on the story page, for the identical two fields -- just unnamed here until now.
+    const whyItMatters =
+      "Because <model> matters, unlike <script>alert(3)</script> which is prose quoted here.";
+    const article = toFeedArticle(raw({ whyItMatters }));
+    const { container } = render(<ArticleCard article={article} now={NOW} />);
+    expect(container.querySelector("script")).toBeNull();
+    expect(screen.getByTestId("why-it-matters").textContent).toBe(whyItMatters);
   });
 });
 

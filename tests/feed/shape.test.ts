@@ -49,6 +49,44 @@ describe("toFeedArticle", () => {
     expect(toFeedArticle(raw({ section: undefined })).section).toBeNull();
     expect(toFeedArticle(raw({ section: "sports" })).section).toBeNull();
   });
+
+  describe("url/imageUrl -- final review, L9", () => {
+    // `category`/`section` above are re-validated with the stated rationale that "an unchecked
+    // cast would let a bad write silently mislabel an article" -- `url` and `imageUrl` used to
+    // get a bare `asString`/`asStringOrNull` coercion instead, even though they become an
+    // `<a href>`/`<img src>` a browser will act on, which is a worse outcome than a mislabelled
+    // category. `NormalizedArticleSchema` constrains both with `z.httpUrl()` on the write side
+    // (src/types/article.ts) -- these pin the same http(s)-only rule at the read boundary, which
+    // is the only check either field gets on `fetchArchiveDay`'s path (unauthenticated NDJSON,
+    // never validated by that schema at all).
+    it("keeps a valid https url unchanged", () => {
+      expect(toFeedArticle(raw({ url: "https://example.com/story" })).url).toBe(
+        "https://example.com/story",
+      );
+    });
+
+    it("keeps a valid http imageUrl unchanged", () => {
+      expect(toFeedArticle(raw({ imageUrl: "http://example.com/hero.png" })).imageUrl).toBe(
+        "http://example.com/hero.png",
+      );
+    });
+
+    it("coerces url to the empty string, never passing a javascript: scheme through, for a non-http(s) url", () => {
+      expect(toFeedArticle(raw({ url: "javascript:alert(1)" })).url).toBe("");
+    });
+
+    it("coerces url to the empty string for an unparseable string", () => {
+      expect(toFeedArticle(raw({ url: "not a url" })).url).toBe("");
+    });
+
+    it("coerces imageUrl to null, never passing a javascript: scheme through, for a non-http(s) imageUrl", () => {
+      expect(toFeedArticle(raw({ imageUrl: "javascript:alert(1)" })).imageUrl).toBeNull();
+    });
+
+    it("coerces imageUrl to null for a data: URI, which z.httpUrl() would also reject on the write side", () => {
+      expect(toFeedArticle(raw({ imageUrl: "data:text/html,hi" })).imageUrl).toBeNull();
+    });
+  });
 });
 
 describe("isUnranked", () => {

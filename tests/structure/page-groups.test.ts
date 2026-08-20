@@ -61,14 +61,21 @@ export function isUngrouped(page: string): boolean {
 }
 
 describe("the offender predicate discriminates, independently of what is on disk", () => {
-  // The five evasion shapes the review actually tried against the real tree, plus the plain
-  // case. Each must be recognised as ungrouped -- Next routes all of them, and none of them
-  // passes through app/(feed)/layout.tsx.
+  // Final review, L15: this file previously claimed "Next routes all of them, and none of them
+  // passes through app/(feed)/layout.tsx" for all six fixtures below -- that is true of the four
+  // in THIS block, but false of the two in the next one. `app/_private/page.tsx` and
+  // `app/@slot/page.tsx` used to be in this same list; the review confirmed neither is a route
+  // Next creates at all (see the next describe block), so grouping them here as "evasion shapes
+  // Next routes" was partly fictional evidence, in the one test whose entire claim to authority
+  // is that it was proved by mutation. Two more real, routed shapes (a catch-all segment and a
+  // multi-level nested path) replace them below, so this block still covers the same number of
+  // genuinely exploitable "ships outside the group" shapes it did before the correction, not
+  // fewer.
   it.each([
     "app/plain/page.tsx",
-    "app/_private/page.tsx",
     "app/[slug]/page.tsx",
-    "app/@slot/page.tsx",
+    "app/[...catchAll]/page.tsx",
+    "app/deeply/nested/page.tsx",
     "app/(.)intercepted/page.tsx",
     "app/(other)/page.tsx",
   ])("treats %s as ungrouped", (page) => {
@@ -81,6 +88,33 @@ describe("the offender predicate discriminates, independently of what is on disk
     "app/(feed)/day/[date]/page.tsx",
   ])("treats %s as grouped", (page) => {
     expect(isUngrouped(page)).toBe(false);
+  });
+});
+
+describe("two shapes Next does not route as pages at all -- corrected from the original claim", () => {
+  // Final review, L15: the previous version of this file asserted these two paths belonged among
+  // the "evasion shapes... Next routes all of them" fixtures above. They do not. Next's own
+  // documented routing conventions say so directly, not something this suite can probe by
+  // rendering a route table:
+  //
+  // - A folder prefixed with `_` is a "Private Folder": Next's docs state this "opts the folder
+  //   and all its subfolders out of routing" entirely, so `app/_private/page.tsx` is never
+  //   reachable at any URL.
+  // - A folder prefixed with `@` is a parallel-route "named slot": its `page.tsx` is passed as a
+  //   prop to the enclosing layout, not exposed at a URL of its own (the slot's content renders
+  //   at the PARENT segment's path, never at literally `/@slot`).
+  //
+  // Neither carries a real omission risk on its own -- there is no route for a status line to be
+  // missing from -- so this is not the safety-critical property the earlier claim implied.
+  // `isUngrouped` is still asserted against them below, but for a narrower and honest reason:
+  // it is a pure string-prefix check with no knowledge of Next's routing semantics, so it
+  // (harmlessly) flags these two the same as any other non-`(feed)` path, and that is worth
+  // pinning as deliberate, specified behaviour rather than leaving it silently unverified.
+  it.each([
+    "app/_private/page.tsx",
+    "app/@slot/page.tsx",
+  ])("still (harmlessly) flags %s as ungrouped, though Next never routes it as a page", (page) => {
+    expect(isUngrouped(page)).toBe(true);
   });
 });
 

@@ -14,6 +14,16 @@ export interface DayMatches {
   articles: FeedArticle[];
 }
 
+/** Shared outcome shape for a fan-out over several days: the ones that resolved, plus how many
+ *  did not. Originally introduced for the archive half only (`ArchiveSearchOutcome`, Task 8 fix
+ *  round 1, F5); final review, M2 gives `searchRecentDays` the identical shape for the identical
+ *  fact, rather than one vocabulary for "some days failed" on the archive half and silence (a
+ *  wholesale rejection) on the recent half. */
+export interface DayMatchesOutcome {
+  days: DayMatches[];
+  failedDays: number;
+}
+
 /**
  * `TABLE_NAME` read at call time, never at module load -- the same discipline
  * `src/lib/feed/read.ts`'s own `requireTableName` applies, duplicated here (rather than
@@ -47,28 +57,46 @@ function filterMatches(
  * <day>" message earns its place because every requested day is meaningful there (Task 7 Step
  * 2's initial seven-day view); a search result list has no such promise about which specific
  * days it will cover, so an empty day here is noise, not information.
+ *
+ * `Promise.allSettled`, not `Promise.all` -- final review, M2. This function used to reject the
+ * whole call when a single day's `queryDay` rejected, which had two compounding effects: it
+ * discarded every OTHER recent day's matches that had already come back fine (the exact rule
+ * `getDay`, src/lib/feed/read.ts, wrote down and this file's own `searchArchiveDays` below
+ * already follows), and -- one level up -- it made the search page's
+ * `Promise.all([searchRecentDays(...), searchArchiveDays(...)])` reject too, discarding up to
+ * `MAX_ARCHIVE_SEARCH_DAYS` archive HTTP GETs that had already been paid for and had already
+ * resolved. A failed day is now dropped and counted in `failedDays`, mirroring
+ * `searchArchiveDays` exactly -- see that function's own doc comment for the fuller reasoning.
  */
 export async function searchRecentDays(
   days: string[], scope: SearchScope, query: string,
-): Promise<DayMatches[]> {
+): Promise<DayMatchesOutcome> {
   const table = requireTableName();
   const client = docClient();
-  const results = await Promise.all(days.map(async (day): Promise<DayMatches> => {
+  const settled = await Promise.allSettled(days.map(async (day): Promise<DayMatches> => {
     const items = await queryDay(client, table, day);
     return { day, articles: filterMatches(items, scope, query) };
   }));
-  return results.filter((r) => r.articles.length > 0);
+
+  const resolved: DayMatches[] = [];
+  let failedDays = 0;
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled") resolved.push(outcome.value);
+    else failedDays += 1;
+  }
+
+  return { days: resolved.filter((r) => r.articles.length > 0), failedDays };
 }
 
 /** `searchArchiveDays`' result: the days that resolved, plus how many did not. Task 8 fix round
  *  1, finding F5 -- distinct from a bare `DayMatches[]` so a caller can tell "the archive had
  *  nothing" (`days: [], failedDays: 0`) apart from "some of the archive could not be read"
  *  (`failedDays > 0`), which the page surfaces as its own notice rather than silently rendering
- *  the same as a clean zero. */
-export interface ArchiveSearchOutcome {
-  days: DayMatches[];
-  failedDays: number;
-}
+ *  the same as a clean zero. Kept as its own named export (rather than inlining
+ *  `DayMatchesOutcome` at every call site) so existing imports of this name are undisturbed;
+ *  `searchRecentDays` above now returns the identical shape under `DayMatchesOutcome`'s own name
+ *  -- final review, M2 -- rather than a third, differently-named copy of the same two fields. */
+export type ArchiveSearchOutcome = DayMatchesOutcome;
 
 /**
  * The archive half of a search: one `fetchArchiveDay` GET per day in `days`, run concurrently,

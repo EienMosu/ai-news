@@ -133,16 +133,31 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         {/* Plain `<a>`, not `next/link`: this leaves the app for the original source, which is
          *  exactly the case `next/link`'s soft-navigation model does not apply to (decision 8).
          *  `rel="noopener noreferrer"` -- `target="_blank"` opens the source without handing it
-         *  a `window.opener` reference back into this app. */}
-        <a
-          href={article.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="original-link"
-          className="mt-6 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-neutral-700"
-        >
-          Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
-        </a>
+         *  a `window.opener` reference back into this app.
+         *
+         *  `article.url` is `""` when `toFeedArticle`'s `asHttpUrl` rejected the stored value --
+         *  missing, or not an absolute `http:`/`https:` URL (final review, L9). Rendering that
+         *  through unconditionally would be scheme-checked garbage in an `href` a reader can
+         *  click; the decision here is to render the article UNLINKED rather than drop it from
+         *  the page entirely, the same way a missing `imageUrl` or `whyItMatters` degrades one
+         *  block, not the whole card -- everything else about this article (title, summary,
+         *  score signals) is independently valid data, and a broken outbound link is not a
+         *  reason to hide it, only to stop offering a link that cannot be trusted. */}
+        {article.url !== "" ? (
+          <a
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="original-link"
+            className="mt-6 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-neutral-700"
+          >
+            Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
+          </a>
+        ) : (
+          <p data-testid="original-link-unavailable" className="mt-6 text-sm text-neutral-500">
+            Original source link unavailable.
+          </p>
+        )}
 
         <section className="mt-8">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">

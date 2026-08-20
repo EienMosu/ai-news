@@ -26,13 +26,18 @@ vi.mock("../../src/lib/feed/read.js", () => ({
 
 import DesignPage from "../../app/(feed)/design/page.js";
 import Home from "../../app/(feed)/page.js";
-import type { FeedResult } from "../../src/lib/feed/read.js";
+import type { FeedResult, RecentDaysOutcome } from "../../src/lib/feed/read.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
 
 afterEach(() => {
   cleanup();
   vi.mocked(getRecentDays).mockReset();
 });
+
+/** `getRecentDays` now resolves a `RecentDaysOutcome` (final review, M2), not a bare
+ *  `FeedResult[]` -- this helper is the one place every test in this file builds that shape, so
+ *  a future change to it only has to happen here. */
+const outcome = (results: FeedResult[] = [], failedDays = 0): RecentDaysOutcome => ({ results, failedDays });
 
 // A single day that ranked fine but has nothing for whichever section asks. The empty-section
 // message names the section it was given, which is what makes the FeedArchive/FeedView-prop
@@ -49,20 +54,20 @@ const searchParams = (params: Record<string, string | string[]> = {}) => Promise
 
 describe("Home (app/page.tsx)", () => {
   it("asks getRecentDays for the 'ai' section", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
     expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
   });
 
   it("marks the AI nav link current, not Design", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
   });
 
   it("passes its own section through to the rendered day, not the other one", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
     expect(screen.getByText("No AI stories for 2026-08-18.")).toBeTruthy();
   });
@@ -74,25 +79,25 @@ describe("Home (app/page.tsx)", () => {
     // correctly" apart from "never awaited at all, so .days read off the Promise is undefined
     // either way" -- both produce 7. Asserting on a specific, non-default requested value is
     // what actually pins the await.
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams({ days: "20" }) }));
     expect(getRecentDays).toHaveBeenCalledWith("ai", 20);
   });
 
   it("defaults to 7 days when no `days` param is given", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
     expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
   });
 
   it("clamps an out-of-range `days` value before calling getRecentDays, rather than passing the raw request through", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams({ days: "1000" }) }));
     expect(getRecentDays).toHaveBeenCalledWith("ai", 30);
   });
 
   it("ignores a garbage `days` value, falling back to the default rather than rendering it as requested", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams({ days: "banana" }) }));
     expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
   });
@@ -102,10 +107,10 @@ describe("Home (app/page.tsx)", () => {
     // order -- "newest first" in the name was uncashed. `feed-archive.test.tsx` pins the order
     // via heading order at the component-unit level; this asserts it here too, at the page
     // wiring level, via document order in the rendered DOM.
-    vi.mocked(getRecentDays).mockResolvedValue([
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([
       { ...EMPTY_DAY_RESULT, day: "2026-08-18" },
       { ...EMPTY_DAY_RESULT, day: "2026-08-17" },
-    ]);
+    ]));
     render(await Home({ searchParams: searchParams() }));
     const newer = screen.getByText("No AI stories for 2026-08-18.");
     const older = screen.getByText("No AI stories for 2026-08-17.");
@@ -113,10 +118,16 @@ describe("Home (app/page.tsx)", () => {
   });
 
   it("shows the no-ranked-day-at-all message, distinct from a per-day empty message, when getRecentDays returns no days", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome());
     const { container } = render(await Home({ searchParams: searchParams() }));
     expect(container.querySelector('[data-testid="feed-empty-no-day"]')).not.toBeNull();
     expect(screen.queryByText(/No AI stories for/)).toBeNull();
+  });
+
+  it("passes getRecentDays' failedDays through to FeedArchive, surfacing a failure notice -- final review, M2", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT], 2));
+    render(await Home({ searchParams: searchParams() }));
+    expect(screen.getByTestId("feed-days-failed").textContent).toContain("2 days");
   });
 
   it("points its load-more link at /, not /design", async () => {
@@ -124,7 +135,7 @@ describe("Home (app/page.tsx)", () => {
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
-    vi.mocked(getRecentDays).mockResolvedValue(results);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await Home({ searchParams: searchParams() }));
     expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=14");
   });
@@ -143,7 +154,7 @@ describe("Home (app/page.tsx)", () => {
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
-    vi.mocked(getRecentDays).mockResolvedValue(results);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await Home({ searchParams: searchParams({ days: "-5" }) }));
     expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
     expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=14");
@@ -154,7 +165,7 @@ describe("Home (app/page.tsx)", () => {
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
-    vi.mocked(getRecentDays).mockResolvedValue(results);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await Home({ searchParams: searchParams({ days: "14" }) }));
     expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design?days=14");
   });
@@ -172,32 +183,32 @@ describe("Home (app/page.tsx)", () => {
 
 describe("DesignPage (app/design/page.tsx)", () => {
   it("asks getRecentDays for the 'design' section", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams() }));
     expect(getRecentDays).toHaveBeenCalledWith("design", 7);
   });
 
   it("marks the Design nav link current, not AI", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams() }));
     expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
   });
 
   it("passes its own section through to the rendered day, not the other one", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams() }));
     expect(screen.getByText("No design stories for 2026-08-18.")).toBeTruthy();
   });
 
   it("reads `days` from the awaited searchParams and passes the parsed count to getRecentDays", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams({ days: "20" }) }));
     expect(getRecentDays).toHaveBeenCalledWith("design", 20);
   });
 
   it("clamps an out-of-range `days` value before calling getRecentDays", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams({ days: "1000" }) }));
     expect(getRecentDays).toHaveBeenCalledWith("design", 30);
   });
@@ -207,15 +218,21 @@ describe("DesignPage (app/design/page.tsx)", () => {
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
-    vi.mocked(getRecentDays).mockResolvedValue(results);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await DesignPage({ searchParams: searchParams() }));
     expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/design?days=14");
   });
 
   it("shows the no-ranked-day-at-all message when getRecentDays returns no days", async () => {
-    vi.mocked(getRecentDays).mockResolvedValue([]);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome());
     const { container } = render(await DesignPage({ searchParams: searchParams() }));
     expect(container.querySelector('[data-testid="feed-empty-no-day"]')).not.toBeNull();
+  });
+
+  it("passes getRecentDays' failedDays through to FeedArchive, surfacing a failure notice -- final review, M2", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT], 1));
+    render(await DesignPage({ searchParams: searchParams() }));
+    expect(screen.getByTestId("feed-days-failed").textContent).toContain("1 day");
   });
 
   it("carries a non-default `days` value into the SectionNav links -- fix round 1, F9", async () => {
@@ -223,7 +240,7 @@ describe("DesignPage (app/design/page.tsx)", () => {
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
-    vi.mocked(getRecentDays).mockResolvedValue(results);
+    vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await DesignPage({ searchParams: searchParams({ days: "14" }) }));
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
   });

@@ -10,6 +10,12 @@ export interface FeedArchiveProps {
    *  day exists at all -- not "every day was empty for this vertical", which is instead one or
    *  more entries whose own `articles` array is empty (see `NO_DAYS_RESULT` below). */
   results: FeedResult[];
+  /** How many of the requested days `getRecentDays` could not read at all (final review, M2) --
+   *  distinct from a day that read fine and had nothing for this vertical, which is already
+   *  represented as an entry in `results` with an empty `articles` array. Surfaced the same way
+   *  `/search`'s `ArchiveSearchOutcome.failedDays` already is, rather than a second vocabulary
+   *  for "some of these parallel reads failed." */
+  failedDays: number;
   now: Date;
   /** The (already-clamped) day count this page actually asked `getRecentDays` for -- used only
    *  to decide whether more, older days might exist and to compute the "load more" link's
@@ -41,24 +47,37 @@ const NO_DAYS_RESULT: FeedResult = {
  * direct generalisation of what a single day already does today, via the exact same `FeedView`
  * codepath, rather than a second, new way to express the same absence.
  *
- * `results.length === 0` (no ranked day has ever completed, distinct from "every requested day
- * was empty for this vertical") renders `FeedView`'s own no-day message once, via
- * `NO_DAYS_RESULT`, instead of a wall of N empty per-day messages that would all be lying about
- * there being N real days to report on.
+ * `results.length === 0 && failedDays === 0` (no ranked day has ever completed, distinct from
+ * "every requested day was empty for this vertical") renders `FeedView`'s own no-day message
+ * once, via `NO_DAYS_RESULT`, instead of a wall of N empty per-day messages that would all be
+ * lying about there being N real days to report on. `results.length === 0 && failedDays > 0` --
+ * final review, M2 -- is a THIRD, distinct state this no longer collapses into the same message:
+ * days were requested and at least one exists, but every one of them failed to read just now,
+ * which is not the same fact as "no day has ever ranked" and must not be worded as though it
+ * were.
  */
-export function FeedArchive({ section, results, now, days, basePath }: FeedArchiveProps) {
-  if (results.length === 0) {
+export function FeedArchive({ section, results, failedDays, now, days, basePath }: FeedArchiveProps) {
+  if (results.length === 0 && failedDays === 0) {
     return <FeedView section={section} result={NO_DAYS_RESULT} now={now} />;
   }
 
   // More days can only exist if `listDays` returned as many as were asked for -- fewer means
   // the table's history was exhausted before `days` was reached, and asking again would just
-  // repeat the same query for no new data.
-  const moreMayExist = results.length === days && days < MAX_ARCHIVE_DAYS;
+  // repeat the same query for no new data. `+ failedDays` (final review, M2): a day dropped by
+  // `getRecentDays` because its own `queryDay` failed is not evidence the archive is exhausted --
+  // it is evidence one read failed -- so the comparison is against how many days were actually
+  // ATTEMPTED (`results.length + failedDays`), not just how many came back.
+  const moreMayExist = results.length + failedDays === days && days < MAX_ARCHIVE_DAYS;
   const nextDays = Math.min(days + ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS);
 
   return (
     <>
+      {failedDays > 0 ? (
+        <p data-testid="feed-days-failed" className="mb-4 text-sm text-amber-700">
+          {failedDays} {failedDays === 1 ? "day" : "days"} could not be loaded just now; the
+          sections below may be missing {failedDays === 1 ? "that day" : "those days"}.
+        </p>
+      ) : null}
       {results.map((result) => (
         <FeedView key={result.day} section={section} result={result} now={now} />
       ))}

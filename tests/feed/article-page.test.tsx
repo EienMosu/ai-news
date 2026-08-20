@@ -250,6 +250,35 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
+  describe("a url that is not a valid http(s) address -- final review, L9", () => {
+    // `toArticleDetail`/`toFeedArticle` (src/lib/feed/shape.ts) already coerce a non-http(s)
+    // `url` to `""` at the read boundary -- these pin the page's OWN decision about what to do
+    // with that: render the article unlinked (no `<a>` at all, so there is no href a browser
+    // could ever act on) rather than drop the whole article from the page. Everything else about
+    // the article (title, summary, whyItMatters, score signals) is independently valid data, so
+    // hiding all of it over one bad field would throw away more than the bad field earns.
+    it("renders no original-link anchor and shows an unavailable notice instead", async () => {
+      vi.mocked(getArticle).mockResolvedValue(
+        detail({ ingestDay: null, url: "javascript:alert(1)" }),
+      );
+
+      const { container } = render(await ArticlePage({ params: params(HASH) }));
+
+      expect(container.querySelector('[data-testid="original-link"]')).toBeNull();
+      expect(screen.getByTestId("original-link-unavailable")).toBeTruthy();
+    });
+
+    it("still renders the rest of the article normally", async () => {
+      vi.mocked(getArticle).mockResolvedValue(
+        detail({ ingestDay: null, url: "javascript:alert(1)", title: "GPT-6 ships" }),
+      );
+
+      render(await ArticlePage({ params: params(HASH) }));
+
+      expect(screen.getByText("GPT-6 ships")).toBeTruthy();
+    });
+  });
+
   describe("published-date provenance", () => {
     it("notes that the published date was estimated when publishedAtSource is 'fallback'", async () => {
       vi.mocked(getArticle).mockResolvedValue(
@@ -408,4 +437,34 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
   // Fix round 1's F1 presence assertion lived here; fix round 2 removed it -- `ArticlePage`
   // alone no longer renders `RunStatusLine` (see the note on the mock above). The presence
   // guarantee now lives in tests/feed/feed-layout.test.tsx and tests/structure/page-groups.test.ts.
+
+  describe("XSS escaping -- final review, M1", () => {
+    // ArticleCard's own version of this test (tests/feed/card.test.tsx, "renders bracketed prose
+    // and a defanged script tag...") is the standing defence for src/lib/ingest/fetchers/rss.ts's
+    // stripTags heuristic, which deliberately leaves `<model>`-shaped prose untouched in stored
+    // summaries because it cannot always tell that prose apart from real markup after
+    // entity-decoding. This story page renders the same two fields (`summary`, `whyItMatters`)
+    // the card does, plus `title`, and until this test existed, nothing pinned that half of the
+    // guarantee: switching either field to `dangerouslySetInnerHTML` left every other test in
+    // this file green (they all assert `textContent`, which a real dangerouslySetInnerHTML
+    // render of this exact fixture would still satisfy, since there is no unescaped `<` anywhere
+    // in the DEFANGED prose being rendered as visible text either way). Asserting
+    // `container.querySelector("script")` is null, not merely a text match, is what actually
+    // distinguishes "rendered as escaped text" from "rendered as parsed HTML" -- a card that
+    // ever renders either field via `dangerouslySetInnerHTML` turns this fixture's `<script>`
+    // text into a live `<script>` element; plain JSX text never can.
+    it("renders bracketed prose and a defanged script tag as visible text in summary and whyItMatters, and creates no script element", async () => {
+      const summary =
+        "The <model> improved, unlike <script>alert(1)</script> which is prose quoted here.";
+      const whyItMatters =
+        "Because <model> matters, unlike <script>alert(2)</script> which is prose quoted here.";
+      vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null, summary, whyItMatters }));
+
+      const { container } = render(await ArticlePage({ params: params(HASH) }));
+
+      expect(container.querySelector("script")).toBeNull();
+      expect(screen.getByTestId("summary").textContent).toBe(summary);
+      expect(screen.getByTestId("why-it-matters").textContent).toBe(whyItMatters);
+    });
+  });
 });
