@@ -1,5 +1,6 @@
 import { relativeTime } from "./format.js";
 import type { RunStatus } from "./read.js";
+import type { DayMeta } from "../store/meta.js";
 
 /**
  * Spec §8's five states. `perSourceCounts`, `filtered`, `quarantined` and `errors` on
@@ -56,7 +57,7 @@ export const SOURCE_STATE_LABEL: Record<Exclude<SourceState, "healthy">, string>
  * that "turn red on two consecutive runs" -- but `getRunStatus` (src/lib/feed/read.ts) reads a
  * single `META#lastRun` item, with no record of the run before it. There is no second data point
  * here to check "two consecutive" against, so both render amber, the same as `drift`, rather
- * than inventing a red state this layer cannot actually verify -- see components/RunStatus.tsx
+ * than inventing a red state this layer cannot actually verify -- see components/RunStatusLine.tsx
  * and the Task 9 report for the fuller reasoning. `quiet` is grey, never amber: spec §8 is
  * explicit that a reliably-quiet source (`alistapart`) is not a fault.
  */
@@ -67,23 +68,86 @@ export const SOURCE_STATE_CLASS: Record<Exclude<SourceState, "healthy">, string>
   dead: "text-amber-600",
 };
 
-const LLM_LABEL: Record<NonNullable<RunStatus["llmStatus"]>, string> = {
+/**
+ * Fix round 1, F2: the header's "LLM ..." segment is sourced from the latest `META#DAY` record
+ * (a second, concurrent read -- `getArchive(1)` in `components/RunStatusLine.tsx`), never from
+ * `META#lastRun.llmStatus` on `RunStatus`. That field is not usable for this: `capture.ts`
+ * hardcodes it to `"skipped"` on every hourly write (capture never calls the model) and
+ * `rank.ts` never writes `META#lastRun` at all, so it is permanently `"skipped"` on the live
+ * data regardless of how ranking actually went -- a segment that renders the same word forever
+ * is worse than no segment, because it reads as a live signal while certifying nothing.
+ *
+ * `META#DAY` is the correct source because it is the ONLY thing that can show a rank Lambda
+ * that has stopped running at all: `day`/`completedAt` freeze on the last day that genuinely
+ * ranked, while `META#lastRun` keeps refreshing every hour off capture alone. No value of any
+ * field capture writes can ever show "rank hasn't run in a week," because a Lambda that never
+ * runs never writes anything -- only a second, independent read can catch that.
+ *
+ * `DayMeta.status` is deliberately NEVER surfaced here, unlike `llmStatus`: days are
+ * permanently `"partial"` under the current `RANK_INPUT_CAP` (~250 kept of ~264 candidates), so
+ * a header reading "partial" every day would be exactly the alarm-that-always-fires spec §8
+ * spends its longest revision note warning against. `llmStatus` (`"ok" | "failed" |
+ * "truncated"`) is a real per-run outcome, not a permanent artifact of the cap, so it is safe to
+ * show.
+ */
+const RANK_STATUSES = ["ok", "failed", "truncated"] as const;
+type RankStatus = (typeof RANK_STATUSES)[number];
+
+/** `listDays`/`getArchive` (`src/lib/store/query.ts`) cast DynamoDB's raw `Items` straight to
+ *  `DayMeta[]` with no field-level coercion, unlike `getRunStatus`'s careful `memberOrNull`
+ *  treatment of `META#lastRun`. A malformed or future-added `llmStatus` value must not reach an
+ *  object literal keyed by the exact union below -- that lookup would return `undefined` and
+ *  render the literal string "undefined" into the header, which is exactly Task 9 fix round 1's
+ *  finding about `truncated` being missing, generalised to any value this function does not
+ *  recognise. */
+function rankStatusOrNull(v: unknown): RankStatus | null {
+  return typeof v === "string" && (RANK_STATUSES as readonly string[]).includes(v)
+    ? (v as RankStatus)
+    : null;
+}
+
+const RANK_STATUS_LABEL: Record<RankStatus, string> = {
   ok: "ok",
-  skipped: "skipped",
   failed: "failed",
+  truncated: "truncated",
 };
+
+/**
+ * The header's trailing "LLM ..." clause. `latestDay` carries three distinct states, not two:
+ * `undefined` means the `getArchive(1)` read itself failed (fix round 1, F6 -- a secondary read
+ * failing must degrade this segment, not the whole component); `null` means the read succeeded
+ * and there is genuinely no ranked day yet (a fresh deploy, matching `getDay`'s own `status ===
+ * null` case); a `DayMeta` means both reads succeeded and this is the most recent one. Collapsing
+ * "the read failed" and "there is nothing" into one case would render a working system's own
+ * transient blip as "no ranked day yet," which is false, not merely uninformative.
+ */
+function llmLine(latestDay: DayMeta | null | undefined): string {
+  if (latestDay === undefined) return "LLM status unavailable";
+  if (latestDay === null) return "LLM no ranked day yet";
+  const rankStatus = rankStatusOrNull(latestDay.llmStatus);
+  const label = rankStatus !== null ? RANK_STATUS_LABEL[rankStatus] : "unknown";
+  return `LLM ${label} (ranked through ${latestDay.day})`;
+}
 
 export interface RunStatusSummary {
   relativeTime: string;
   itemsWritten: number;
-  /** Sources classified `healthy` this run -- see `classifySourceState`. A source in `drift`
-   *  (spec §8's "amber, never hidden" row) does not count here even when it also produced
-   *  items, so this can read e.g. 19/21 on a day where nothing is actually broken; the
-   *  `notable` list below is what explains the gap, so the fraction alone is never the whole
-   *  story a reader needs. */
+  /**
+   * Fix round 1, F3: sources classified `healthy` OR `drift` -- i.e. every source that produced
+   * at least one article this run, whether or not it also quarantined something. Folding
+   * `drift` out of this count (the previous behaviour) meant a source that reliably quarantines
+   * one degenerate title a day -- the `anthropic` case spec §8 names as *not* a fault -- could
+   * never let the fraction read `M/M` on a day where nothing is actually broken: the exact
+   * alarm-that-always-fires §8 warns against, implemented inside the warning itself. `drift`
+   * still appears in `notable` below (quarantined>0 is never silent), so "is anything
+   * producing" and "is anything drifting" stay two independent signals instead of one collapsed
+   * number.
+   */
   producingCount: number;
   totalSources: number;
-  llmLabel: string;
+  /** The full "LLM ..." clause -- see `llmLine`'s doc comment for what each shape of input
+   *  means and why `DayMeta.status` never appears here. */
+  llmLine: string;
   /** Every source not in the `healthy` state, sorted by id for a stable render order. */
   notable: { source: string; state: Exclude<SourceState, "healthy"> }[];
 }
@@ -91,7 +155,10 @@ export interface RunStatusSummary {
 /**
  * The header's run-status line (spec §8) plus the per-source detail beneath it. `now` is a
  * parameter, never read internally, matching `relativeTime`'s own purity rule -- see its doc
- * comment in `format.ts`.
+ * comment in `format.ts`. `latestDay` is `getArchive(1)`'s first result (or `null`/`undefined`
+ * -- see `llmLine`), read concurrently with `status` by the caller, never fetched here: this
+ * function stays pure and synchronous, the same reason `classifySourceState` takes plain counts
+ * rather than reading `RunStatus` itself.
  *
  * The source-id set is the union of every id appearing in `perSourceCounts`, `filtered`,
  * `quarantined` or `errors`, not just `Object.keys(status.perSourceCounts)`: capture.ts
@@ -101,7 +168,11 @@ export interface RunStatusSummary {
  * source counted only through `errors` (and missing from the other three) must still be
  * surfaced rather than silently dropped from the denominator.
  */
-export function summarizeRunStatus(status: RunStatus, now: Date): RunStatusSummary {
+export function summarizeRunStatus(
+  status: RunStatus,
+  latestDay: DayMeta | null | undefined,
+  now: Date,
+): RunStatusSummary {
   const ids = new Set<string>([
     ...Object.keys(status.perSourceCounts),
     ...Object.keys(status.filtered),
@@ -120,8 +191,8 @@ export function summarizeRunStatus(status: RunStatus, now: Date): RunStatusSumma
       quarantined: status.quarantined[id] ?? 0,
       hasError: errorSources.has(id),
     });
-    if (state === "healthy") producingCount += 1;
-    else notable.push({ source: id, state });
+    if (state === "healthy" || state === "drift") producingCount += 1;
+    if (state !== "healthy") notable.push({ source: id, state });
   }
   notable.sort((a, b) => a.source.localeCompare(b.source));
 
@@ -130,7 +201,7 @@ export function summarizeRunStatus(status: RunStatus, now: Date): RunStatusSumma
     itemsWritten: status.itemsWritten,
     producingCount,
     totalSources: ids.size,
-    llmLabel: status.llmStatus !== null ? LLM_LABEL[status.llmStatus] : "unknown",
+    llmLine: llmLine(latestDay),
     notable,
   };
 }

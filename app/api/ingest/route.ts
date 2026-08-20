@@ -17,6 +17,23 @@ export const dynamic = "force-dynamic";
 
 const SECRET_HEADER = "x-ingest-secret";
 
+let cachedLambdaClient: LambdaClient | undefined;
+
+/**
+ * One client per warm invocation, not one per request -- fix round 1, F8. Mirrors
+ * `src/lib/store/client.ts`'s `docClient()`: created lazily so importing this module (as a
+ * test does) never constructs an SDK client or attempts credential resolution, and cached after
+ * the first call so a route hit repeatedly on a warm Lambda/Vercel function reuses one
+ * connection instead of paying setup cost on every request. `aws-sdk-client-mock`'s
+ * `mockClient(LambdaClient)` patches the class prototype, not a specific instance, so this
+ * memoization needs no test seam the way `docClient` needs `__setDocClient` -- the mock
+ * intercepts `.send` on whichever instance ends up cached.
+ */
+function lambdaClient(): LambdaClient {
+  cachedLambdaClient ??= new LambdaClient({});
+  return cachedLambdaClient;
+}
+
 /**
  * SHA-256 both sides before comparing. `crypto.timingSafeEqual` throws
  * `ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH` on two buffers of different byte length -- verified
@@ -83,8 +100,9 @@ export async function POST(request: Request): Promise<Response> {
   const functionName = process.env.CAPTURE_FUNCTION_NAME;
   if (!functionName) throw new Error("CAPTURE_FUNCTION_NAME environment variable is not set");
 
-  const client = new LambdaClient({});
-  await client.send(new InvokeCommand({ FunctionName: functionName, InvocationType: "Event" }));
+  await lambdaClient().send(
+    new InvokeCommand({ FunctionName: functionName, InvocationType: "Event" }),
+  );
 
   return new Response(null, { status: 202 });
 }
@@ -94,7 +112,11 @@ export async function POST(request: Request): Promise<Response> {
  * method-not-allowed behaviour for an undeclared handler -- an explicit `GET` here makes the
  * 405 a fact this route's own tests assert on directly, not a framework internal nothing in
  * this file exercises.
+ *
+ * `Allow: POST` on the 405 -- fix round 1, F9. RFC 7231 §6.5.5 says a 405 response SHOULD
+ * include it, and it costs nothing here to make the endpoint self-describing to whoever wires
+ * up a caller later (Task 10).
  */
 export async function GET(): Promise<Response> {
-  return new Response(null, { status: 405 });
+  return new Response(null, { status: 405, headers: { Allow: "POST" } });
 }

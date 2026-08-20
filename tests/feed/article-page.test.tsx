@@ -14,10 +14,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../src/lib/feed/read.js", () => ({
   getArticle: vi.fn(),
   getDay: vi.fn(),
-  // `app/article/[urlHash]/page.tsx` now also renders `RunStatus`, which calls `getRunStatus`
-  // -- this file's tests are about the article/cluster logic and never customise this, so it
-  // stays a fixed `null` (the "pipeline never ran" case) for every test.
+  // `app/article/[urlHash]/page.tsx` now also renders `RunStatusLine`, which calls
+  // `getRunStatus`/`getArchive` -- this file's tests are about the article/cluster logic and
+  // never customise either, so they stay fixed at "pipeline never ran"/"no ranked day yet" for
+  // every test. Fix round 1, F1: presence of the rendered line itself IS pinned below, in its
+  // own dedicated test.
   getRunStatus: vi.fn(async () => null),
+  getArchive: vi.fn(async () => []),
 }));
 
 import ArticlePage from "../../app/article/[urlHash]/page.js";
@@ -403,5 +406,13 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
 
       expect(screen.getByTestId("recency").textContent).toContain("0.00");
     });
+  });
+
+  it("fix round 1 F1: renders the run-status line -- spec §8's highest-value element must actually be on the page", async () => {
+    vi.mocked(getArticle).mockResolvedValue(detail());
+
+    render(await ArticlePage({ params: params(HASH) }));
+
+    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
   });
 });

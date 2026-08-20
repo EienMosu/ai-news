@@ -196,6 +196,34 @@ Record whichever decision you make somewhere durable, then continue to step 1.
     archive fail, with `BACKUP_REPO environment variable is not set`, which makes the gap easy to
     miss until someone actually widens a search.
 
+    **As of Task 9's `/api/ingest` (`app/api/ingest/route.ts`), two more variables, one of each
+    kind:**
+
+    - **`CAPTURE_FUNCTION_NAME`** — the same value as `$CAPTURE_FN` (the `CaptureFunctionName`
+      output from step 4), not a credential, set as a plain environment variable the same as
+      `TABLE_NAME`/`BACKUP_REPO`. The route reads it at request time and invokes exactly that
+      function, asynchronously, on a valid request — never the rank function, and nothing here
+      re-derives or validates which function the name points at (that only matters at the IAM
+      layer: `VercelReaderUserName`'s `lambda:InvokeFunction` grant is scoped to the capture
+      function's ARN alone, so pointing this at the wrong function name 403s rather than
+      ranking).
+    - **`INGEST_SECRET`** — **set this one as a Vercel *secret*, not a plain variable**: unlike
+      the three above, this genuinely is a credential — anyone who has it can trigger capture
+      (never ranking; see spec §2) at will. Generate a long random string yourself (there is no
+      CDK/CLI step that produces one; nothing in this stack knows or needs to know its value).
+      Same handling as the GitHub PAT and the Vercel access key above: don't write it to a file,
+      echo it to this terminal, or paste it into a chat window or an agent. Left unset, the route
+      returns `500` and logs `INGEST_SECRET environment variable is not set` — it never falls
+      back to accepting any request as authenticated.
+
+      **Whoever calls this route must send the secret in a header literally named
+      `x-ingest-secret`** — this exact string, lowercase, is not derivable from any spec, plan,
+      or CDK output; it exists only in `app/api/ingest/route.ts`'s own source and this line.
+      `POST https://<vercel-domain>/api/ingest` with that header set to the `INGEST_SECRET`
+      value returns `202` and triggers one asynchronous capture invoke; a wrong or missing
+      secret returns `401`; any method other than `POST` returns `405` with an `Allow: POST`
+      header.
+
     ⚠️ **This key is invisible to CDK, permanently.** Because it's minted outside the stack,
     `cdk diff` will never mention it, before or after it exists. If a future change ever forces
     replacement of the `VercelReader` user construct (renaming it, changing an ID in the
@@ -278,6 +306,10 @@ otherwise, and repeat that same decision if it does.
   this is also a **Vercel runtime requirement** (`BACKUP_REPO`, see step 10) — the web app's
   `/search` route reads it too, not only the Lambdas.
 - **GitHub token parameter:** `/ai-news/github-token` (SecureString, `eu-central-1`).
+- **Manual ingest trigger:** `POST /api/ingest` with header `x-ingest-secret: <INGEST_SECRET>`.
+  As of Task 9, this is also a **Vercel runtime requirement** (`INGEST_SECRET` as a secret,
+  `CAPTURE_FUNCTION_NAME` as a plain variable, see step 10) — capture-only, never rank; see
+  spec §2.
 - Table, both function, and the Vercel IAM user's physical names are all CDK-generated (none
   is hardcoded to what its logical ID suggests). The stack outputs all four — see step 4. If
   you've lost them, `aws cloudformation describe-stacks --stack-name AiNewsStack --query

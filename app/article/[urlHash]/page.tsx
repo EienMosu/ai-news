@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { RunStatus } from "../../../components/RunStatus.js";
+import { RunStatusLine } from "../../../components/RunStatusLine.js";
 import { ScoreSignals } from "../../../components/ScoreSignals.js";
 import { SectionNav } from "../../../components/SectionNav.js";
 import { computeRecency } from "../../../src/lib/core/score.js";
@@ -78,7 +78,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      {await RunStatus({ now })}
+      {await RunStatusLine({ now })}
       <SectionNav current={null} />
 
       <article>

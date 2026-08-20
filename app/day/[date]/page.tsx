@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { DaySection } from "../../../components/DaySection.js";
 import { dayStatusLine } from "../../../components/FeedView.js";
-import { RunStatus } from "../../../components/RunStatus.js";
+import { RunStatusLine } from "../../../components/RunStatusLine.js";
 import { SectionNav } from "../../../components/SectionNav.js";
 import { getDay } from "../../../src/lib/feed/read.js";
 
@@ -62,14 +62,14 @@ export default async function DayPage({ params }: DayPageProps) {
     notFound();
   }
 
-  // One instant, shared by RunStatus's "last run Xh ago" and DaySection's per-card relative
+  // One instant, shared by RunStatusLine's "last run Xh ago" and DaySection's per-card relative
   // times -- the same reasoning app/article/[urlHash]/page.tsx documents: never two independent
   // `new Date()` calls in one render that could drift apart mid-render.
   const now = new Date();
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      {await RunStatus({ now })}
+      {await RunStatusLine({ now })}
       <SectionNav current={null} />
 
       {result.llmRankedInDay !== null ? (

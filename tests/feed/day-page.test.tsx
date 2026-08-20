@@ -13,10 +13,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/lib/feed/read.js", () => ({
   getDay: vi.fn(),
-  // `app/day/[date]/page.tsx` now also renders `RunStatus`, which calls `getRunStatus` --
-  // this file's tests are about `getDay`/date handling and never customise this, so it stays a
-  // fixed `null` (the "pipeline never ran" case) for every test rather than being reset per-test.
+  // `app/day/[date]/page.tsx` now also renders `RunStatusLine`, which calls
+  // `getRunStatus`/`getArchive` -- this file's tests are about `getDay`/date handling and never
+  // customise either, so they stay fixed at "pipeline never ran"/"no ranked day yet" for every
+  // test rather than being reset per-test. Fix round 1, F1: presence of the rendered line
+  // itself IS pinned below, in its own dedicated test.
   getRunStatus: vi.fn(async () => null),
+  getArchive: vi.fn(async () => []),
 }));
 
 import DayPage from "../../app/day/[date]/page.js";
@@ -204,5 +207,19 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
 
     expect(screen.getByRole("heading", { level: 2, name: "2026-08-18" })).toBeTruthy();
     expect(screen.queryByText("2099-12-31")).toBeNull();
+  });
+
+  it("fix round 1 F1: renders the run-status line -- spec §8's highest-value element must actually be on the page", async () => {
+    vi.mocked(getDay).mockResolvedValue({
+      articles: [toFeedArticle(rawArticle())],
+      day: "2026-08-18",
+      status: "complete",
+      llmRankedInDay: 1,
+      truncatedInDay: 0,
+    });
+
+    render(await DayPage({ params: params("2026-08-18") }));
+
+    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
   });
 });

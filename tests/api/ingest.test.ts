@@ -128,6 +128,11 @@ describe("GET /api/ingest", () => {
     expect(res.status).toBe(405);
   });
 
+  it("fix round 1 F9: names the allowed method via the Allow header, per RFC 7231 §6.5.5", async () => {
+    const res = await GET();
+    expect(res.headers.get("Allow")).toBe("POST");
+  });
+
   it("never touches the Lambda client", async () => {
     await GET();
     expect(lambda.commandCalls(InvokeCommand)).toHaveLength(0);

@@ -18,10 +18,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/lib/feed/read.js", () => ({
   getRecentDays: vi.fn(),
-  // Both pages now also render `RunStatus`, which calls `getRunStatus` -- this file's tests
-  // are about the `getRecentDays`/`?days=` seam and never customise this, so it stays a fixed
-  // `null` (the "pipeline never ran" case) for every test.
+  // Both pages now also render `RunStatusLine`, which calls `getRunStatus`/`getArchive` -- this
+  // file's tests are about the `getRecentDays`/`?days=` seam and never customise either, so
+  // they stay fixed at "pipeline never ran"/"no ranked day yet" for every test. Fix round 1,
+  // F1: presence of the rendered line itself IS pinned below, in its own dedicated test per
+  // page -- removing either page's `{await RunStatusLine({ now })}` call site must fail it.
   getRunStatus: vi.fn(async () => null),
+  getArchive: vi.fn(async () => []),
 }));
 
 import DesignPage from "../../app/design/page.js";
@@ -158,6 +161,12 @@ describe("Home (app/page.tsx)", () => {
     render(await Home({ searchParams: searchParams({ days: "14" }) }));
     expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design?days=14");
   });
+
+  it("fix round 1 F1: renders the run-status line -- spec §8's highest-value element must actually be on the page", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    render(await Home({ searchParams: searchParams() }));
+    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
+  });
 });
 
 describe("DesignPage (app/design/page.tsx)", () => {
@@ -216,5 +225,11 @@ describe("DesignPage (app/design/page.tsx)", () => {
     vi.mocked(getRecentDays).mockResolvedValue(results);
     render(await DesignPage({ searchParams: searchParams({ days: "14" }) }));
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
+  });
+
+  it("fix round 1 F1: renders the run-status line -- spec §8's highest-value element must actually be on the page", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue([EMPTY_DAY_RESULT]);
+    render(await DesignPage({ searchParams: searchParams() }));
+    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
   });
 });

@@ -19,11 +19,15 @@ vi.mock("../../src/lib/search/read.js", () => ({
   searchArchiveDays: vi.fn(),
 }));
 
-// `app/search/page.tsx` now also renders `RunStatus`, which calls `getRunStatus` from a
-// different module than the one above -- this file's tests are about search itself and never
-// customise this, so it stays a fixed `null` (the "pipeline never ran" case) for every test.
+// `app/search/page.tsx` now also renders `RunStatusLine`, which calls
+// `getRunStatus`/`getArchive` from a different module than the one above -- this file's tests
+// are about search itself and never customise either, so they stay fixed at "pipeline never
+// ran"/"no ranked day yet" for every test. Fix round 1, F1: presence of the rendered line
+// itself IS pinned below, in both of this page's return branches -- the blank-query early
+// return and the results branch are separate `return`s, so each needs its own assertion.
 vi.mock("../../src/lib/feed/read.js", () => ({
   getRunStatus: vi.fn(async () => null),
+  getArchive: vi.fn(async () => []),
 }));
 
 import SearchPage, { dynamic } from "../../app/search/page.js";
@@ -106,6 +110,11 @@ describe("SearchPage -- blank query (decision 7)", () => {
   it("does not render a results-empty message for a blank query -- that is a distinct state from a real zero-result search", async () => {
     render(await SearchPage({ searchParams: searchParams() }));
     expect(screen.queryByTestId("search-empty")).toBeNull();
+  });
+
+  it("fix round 1 F1: renders the run-status line on the blank-query early return -- a separate `return` from the results branch", async () => {
+    render(await SearchPage({ searchParams: searchParams() }));
+    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
   });
 });
 
@@ -332,6 +341,13 @@ describe("SearchPage -- rendering results", () => {
     const recent = screen.getByText("Recent story");
     const older = screen.getByText("Archive story");
     expect(recent.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("fix round 1 F1: renders the run-status line on the results branch -- a separate `return` from the blank-query one", async () => {
+    vi.mocked(searchRecentDays).mockResolvedValue([]);
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
+    render(await SearchPage({ searchParams: searchParams({ q: "story" }) }));
+    expect(screen.getByTestId("run-status-empty")).toBeTruthy();
   });
 });
 

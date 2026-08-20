@@ -7,6 +7,7 @@ import {
   type SourceCounts,
 } from "../../src/lib/feed/runStatus.js";
 import type { RunStatus } from "../../src/lib/feed/read.js";
+import type { DayMeta } from "../../src/lib/store/meta.js";
 
 const counts = (over: Partial<SourceCounts> = {}): SourceCounts => ({
   produced: 0, filtered: 0, quarantined: 0, hasError: false, ...over,
@@ -86,53 +87,93 @@ const baseStatus: RunStatus = {
   errors: [],
 };
 
+const dayMeta = (over: Partial<DayMeta> = {}): DayMeta => ({
+  day: "2026-08-17",
+  status: "partial",
+  articleCount: 264,
+  llmRanked: 250,
+  truncated: 14,
+  llmStatus: "ok",
+  runId: "r1",
+  completedAt: "2026-08-17T03:00:00.000Z",
+  ...over,
+});
+
 describe("summarizeRunStatus", () => {
   const now = new Date("2026-08-18T10:00:00.000Z"); // 4h after startedAt
 
   it("builds the relative time from startedAt using the given `now`, not the real clock", () => {
-    const summary = summarizeRunStatus(baseStatus, now);
+    const summary = summarizeRunStatus(baseStatus, null, now);
     expect(summary.relativeTime).toBe("4h ago");
   });
 
   it("passes itemsWritten through unchanged", () => {
-    const summary = summarizeRunStatus({ ...baseStatus, itemsWritten: 229 }, now);
+    const summary = summarizeRunStatus({ ...baseStatus, itemsWritten: 229 }, null, now);
     expect(summary.itemsWritten).toBe(229);
   });
 
-  it("counts producingCount as sources classified healthy, out of every known source id", () => {
+  it("fix round 1 F3: producingCount counts healthy AND drift -- both mean 'produced something'", () => {
     const status: RunStatus = {
       ...baseStatus,
       perSourceCounts: { techcrunch: 10, alistapart: 0, anthropic: 40 },
       filtered: { techcrunch: 0, alistapart: 5, anthropic: 0 },
       quarantined: { techcrunch: 0, alistapart: 0, anthropic: 1 },
     };
-    const summary = summarizeRunStatus(status, now);
+    const summary = summarizeRunStatus(status, null, now);
 
-    // techcrunch: healthy. alistapart: quiet (row 2). anthropic: drift (row 3, quarantined
-    // wins over its 40 produced). Only techcrunch counts toward producingCount.
-    expect(summary.producingCount).toBe(1);
+    // techcrunch: healthy. alistapart: quiet (row 2, produced nothing). anthropic: drift (row
+    // 3, quarantined wins over its 40 produced) -- but anthropic DID produce, so it counts too.
+    // Only alistapart (quiet -- produced nothing at all) is excluded.
+    expect(summary.producingCount).toBe(2);
     expect(summary.totalSources).toBe(3);
   });
 
-  it("lists every non-healthy source in `notable`, sorted by id", () => {
+  it("fix round 1 F3: a fully healthy day (nothing genuinely broken) reads the whole fraction, M/M", () => {
+    // Before the fix, a source that quarantines one item while producing plenty (the anthropic
+    // case spec §8 names as NOT a fault) permanently excluded that source from the numerator,
+    // so a day with nothing actually broken could never read e.g. 2/2 -- the exact
+    // alarm-that-always-fires §8 warns against, implemented inside the warning itself.
     const status: RunStatus = {
       ...baseStatus,
-      perSourceCounts: { zeta: 0, alistapart: 0 },
-      filtered: { zeta: 0, alistapart: 5 },
-      quarantined: { zeta: 0, alistapart: 0 },
+      perSourceCounts: { techcrunch: 10, anthropic: 40 },
+      quarantined: { anthropic: 1 },
+    };
+    const summary = summarizeRunStatus(status, null, now);
+    expect(summary.producingCount).toBe(summary.totalSources);
+  });
+
+  it("still excludes quiet, fetchFailed and dead sources from producingCount -- only drift changed", () => {
+    const status: RunStatus = {
+      ...baseStatus,
+      perSourceCounts: { healthy1: 10, quiet1: 0, dead1: 0 },
+      filtered: { healthy1: 0, quiet1: 5, dead1: 0 },
+      errors: [{ source: "failed1", message: "HTTP 429" }],
+    };
+    const summary = summarizeRunStatus(status, null, now);
+    expect(summary.producingCount).toBe(1);
+    expect(summary.totalSources).toBe(4);
+  });
+
+  it("lists every non-healthy source in `notable`, sorted by id -- drift included, despite also producing", () => {
+    const status: RunStatus = {
+      ...baseStatus,
+      perSourceCounts: { zeta: 0, alistapart: 0, anthropic: 40 },
+      filtered: { zeta: 0, alistapart: 5, anthropic: 0 },
+      quarantined: { zeta: 0, alistapart: 0, anthropic: 1 },
       errors: [{ source: "zeta", message: "HTTP 429" }],
     };
-    const summary = summarizeRunStatus(status, now);
+    const summary = summarizeRunStatus(status, null, now);
 
     expect(summary.notable).toEqual([
       { source: "alistapart", state: "quiet" },
+      { source: "anthropic", state: "drift" },
       { source: "zeta", state: "fetchFailed" },
     ]);
   });
 
   it("never puts a healthy source in `notable`", () => {
     const status: RunStatus = { ...baseStatus, perSourceCounts: { techcrunch: 10 } };
-    const summary = summarizeRunStatus(status, now);
+    const summary = summarizeRunStatus(status, null, now);
     expect(summary.notable).toEqual([]);
   });
 
@@ -141,18 +182,43 @@ describe("summarizeRunStatus", () => {
       ...baseStatus,
       errors: [{ source: "orphan", message: "boom" }],
     };
-    const summary = summarizeRunStatus(status, now);
+    const summary = summarizeRunStatus(status, null, now);
     expect(summary.totalSources).toBe(1);
     expect(summary.notable).toEqual([{ source: "orphan", state: "fetchFailed" }]);
   });
 
-  it("maps llmStatus ok/skipped/failed to their own label", () => {
-    expect(summarizeRunStatus({ ...baseStatus, llmStatus: "ok" }, now).llmLabel).toBe("ok");
-    expect(summarizeRunStatus({ ...baseStatus, llmStatus: "skipped" }, now).llmLabel).toBe("skipped");
-    expect(summarizeRunStatus({ ...baseStatus, llmStatus: "failed" }, now).llmLabel).toBe("failed");
-  });
+  describe("fix round 1 F2: the LLM clause is sourced from the latest META#DAY, never META#lastRun.llmStatus", () => {
+    it("undefined latestDay (the getArchive read failed) renders 'status unavailable'", () => {
+      expect(summarizeRunStatus(baseStatus, undefined, now).llmLine).toBe("LLM status unavailable");
+    });
 
-  it("labels a null llmStatus (an unrecognised stored value) as unknown, not a crash", () => {
-    expect(summarizeRunStatus({ ...baseStatus, llmStatus: null }, now).llmLabel).toBe("unknown");
+    it("null latestDay (read succeeded, nothing ranked yet) renders 'no ranked day yet'", () => {
+      expect(summarizeRunStatus(baseStatus, null, now).llmLine).toBe("LLM no ranked day yet");
+    });
+
+    it("maps ok/failed/truncated to their own label, plus the ranked-through day", () => {
+      expect(summarizeRunStatus(baseStatus, dayMeta({ llmStatus: "ok", day: "2026-08-17" }), now).llmLine)
+        .toBe("LLM ok (ranked through 2026-08-17)");
+      expect(summarizeRunStatus(baseStatus, dayMeta({ llmStatus: "failed", day: "2026-08-17" }), now).llmLine)
+        .toBe("LLM failed (ranked through 2026-08-17)");
+      expect(summarizeRunStatus(baseStatus, dayMeta({ llmStatus: "truncated", day: "2026-08-17" }), now).llmLine)
+        .toBe("LLM truncated (ranked through 2026-08-17)");
+    });
+
+    it("labels an unrecognised llmStatus value as unknown, not a crash or a literal 'undefined'", () => {
+      // getArchive/listDays cast DynamoDB's raw Items straight to DayMeta[] with no field-level
+      // coercion (unlike getRunStatus's memberOrNull treatment of META#lastRun) -- a malformed
+      // value reaching a Record lookup keyed by the exact union would otherwise render the
+      // literal string "undefined" into the header.
+      const malformed = dayMeta({ llmStatus: "bogus" as unknown as DayMeta["llmStatus"] });
+      expect(summarizeRunStatus(baseStatus, malformed, now).llmLine).toBe(
+        "LLM unknown (ranked through 2026-08-17)",
+      );
+    });
+
+    it("never surfaces DayMeta.status ('partial') -- days are permanently partial under the rank cap", () => {
+      const line = summarizeRunStatus(baseStatus, dayMeta({ status: "partial" }), now).llmLine;
+      expect(line).not.toContain("partial");
+    });
   });
 });
