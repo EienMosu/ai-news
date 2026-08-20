@@ -1,5 +1,9 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { istanbulDay } from "../../../src/lib/core/day.js";
+import { docClient } from "../../../src/lib/store/client.js";
+import { INGEST_DAILY_CAP, ingestCounterKey } from "../../../src/lib/store/keys.js";
 
 // A trigger, and nothing else -- spec §2's "Manual refresh". This route invokes
 // capture-lambda only, asynchronously, and returns before capture has done any work. It must
@@ -62,10 +66,10 @@ function secretsMatch(given: string, expected: string): boolean {
 }
 
 /**
- * `POST /api/ingest`. Reads `INGEST_SECRET` and `CAPTURE_FUNCTION_NAME` at call time, never at
- * module load -- the same discipline `src/lib/feed/read.ts`'s `requireTableName` uses, for the
- * same reason: importing this module (as a test does) must never itself require the
- * environment to be configured, and a misconfiguration should be reported as a named,
+ * `POST /api/ingest`. Reads `INGEST_SECRET`, `TABLE_NAME` and `CAPTURE_FUNCTION_NAME` at call
+ * time, never at module load -- the same discipline `src/lib/feed/read.ts`'s `requireTableName`
+ * uses, for the same reason: importing this module (as a test does) must never itself require
+ * the environment to be configured, and a misconfiguration should be reported as a named,
  * diagnosable failure rather than the SDK's own opaque error once something actually calls out.
  *
  * `INGEST_SECRET` missing is a server misconfiguration, not "no secret required" -- it returns
@@ -73,14 +77,27 @@ function secretsMatch(given: string, expected: string): boolean {
  * is merely unset would be silent and far worse than a loud 500.
  *
  * A wrong secret returns 401 and invokes nothing: the secret check runs to completion, and
- * `CAPTURE_FUNCTION_NAME` is not even read, before the Lambda client is ever constructed.
+ * neither the ingest counter nor `CAPTURE_FUNCTION_NAME` is even read, before the Lambda client
+ * is ever constructed.
+ *
+ * Spec §9's per-day cap: the ONE piece of this that is actually a guarantee lives in
+ * `src/lambda/capture.ts` (an atomic conditional `ADD` against `META#INGEST/<ingestDay>`, which
+ * refuses past `INGEST_DAILY_CAP` even under concurrent requests). This route's own `GetItem`
+ * read is a plain, non-atomic snapshot -- two simultaneous requests can both read a count under
+ * the cap and both pass here -- so its only job is legibility: turning a capped-out day into an
+ * explicit 429 the caller (and the owner reading logs) can see, rather than a 202 that silently
+ * invokes a capture run whose own increment is then refused. `VercelReader` already carries
+ * `dynamodb:GetItem` on the table (infra/lib/functions.ts) -- no IAM change was needed for this
+ * read, and none was made for a write; only capture's execution role can write META#INGEST.
  *
  * `InvocationType: "Event"` on `InvokeCommand` -- not the deprecated `lambda:InvokeAsync` API
  * the brief mentions descriptively. That is a distinct, separate IAM action that
  * `VercelReader` is not granted (only `lambda:InvokeFunction`, scoped to the capture function's
  * ARN -- infra/lib/functions.ts); asynchronous invocation through `InvokeCommand` with
  * `InvocationType: "Event"` is what that grant actually authorises. Using the deprecated API
- * would 403 rather than trigger anything.
+ * would 403 rather than trigger anything. The `Payload` marks the invocation MANUAL -- capture's
+ * handler only ever touches the per-day counter when it sees this marker, so the hourly
+ * EventBridge schedule (which invokes with no such payload) can never be counted against the cap.
  *
  * Returns 202 immediately, without waiting for capture to run -- the invoke is fire-and-forget,
  * and the work has not happened by the time this responds.
@@ -97,11 +114,27 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(null, { status: 401 });
   }
 
+  const table = process.env.TABLE_NAME;
+  if (!table) throw new Error("TABLE_NAME environment variable is not set");
+
+  const ingestDay = istanbulDay(new Date());
+  const counter = await docClient().send(
+    new GetCommand({ TableName: table, Key: ingestCounterKey(ingestDay) }),
+  );
+  const count = typeof counter.Item?.count === "number" ? counter.Item.count : 0;
+  if (count >= INGEST_DAILY_CAP) {
+    return new Response(null, { status: 429 });
+  }
+
   const functionName = process.env.CAPTURE_FUNCTION_NAME;
   if (!functionName) throw new Error("CAPTURE_FUNCTION_NAME environment variable is not set");
 
   await lambdaClient().send(
-    new InvokeCommand({ FunctionName: functionName, InvocationType: "Event" }),
+    new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: "Event",
+      Payload: JSON.stringify({ manual: true }),
+    }),
   );
 
   return new Response(null, { status: 202 });
