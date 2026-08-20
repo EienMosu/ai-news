@@ -10,8 +10,18 @@ import robots from "../../app/robots.js";
  * asserted on the actual rule this file returns.
  */
 describe("robots", () => {
-  it("disallows exactly /search for every user agent", () => {
-    expect(robots().rules).toEqual({ userAgent: "*", disallow: "/search" });
+  it("disallows exactly /search and /article/ for every user agent", () => {
+    expect(robots().rules).toEqual({ userAgent: "*", disallow: ["/search", "/article/"] });
+  });
+
+  it("keeps /article/ disallowed -- deferred until the app has a real domain", () => {
+    // Separate from the equality assertion above so that adding a third path later does not
+    // silently drop this one: this test fails if /article/ specifically stops being blocked.
+    const { rules } = robots();
+    const list = (Array.isArray(rules) ? rules : [rules]).flatMap((r) =>
+      Array.isArray(r.disallow) ? r.disallow : r.disallow ? [r.disallow] : []);
+    expect(list).toContain("/article/");
+    expect(list).toContain("/search");
   });
 
   it("does not disallow the whole site -- the feed and story routes must stay crawlable", () => {
