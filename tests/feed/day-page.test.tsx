@@ -156,7 +156,7 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
     render(await DayPage({ params: params("2026-08-18") }));
 
     expect(screen.getByTestId("day-status").textContent).toContain(
-      "264 stories ranked across both sections on 2026-08-18",
+      "264 stories ranked across all sections on 2026-08-18",
     );
   });
 

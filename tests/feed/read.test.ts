@@ -211,7 +211,7 @@ describe("getRecentDays", () => {
     // trusted `listDays`' cast verbatim, so a record missing `llmRanked` (or carrying an
     // unrecognised `status`) reached `FeedResult` as `undefined`/the raw string, which is not
     // `null` -- `FeedView`'s `llmRankedInDay !== null` guard let `undefined` straight through and
-    // rendered the literal string "undefined stories ranked across both sections."
+    // rendered the literal string "undefined stories ranked across all sections."
     it("returns llmRankedInDay/truncatedInDay null, never undefined, for a record missing those fields", async () => {
       const { day: _day, llmRanked: _llmRanked, truncated: _truncated, ...rest } = dayMetaItem({ day: "2020-01-01" });
       ddb.on(QueryCommand).resolves({ Items: [{ ...rest, day: "2020-01-01" }] });

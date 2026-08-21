@@ -107,7 +107,7 @@ export interface RecentDaysOutcome {
  * function's to fix; but this was the one caller that piped an uncoerced field straight into a
  * union-typed `FeedResult` a component renders. A record missing `llmRanked` used to reach
  * `FeedView` as `undefined`, which is not `null`, so `FeedView`'s `llmRankedInDay !== null` guard
- * let it through and rendered the literal string "undefined stories ranked across both sections"
+ * let it through and rendered the literal string "undefined stories ranked across all sections"
  * -- the exact bug class Task 9 fix round 1 closed for `truncated` on the `getDay` path, still
  * live here until now.
  *

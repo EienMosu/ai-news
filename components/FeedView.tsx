@@ -41,7 +41,7 @@ export function dayStatusLine(
   day: string,
 ): string {
   const rankedPart =
-    `${llmRankedInDay} ${llmRankedInDay === 1 ? "story" : "stories"} ranked across both sections on ${day}`;
+    `${llmRankedInDay} ${llmRankedInDay === 1 ? "story" : "stories"} ranked across all sections on ${day}`;
   const truncatedPart =
     truncatedInDay !== null && truncatedInDay > 0
       ? `, ${truncatedInDay} truncated by the day's ranking cap`

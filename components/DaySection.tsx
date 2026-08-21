@@ -15,7 +15,7 @@ export interface DaySectionProps {
  * One day, as the sheet it was judged on.
  *
  * The count is `articles.length` -- what this section actually renders. Never
- * `META#DAY.articleCount` and never `llmRankedInDay`, both of which total BOTH verticals; a day
+ * `META#DAY.articleCount` and never `llmRankedInDay`, both of which total across every vertical; a day
  * total printed beside a section-filtered list is a number that matches nothing on screen.
  *
  * The first entry is the day's lead and renders inverted, on the field rather than the paper.

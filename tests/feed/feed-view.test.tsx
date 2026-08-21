@@ -85,7 +85,7 @@ describe("FeedView", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByText(/264 stories ranked across both sections on 2026-08-18/)).toBeTruthy();
+    expect(screen.getByText(/264 stories ranked across all sections on 2026-08-18/)).toBeTruthy();
   });
 
   it("omits the day-status line entirely when llmRankedInDay is null, rather than print a confident '0'", () => {
@@ -102,12 +102,12 @@ describe("FeedView", () => {
 describe("dayStatusLine", () => {
   it("uses singular 'story' for exactly one ranked article", () => {
     expect(dayStatusLine("complete", 1, 0, "2026-08-18"))
-      .toBe("1 story ranked across both sections on 2026-08-18.");
+      .toBe("1 story ranked across all sections on 2026-08-18.");
   });
 
   it("uses plural 'stories' for any count other than one", () => {
     expect(dayStatusLine("complete", 264, 0, "2026-08-18"))
-      .toBe("264 stories ranked across both sections on 2026-08-18.");
+      .toBe("264 stories ranked across all sections on 2026-08-18.");
   });
 
   it("omits the truncated clause when truncatedInDay is 0", () => {
