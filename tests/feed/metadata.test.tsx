@@ -7,6 +7,8 @@ describe("page metadata", () => {
   });
 
   it("has the correct description with proper apostrophe", () => {
-    expect(metadata.description).toBe("Each day's news, ranked by importance, not recency.");
+    // U+2019 (right single quotation mark), not ASCII U+0027 -- pins the branch-review fix
+    // that unified the tagline glyph across app/layout.tsx, README.md, and PRODUCT.md.
+    expect(metadata.description).toBe("Each day’s news, ranked by importance, not recency.");
   });
 });

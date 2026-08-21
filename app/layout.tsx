@@ -29,7 +29,7 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "The Slow Wire",
-  description: "Each day's news, ranked by importance, not recency.",
+  description: "Each day’s news, ranked by importance, not recency.",
 };
 
 //

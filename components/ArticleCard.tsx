@@ -56,8 +56,13 @@ export function ArticleCard({ article, now, rank, lead = false }: ArticleCardPro
         ) : null}
 
         <div className="min-w-0 flex-1">
+          {/* Same ink-overflow class as the summary below: a scraped title with no break
+              opportunity in a long run paints past this box without ever making the box
+              itself measure wider, invisible to a rect sweep, and inflates the mobile layout
+              viewport (the 745px defect A4 diagnosed on the summary paragraph). break-words is
+              the same one-class guard, applied here because the input is exactly as hostile. */}
           <h3
-            className="font-[family-name:var(--font-display)] text-[1.0625rem] font-semibold leading-[1.25] tracking-[-0.011em] underline-offset-[0.22em] group-hover:underline sm:text-[1.1875rem]"
+            className="break-words font-[family-name:var(--font-display)] text-[1.0625rem] font-semibold leading-[1.25] tracking-[-0.011em] underline-offset-[0.22em] group-hover:underline sm:text-[1.1875rem]"
             style={{ textWrap: "balance" }}
           >
             {article.title}
@@ -82,7 +87,7 @@ export function ArticleCard({ article, now, rank, lead = false }: ArticleCardPro
           {article.whyItMatters !== null ? (
             <p
               data-testid="why-it-matters"
-              className="mt-3 border-l border-current pl-3 font-[family-name:var(--font-text)] text-[0.9375rem] italic leading-[1.5]"
+              className="mt-3 break-words border-l border-current pl-3 font-[family-name:var(--font-text)] text-[0.9375rem] italic leading-[1.5]"
             >
               {article.whyItMatters}
             </p>

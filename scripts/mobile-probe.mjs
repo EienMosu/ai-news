@@ -18,7 +18,9 @@
 //      overflow is a FINDING, not a probe failure)
 //   1  indeterminate: the device-metrics override never applied AND nothing measurably
 //      overflowed -- the one case where the probe cannot tell you anything
-//   2  infrastructure failure: Chrome never came up or never exposed a page target
+//   2  infrastructure failure: Chrome never came up, never exposed a page target, the spawned
+//      process errored (bad CHROME_PATH), or a CDP call/connection timed out (10s) -- a live but
+//      unresponsive renderer is a failure to measure, not a measurement of "no overflow"
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -56,6 +58,18 @@ const userDataDir = mkdtempSync(join(tmpdir(), "mobile-probe-"));
 let chrome;
 let ws;
 
+class InfraError extends Error {}
+
+// Races a promise against a timeout so a live-but-unresponsive renderer (blocked main thread,
+// dropped socket) cannot hang the probe forever -- every wait in this script must be bounded.
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new InfraError(`${label} timed out after ${ms}ms.`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function main() {
   chrome = spawn(
     CHROME_PATH,
@@ -70,10 +84,24 @@ async function main() {
     { stdio: "ignore" },
   );
 
+  // A bad CHROME_PATH (or any spawn failure) surfaces as an 'error' event on the ChildProcess,
+  // never as a rejection anything here awaits. Left unhandled, that is an uncaught exception
+  // that bypasses the try/catch/finally below entirely -- the process dies with exit 1 (the
+  // documented "indeterminate" code, not "infra failure") and the finally block never runs, so
+  // the temp profile dir is never removed. Capturing it here and re-throwing inside the awaited
+  // chain is what makes it a normal InfraError that hits catch (exit 2) and finally (cleanup).
+  let spawnError = null;
+  chrome.on("error", (err) => {
+    spawnError = err;
+  });
+
   // Poll for the DevTools endpoint instead of a fixed sleep -- Chrome's startup time varies.
   let targets;
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
+    if (spawnError) {
+      throw new InfraError(`Chrome failed to launch: ${spawnError.message}`);
+    }
     try {
       targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       if (targets.some((t) => t.type === "page")) break;
@@ -81,6 +109,9 @@ async function main() {
       // Debugger endpoint not up yet.
     }
     await new Promise((r) => setTimeout(r, 150));
+  }
+  if (spawnError) {
+    throw new InfraError(`Chrome failed to launch: ${spawnError.message}`);
   }
   const page = targets?.find((t) => t.type === "page");
   if (!page) {
@@ -93,17 +124,50 @@ async function main() {
   ws.addEventListener("message", (e) => {
     const m = JSON.parse(e.data);
     if (m.id && pending.has(m.id)) {
-      pending.get(m.id)(m);
+      pending.get(m.id).resolve(m);
       pending.delete(m.id);
     }
   });
-  await new Promise((r) => ws.addEventListener("open", r));
+
+  // Every wait must be bounded: a live-but-unresponsive renderer (blocked main thread, dropped
+  // socket) must not hang the probe forever the way a bare `await new Promise(...)` with no
+  // timeout would.
+  const SOCKET_TIMEOUT_MS = 10000;
+  await withTimeout(
+    new Promise((resolve, reject) => {
+      ws.addEventListener("open", resolve, { once: true });
+      ws.addEventListener("error", () => reject(new InfraError("WebSocket errored before opening.")), { once: true });
+      ws.addEventListener("close", () => reject(new InfraError("WebSocket closed before opening.")), { once: true });
+    }),
+    SOCKET_TIMEOUT_MS,
+    "WebSocket open",
+  );
+
+  // Reject every pending command if the socket dies mid-run, so a dropped connection surfaces
+  // immediately instead of leaving send() calls parked forever.
+  ws.addEventListener("close", () => {
+    for (const { reject } of pending.values()) {
+      reject(new InfraError("WebSocket closed while a command was pending."));
+    }
+    pending.clear();
+  });
+  ws.addEventListener("error", () => {
+    for (const { reject } of pending.values()) {
+      reject(new InfraError("WebSocket errored while a command was pending."));
+    }
+    pending.clear();
+  });
+
   const send = (method, params = {}) =>
-    new Promise((res) => {
-      const n = ++id;
-      pending.set(n, res);
-      ws.send(JSON.stringify({ id: n, method, params }));
-    });
+    withTimeout(
+      new Promise((resolve, reject) => {
+        const n = ++id;
+        pending.set(n, { resolve, reject });
+        ws.send(JSON.stringify({ id: n, method, params }));
+      }),
+      SOCKET_TIMEOUT_MS,
+      `CDP command ${method}`,
+    );
 
   // Order matters: navigate first, THEN override, then let it reflow. Setting the override
   // before navigation races and silently lays out at the window size instead.
@@ -173,8 +237,6 @@ async function main() {
   }
   return 0;
 }
-
-class InfraError extends Error {}
 
 let code;
 try {

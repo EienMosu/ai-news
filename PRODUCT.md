@@ -64,7 +64,7 @@ reshuffle under him.
 
 ## Brand Commitments
 
-**The Slow Wire** (2026-08-21). The tagline is fixed: "Each day's news, ranked by importance,
+**The Slow Wire** (2026-08-21). The tagline is fixed: "Each day’s news, ranked by importance,
 not recency." The mark is the folded-corner file, a 26px stroke in current colour.
 
 ## Evidence on Hand
