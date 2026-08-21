@@ -99,7 +99,12 @@ export function FeedView({ section, result, now }: FeedViewProps) {
           No {SECTION_LABELS[section]} stories for {day}.
         </p>
       ) : (
-        <DaySection day={day} articles={articles} now={now} />
+        <DaySection
+          day={day}
+          entries={articles.map((article, i) => ({ article, rank: i + 1 }))}
+          totalInDay={articles.length}
+          now={now}
+        />
       )}
     </>
   );

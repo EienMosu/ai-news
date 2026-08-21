@@ -1,0 +1,136 @@
+// @vitest-environment jsdom
+//
+// Opt-in per file, not global -- see the docblock in tests/feed/card.test.tsx for why: this
+// suite needs a DOM and explicit `afterEach(cleanup)` because `test.globals` is false
+// project-wide.
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { DaySection, type RankedEntry } from "../../components/DaySection.js";
+import { toFeedArticle } from "../../src/lib/feed/shape.js";
+
+afterEach(cleanup);
+
+const NOW = new Date("2026-08-18T12:00:00.000Z");
+
+const raw = (over: Record<string, unknown> = {}) => ({
+  pk: `ART#${"a".repeat(64)}`,
+  sk: "A",
+  title: "GPT-6 ships",
+  summary: "A plain summary.",
+  imageUrl: null,
+  url: "https://example.com/p",
+  source: "techcrunch",
+  sourceName: "TechCrunch",
+  category: "news",
+  section: "ai",
+  publishedAt: "2026-08-18T09:00:00.000Z",
+  clusterId: "2026-08-18#gpt6",
+  corroborationToday: 3,
+  whyItMatters: "Because it changes the frontier.",
+  score: 812,
+  scoreVersion: "v1",
+  points: null,
+  pointsImputed: true,
+  llmImportance: 88,
+  firstSeenAt: "2026-08-18T10:00:00.000Z",
+  ...over,
+});
+
+/** Every entry's rank span carries both `aria-hidden` (decorative -- the number is content the
+ *  sighted layout conveys via position, not something a screen reader should announce twice)
+ *  and `data-numeric`; the header's own count span carries `data-numeric` without
+ *  `aria-hidden="true"`, so this selector picks out only the per-entry rank numbers. */
+const rankTexts = (container: HTMLElement): (string | null)[] =>
+  Array.from(container.querySelectorAll('[aria-hidden="true"][data-numeric]')).map(
+    (el) => el.textContent,
+  );
+
+const entriesFrom = (items: ReturnType<typeof toFeedArticle>[]): RankedEntry[] =>
+  items.map((article, i) => ({ article, rank: i + 1 }));
+
+describe("DaySection", () => {
+  it("shows the count of the articles it is actually rendering, unfiltered", () => {
+    const items = [
+      raw({ pk: `ART#${"a".repeat(64)}` }),
+      raw({ pk: `ART#${"b".repeat(64)}` }),
+    ].map(toFeedArticle);
+    const entries = entriesFrom(items);
+    render(<DaySection day="2026-08-18" entries={entries} totalInDay={items.length} now={NOW} />);
+    expect(screen.getByText("2 stories")).toBeTruthy();
+  });
+
+  it("uses singular 'story' for exactly one article, unfiltered", () => {
+    const items = [toFeedArticle(raw())];
+    const entries = entriesFrom(items);
+    render(<DaySection day="2026-08-18" entries={entries} totalInDay={items.length} now={NOW} />);
+    expect(screen.getByText("1 story")).toBeTruthy();
+  });
+
+  it("renders one card per entry, preserving the given (score) order", () => {
+    const items = [
+      raw({ pk: `ART#${"a".repeat(64)}`, title: "First" }),
+      raw({ pk: `ART#${"b".repeat(64)}`, title: "Second" }),
+    ].map(toFeedArticle);
+    const entries = entriesFrom(items);
+    const { container } = render(
+      <DaySection day="2026-08-18" entries={entries} totalInDay={items.length} now={NOW} />,
+    );
+    const titles = Array.from(container.querySelectorAll("h3")).map((h) => h.textContent);
+    expect(titles).toEqual(["First", "Second"]);
+  });
+
+  it("shows the day string in the header", () => {
+    render(<DaySection day="2026-08-18" entries={[]} totalInDay={0} now={NOW} />);
+    expect(screen.getByText("2026-08-18")).toBeTruthy();
+  });
+
+  it("links the header date to its own day page -- fix round 1, F3", () => {
+    render(<DaySection day="2026-08-18" entries={[]} totalInDay={0} now={NOW} />);
+    expect(screen.getByRole("link", { name: "2026-08-18" }).getAttribute("href")).toBe(
+      "/day/2026-08-18",
+    );
+  });
+
+  it("renders '93 stories' and ranks 01 through 93, unfiltered -- a day sheet at real scale", () => {
+    const items = Array.from({ length: 93 }, (_, i) =>
+      toFeedArticle(raw({ pk: `ART#story-${i}`, title: `Story ${i + 1}` })),
+    );
+    const entries = entriesFrom(items);
+    const { container } = render(
+      <DaySection day="2026-08-18" entries={entries} totalInDay={items.length} now={NOW} />,
+    );
+
+    expect(screen.getByText("93 stories")).toBeTruthy();
+    expect(rankTexts(container)).toEqual(
+      Array.from({ length: 93 }, (_, i) => String(i + 1).padStart(2, "0")),
+    );
+  });
+
+  it("under a filtered shape, keeps each entry's original day rank, reads 'K of N stories', and inverts only the first entry", () => {
+    // Ranks 1, 4, and 7 out of a 9-story day -- the day sheet's own filtered-shape contract
+    // (shared-preamble.md's "Filter states" paragraph): rank is a fact about the day, not the
+    // filter, so a filtered render must print the day's real numbers, not 1, 2, 3.
+    const articleOne = toFeedArticle(raw({ pk: `ART#${"a".repeat(64)}`, title: "Day's actual rank one" }));
+    const articleFour = toFeedArticle(raw({ pk: `ART#${"b".repeat(64)}`, title: "Day's actual rank four" }));
+    const articleSeven = toFeedArticle(raw({ pk: `ART#${"c".repeat(64)}`, title: "Day's actual rank seven" }));
+    const entries: RankedEntry[] = [
+      { article: articleOne, rank: 1 },
+      { article: articleFour, rank: 4 },
+      { article: articleSeven, rank: 7 },
+    ];
+
+    const { container } = render(
+      <DaySection day="2026-08-18" entries={entries} totalInDay={9} now={NOW} />,
+    );
+
+    expect(screen.getByText("3 of 9 stories")).toBeTruthy();
+    expect(rankTexts(container)).toEqual(["01", "04", "07"]);
+
+    // Only the first entry given (rank 1, the day's actual lead) inverts, regardless of how few
+    // entries the filter left, and no other entry does -- `ArticleCard` only sets `data-lead` on
+    // the link it renders as `lead`.
+    const leadLinks = container.querySelectorAll("a[data-lead]");
+    expect(leadLinks.length).toBe(1);
+    expect(leadLinks[0]?.textContent).toContain("Day's actual rank one");
+  });
+});

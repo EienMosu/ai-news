@@ -2,27 +2,57 @@ import Link from "next/link";
 import type { FeedArticle } from "../src/lib/feed/shape.js";
 import { ArticleCard } from "./ArticleCard.js";
 
+/** One entry on a day sheet: the article, paired with its rank within the day. Rank travels
+ *  with the entry rather than being derived from array position, so a filtered subset of a day
+ *  (see `totalInDay` below) can still print each entry's real, day-wide rank instead of
+ *  renumbering from 1 -- the rank is a fact about the day, not about whatever filter is
+ *  currently narrowing what is shown. */
+export interface RankedEntry {
+  article: FeedArticle;
+  rank: number;
+}
+
 export interface DaySectionProps {
   /** The store's day key (`YYYY-MM-DD`), shown as-is -- no locale formatting here. */
   day: string;
-  /** Already in score order (GSI1's sort order); this component renders them as given and
-   *  never re-sorts. */
-  articles: FeedArticle[];
+  /** Already in score order (GSI1's sort order) and already carrying each entry's day rank;
+   *  this component renders them exactly as given -- never re-sorts, never renumbers. */
+  entries: RankedEntry[];
+  /** The day's own unfiltered article count. Equal to `entries.length` when nothing has
+   *  filtered the day; smaller than `entries.length` is never valid. When a filter has narrowed
+   *  `entries` below this count, the header switches from "N stories" to "K of N stories". */
+  totalInDay: number;
   now: Date;
 }
 
 /**
  * One day, as the sheet it was judged on.
  *
- * The count is `articles.length` -- what this section actually renders. Never
- * `META#DAY.articleCount` and never `llmRankedInDay`, both of which total across every vertical; a day
- * total printed beside a section-filtered list is a number that matches nothing on screen.
+ * The header count is always this section's own numbers, never `META#DAY.articleCount` and
+ * never `llmRankedInDay` -- both total across every vertical, and a day total printed beside a
+ * section- or filter-narrowed list is a number that matches nothing on screen. Unfiltered
+ * (`entries.length === totalInDay`), that reads as `entries.length` stories -- what this section
+ * actually renders. Under a filter, `entries.length` is smaller than `totalInDay`, and the
+ * header instead reads `K of N stories`: a filtered day still says how big the day was, not just
+ * how many matches survived the filter (shared-preamble.md's "Filter states" paragraph).
  *
- * The first entry is the day's lead and renders inverted, on the field rather than the paper.
- * That is the whole ranking device: no entry is set larger than another, so the reader's eye is
- * pulled by ground, and every other row stays comparable at one size.
+ * Ranks are read off each entry (`entry.rank`), never re-derived from array position -- the
+ * whole point of carrying them explicitly is that a filtered render still prints the day's real
+ * numbers (e.g. 01, 04, 07 for a day's #1, #4, and #7 stories) rather than silently renumbering
+ * the survivors from 1, which would make a filtered sheet's ranks incomparable to the same day
+ * unfiltered.
+ *
+ * The first entry given -- whatever its rank number is -- is the day's lead and renders
+ * inverted, on the field rather than the paper. That is the whole ranking device: no entry is
+ * set larger than another, so the reader's eye is pulled by ground, and every other row stays
+ * comparable at one size.
  */
-export function DaySection({ day, articles, now }: DaySectionProps) {
+export function DaySection({ day, entries, totalInDay, now }: DaySectionProps) {
+  const countLabel =
+    entries.length === totalInDay
+      ? `${entries.length} ${entries.length === 1 ? "story" : "stories"}`
+      : `${entries.length} of ${totalInDay} stories`;
+
   return (
     <section className="mb-10 sm:mb-14">
       <div
@@ -36,16 +66,16 @@ export function DaySection({ day, articles, now }: DaySectionProps) {
             </Link>
           </h2>
           <span className="apparatus opacity-70" data-numeric>
-            {articles.length} {articles.length === 1 ? "story" : "stories"}
+            {countLabel}
           </span>
         </header>
 
-        {articles.map((article, i) => (
+        {entries.map((entry, i) => (
           <ArticleCard
-            key={article.urlHash}
-            article={article}
+            key={entry.article.urlHash}
+            article={entry.article}
             now={now}
-            rank={i + 1}
+            rank={entry.rank}
             lead={i === 0}
           />
         ))}
