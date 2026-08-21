@@ -257,3 +257,31 @@ describe("FeedArchive", () => {
     });
   });
 });
+
+describe("the archive drawer", () => {
+  it("shows five day spines derived from the last rendered day, ISO hrefs, formatted labels", () => {
+    render(
+      <FeedArchive
+        section="ai"
+        results={[dayResult({ day: "2026-08-18", articles: [toFeedArticle(rawArticle())] })]}
+        failedDays={0}
+        now={NOW}
+        days={1}
+        basePath="/"
+      />,
+    );
+    const drawer = screen.getByTestId("archive-drawer");
+    const spines = Array.from(drawer.querySelectorAll("a")).filter((a) =>
+      a.getAttribute("href")?.startsWith("/day/"),
+    );
+    expect(spines.map((a) => a.getAttribute("href"))).toEqual([
+      "/day/2026-08-17",
+      "/day/2026-08-16",
+      "/day/2026-08-15",
+      "/day/2026-08-14",
+      "/day/2026-08-13",
+    ]);
+    expect(spines[0]?.textContent).toBe("17.08.2026");
+    expect(screen.getByTestId("load-more-days").textContent).toBe("Open all older days");
+  });
+});

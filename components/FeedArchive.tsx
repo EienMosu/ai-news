@@ -4,6 +4,7 @@ import { matchesFilter, type FilterDef } from "../src/lib/feed/filter.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
 import { FeedView } from "./FeedView.js";
+import { formatDayKey } from "../src/lib/feed/format.js";
 
 export interface FeedArchiveProps {
   section: Section;
@@ -62,6 +63,26 @@ const NO_DAYS_RESULT: FeedResult = {
  * which is not the same fact as "no day has ever ranked" and must not be worded as though it
  * were.
  */
+/** How many day spines the drawer shows before the "open all" handle. */
+const ARCHIVE_DRAWER_SPINES = 5;
+
+/**
+ * The next calendar days behind the last rendered one, as store day keys. Pure key arithmetic
+ * in UTC: the day key is a calendar label, so parsing it at UTC midnight and stepping in
+ * 86400s units can never skip or double a day across DST, which local-time stepping would.
+ * Days that turn out empty are fine: /day renders an honest empty state.
+ */
+function olderDays(results: { day: string | null }[], count: number): string[] {
+  const lastDay = [...results].reverse().find((r) => r.day !== null)?.day;
+  if (lastDay === undefined || lastDay === null) return [];
+  const t = Date.parse(`${lastDay}T00:00:00.000Z`);
+  if (Number.isNaN(t)) return [];
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(t - (i + 1) * 86_400_000);
+    return d.toISOString().slice(0, 10);
+  });
+}
+
 export function FeedArchive({
   section,
   results,
@@ -122,6 +143,7 @@ export function FeedArchive({
           </span>
         </p>
       ) : null}
+      <div id="stories">
       {results.map((result) => (
         <FeedView
           key={result.day}
@@ -131,14 +153,39 @@ export function FeedArchive({
           filterDef={filterDef}
         />
       ))}
+      </div>
       {moreMayExist ? (
-        <Link
-          href={`${basePath}?days=${nextDays}`}
-          data-testid="load-more-days"
-          className="apparatus mt-2 inline-block border border-current/45 px-4 py-2.5 no-underline transition-colors duration-200 hover:bg-[var(--color-paper)] hover:text-[color:var(--field)]"
-        >
-          Load older days
-        </Link>
+        /* The drawer: the days behind the fold, shown as the file-drawer tab spines they are in
+           this world. Each spine is a real /day link derived from the last rendered day by
+           calendar arithmetic -- zero extra reads -- and the drawer handle keeps the old
+           extend-the-feed behaviour. UTC date maths on the day KEY, deliberately: the key is a
+           calendar label, not an instant, and local-time arithmetic would skip or repeat a day
+           twice a year. */
+        <nav data-testid="archive-drawer" aria-label="Older days" className="mt-4">
+          <h2 className="apparatus mb-2 opacity-75">In the drawer</h2>
+          <ul className="flex flex-wrap gap-2">
+            {olderDays(results, ARCHIVE_DRAWER_SPINES).map((day) => (
+              <li key={day}>
+                <Link
+                  href={`/day/${day}`}
+                  data-numeric
+                  className="apparatus inline-block border border-current/45 border-t-2 border-t-current px-3 py-2 no-underline opacity-70 transition-colors duration-200 hover:opacity-100 hover:bg-[var(--color-paper)] hover:text-[color:var(--field)]"
+                >
+                  {formatDayKey(day)}
+                </Link>
+              </li>
+            ))}
+            <li>
+              <Link
+                href={`${basePath}?days=${nextDays}`}
+                data-testid="load-more-days"
+                className="apparatus inline-block border border-current/45 px-3 py-2 no-underline transition-colors duration-200 hover:bg-[var(--color-paper)] hover:text-[color:var(--field)]"
+              >
+                Open all older days
+              </Link>
+            </li>
+          </ul>
+        </nav>
       ) : null}
     </>
   );

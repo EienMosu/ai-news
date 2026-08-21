@@ -64,7 +64,7 @@ export default async function DayPage({ params }: DayPageProps) {
   const now = new Date();
 
   return (
-    <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+    <main data-ground="ink" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} />
 

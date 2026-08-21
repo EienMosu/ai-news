@@ -62,6 +62,14 @@
   --on-field: #f6ece7;
 }
 
+/* The neutral ground. /day and /search span every vertical, so painting them one section's
+   field claims something false; like the status rail, what belongs to no world wears ink. The
+   lead-entry inversion then lands ink-on-paper, which is this ground's own voice. */
+[data-ground="ink"] {
+  --field: var(--color-ink);
+  --on-field: var(--color-paper);
+}
+
 [data-field="cloud"] {
   --field: var(--color-field-cloud);
   --on-field: #eef2e9;
@@ -281,4 +289,40 @@ body {
   to {
     background-position: -60% 0;
   }
+}
+
+/*
+  The mark's fold. On load, the corner path draws itself once: the file being folded shut. One
+  small authored entrance on the brand, nowhere else -- the loader remains the page's only other
+  authored motion. Reduced-motion collapses it with everything else.
+*/
+.mark-fold {
+  stroke-dasharray: 15;
+  stroke-dashoffset: 15;
+  animation: mark-fold 560ms cubic-bezier(0.16, 1, 0.3, 1) 180ms forwards;
+}
+@keyframes mark-fold {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/*
+  The skip link: first tabbable element, invisible until keyboard focus, then a stamp-voiced
+  banner. Three control rows precede the stories; a keyboard reader should not pay them on
+  every page.
+*/
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus-visible {
+  position: fixed;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  padding: 0.6em 1em;
 }

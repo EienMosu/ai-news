@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import AiLoading from "../../app/(feed)/loading.js";
 import DesignLoading from "../../app/(feed)/design/loading.js";
+import DayLoading from "../../app/(feed)/day/[date]/loading.js";
+import SearchLoading from "../../app/(feed)/search/loading.js";
 import CloudLoading from "../../app/(feed)/cloud/loading.js";
 
 /**
@@ -27,6 +29,13 @@ describe("the loading shell wears its own vertical", () => {
     const markup = renderToStaticMarkup(<CloudLoading />);
     expect(markup).toContain('data-field="cloud"');
     expect(markup).not.toContain('data-field="ai"');
+  });
+
+  it("waits in ink for the day and search surfaces, which belong to no vertical", () => {
+    for (const shell of [renderToStaticMarkup(<DayLoading />), renderToStaticMarkup(<SearchLoading />)]) {
+      expect(shell).toContain('data-ground="ink"');
+      expect(shell).not.toContain("data-field=");
+    }
   });
 
   it("shows the counter and the stamp in both, not a spinner", () => {
