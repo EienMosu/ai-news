@@ -103,10 +103,16 @@ body {
   outline-offset: 3px;
   border-radius: 1px;
 }
-a {
-  color: inherit;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.22em;
+/* In @layer base, deliberately: unlayered author CSS outranks every @layer rule regardless of
+   specificity, so an unlayered `a { color:inherit }` silently defeated every colour utility on
+   every anchor in the app -- the story page's outbound button computed bone-on-bone even though
+   its class matched. Base-layer element defaults are what utilities are SUPPOSED to override. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.22em;
+  }
 }
 
 /* Every digit in this product sits in a column somewhere. */
