@@ -64,11 +64,8 @@ reshuffle under him.
 
 ## Brand Commitments
 
-**The name is undecided.** The current `AI News` is placeholder; the owner is considering
-something else and has not chosen it. Nothing should be built that depends on a final wordmark,
-and no name should be invented on his behalf.
-
-No logo, no existing palette, no typographic commitment, no prior identity to preserve.
+**The Slow Wire** (2026-08-21). The tagline is fixed: "Each day's news, ranked by importance,
+not recency." The mark is the folded-corner file, a 26px stroke in current colour.
 
 ## Evidence on Hand
 
