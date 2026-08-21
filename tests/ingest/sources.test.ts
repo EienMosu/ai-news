@@ -41,13 +41,14 @@ const CLOUD_SOURCES = [
 ] as const;
 const AI_IDS = [
   "techcrunch", "verge", "arstechnica", "venturebeat", "mittr", "openai", "deepmind",
-  "huggingface", "anthropic", "hn", "reddit-localllama", "reddit-ml", "hfpapers",
+  "huggingface", "anthropic", "hn", "hn-local", "simonwillison", "hfpapers",
+  "meta-ai", "qwen", "mistral",
 ];
 
 describe("section", () => {
   it("has exactly the 13 original AI sources plus the 8 design sources plus the 8 cloud sources", () => {
     // Mutation: deleting any one source entry from SOURCES drops this to 28.
-    expect(SOURCES).toHaveLength(29);
+    expect(SOURCES).toHaveLength(33);
   });
 
   it("keeps every original source on the ai vertical", () => {
@@ -58,7 +59,7 @@ describe("section", () => {
       const s = SOURCES.find((x) => x.id === id);
       expect(s?.section, `${id} must be section "ai"`).toBe("ai");
     }
-    expect(SOURCES.filter((s) => s.section === "ai")).toHaveLength(13);
+    expect(SOURCES.filter((s) => s.section === "ai")).toHaveLength(16);
   });
 
   it("puts every new source on the design vertical, with the right id/name/category/url/kind", () => {
@@ -73,7 +74,7 @@ describe("section", () => {
       expect(s?.kind).toBe("rss");
       expect(s?.section).toBe("design");
     }
-    expect(SOURCES.filter((s) => s.section === "design")).toHaveLength(8);
+    expect(SOURCES.filter((s) => s.section === "design")).toHaveLength(9);
   });
 
   it("gives no design source the lab category", () => {
