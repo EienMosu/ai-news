@@ -9,6 +9,31 @@ import { listDays, queryDay } from "../store/query.js";
 import { MAX_ARCHIVE_DAYS } from "./days.js";
 import { bySection, toArticleDetail, toFeedArticle, type ArticleDetail, type FeedArticle } from "./shape.js";
 
+import { unstable_cache } from "next/cache";
+
+/*
+  THE DATA CACHE (owner-approved, 2026-08-21, "TTL can be longer").
+
+  Every route stays dynamic (filters and ?days= keep working), but the store reads underneath
+  are cached across requests, because the data only changes when capture (hourly) or rank
+  (twice daily) runs -- re-querying DynamoDB per visitor bought nothing but latency and RRUs.
+
+  The TTLs are split on purpose:
+  - Heavy reads (the day list + up to 30 day Queries, articles): 3600s. Worst-case staleness is
+    one capture cycle, which is this product's own cadence.
+  - The run-status GetItem: 300s. It is the page's honesty instrument ("last run X ago"), it
+    costs one GetItem, and keeping it near-live means a stale-but-cheap rail never contradicts
+    a fresh manual run for long. Relative times are computed at render from the cached
+    timestamp, so "X ago" keeps aging correctly between refreshes.
+
+  None of the wrapped functions may take a Date or anything request-scoped: unstable_cache keys
+  on the arguments, and a `now` in the key would defeat the cache silently. The guard test
+  (tests/design/data-cache.test.ts) pins both the wrapping and the argument rule.
+*/
+const HEAVY_READ_TTL_SECONDS = 3600;
+const RUN_STATUS_TTL_SECONDS = 300;
+
+
 const DAY_STATUSES = ["complete", "partial"] as const;
 const LAST_RUN_STATUSES = ["ok", "skipped", "failed"] as const;
 
@@ -117,7 +142,7 @@ export interface RecentDaysOutcome {
  * that positional order in its result no matter the completion order underneath; a rejection
  * removes an entry from the middle without reordering the rest.
  */
-export async function getRecentDays(section: Section, count: number): Promise<RecentDaysOutcome> {
+async function getRecentDaysUncached(section: Section, count: number): Promise<RecentDaysOutcome> {
   const table = requireTableName();
   const client = docClient();
   const days = await listDays(client, table, Math.min(count, MAX_ARCHIVE_DAYS));
@@ -143,6 +168,12 @@ export async function getRecentDays(section: Section, count: number): Promise<Re
   return { results, failedDays };
 }
 
+export const getRecentDays = unstable_cache(getRecentDaysUncached, ["getRecentDays"], {
+  revalidate: HEAVY_READ_TTL_SECONDS,
+  tags: ["days"],
+});
+
+
 /**
  * The named day, unfiltered by section -- `/day/[date]` deep-links to a specific date and
  * shows every vertical. Unlike `getRecentDays`, the day is a caller-supplied fact, not something
@@ -163,7 +194,7 @@ export async function getRecentDays(section: Section, count: number): Promise<Re
  * unrecognised value comes back `null`, same as an absent record, instead of flowing a bad
  * write straight into a union-typed field.
  */
-export async function getDay(date: string): Promise<FeedResult> {
+async function getDayUncached(date: string): Promise<FeedResult> {
   const table = requireTableName();
   const client = docClient();
 
@@ -184,6 +215,12 @@ export async function getDay(date: string): Promise<FeedResult> {
   };
 }
 
+export const getDay = unstable_cache(getDayUncached, ["getDay"], {
+  revalidate: HEAVY_READ_TTL_SECONDS,
+  tags: ["days"],
+});
+
+
 /**
  * One article by `urlHash`, read from the base table -- a `GetItem` on `ART#<urlHash>` / `A`,
  * never the `feed-by-day` index. Mapped through `toArticleDetail`, not `toFeedArticle`: the
@@ -198,12 +235,18 @@ export async function getDay(date: string): Promise<FeedResult> {
  * A missing item returns `null`. `urlHash` can arrive from a stale link or a bad guess and
  * that is not exceptional -- the caller (a page component) decides whether that is a 404.
  */
-export async function getArticle(urlHash: string): Promise<ArticleDetail | null> {
+async function getArticleUncached(urlHash: string): Promise<ArticleDetail | null> {
   const table = requireTableName();
   const client = docClient();
   const out = await client.send(new GetCommand({ TableName: table, Key: articleKey(urlHash) }));
   return out.Item ? toArticleDetail(out.Item) : null;
 }
+
+export const getArticle = unstable_cache(getArticleUncached, ["getArticle"], {
+  revalidate: HEAVY_READ_TTL_SECONDS,
+  tags: ["articles"],
+});
+
 
 /**
  * The archive calendar: up to `limit` days, newest first. A thin wrapper over `listDays` -- no
@@ -213,10 +256,16 @@ export async function getArticle(urlHash: string): Promise<ArticleDetail | null>
  * Clamped to 60 so a caller asking for more cannot silently get back a partial page instead of
  * the wider archive it thinks it received.
  */
-export async function getArchive(limit: number): Promise<DayMeta[]> {
+async function getArchiveUncached(limit: number): Promise<DayMeta[]> {
   const table = requireTableName();
   return await listDays(docClient(), table, Math.min(limit, 60));
 }
+
+export const getArchive = unstable_cache(getArchiveUncached, ["getArchive"], {
+  revalidate: HEAVY_READ_TTL_SECONDS,
+  tags: ["days"],
+});
+
 
 /**
  * `META#lastRun` as the health surface reads it. Differs from `LastRun` in exactly two ways,
@@ -268,7 +317,7 @@ function errorList(v: unknown): { source: string; message: string }[] {
  * (`perSourceCounts`, `filtered`, `quarantined`, `errors`) are coerced to renderable shapes
  * here, at the boundary, rather than throwing inside the component.
  */
-export async function getRunStatus(): Promise<RunStatus | null> {
+async function getRunStatusUncached(): Promise<RunStatus | null> {
   const table = requireTableName();
   const client = docClient();
   const out = await client.send(
@@ -288,3 +337,9 @@ export async function getRunStatus(): Promise<RunStatus | null> {
     errors: errorList(item.errors),
   };
 }
+
+export const getRunStatus = unstable_cache(getRunStatusUncached, ["getRunStatus"], {
+  revalidate: RUN_STATUS_TTL_SECONDS,
+  tags: ["run-status"],
+});
+
