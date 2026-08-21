@@ -174,6 +174,13 @@ a {
     padding-block: 0.85rem;
     min-height: 44px;
   }
+
+  /* The quick-filter row's chips (FilterRow) get the identical treatment, for the identical
+     reason -- a pill sized for a mouse cursor is too small a target on a touch screen. */
+  [data-chip] {
+    padding-block: 0.85rem;
+    min-height: 44px;
+  }
 }
 
 /*

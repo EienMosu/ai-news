@@ -5,6 +5,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { dayStatusLine, FeedView } from "../../components/FeedView.js";
+import { resolveFilter } from "../../src/lib/feed/filter.js";
 import type { FeedResult } from "../../src/lib/feed/read.js";
 import { toFeedArticle } from "../../src/lib/feed/shape.js";
 
@@ -96,6 +97,101 @@ describe("FeedView", () => {
     const result = feedResult({ articles, llmRankedInDay: null });
     const { container } = render(<FeedView section="ai" result={result} now={NOW} />);
     expect(container.querySelector('[data-testid="day-status"]')).toBeNull();
+  });
+});
+
+describe("FeedView -- quick filters", () => {
+  /** `n` articles, unfiltered order, where every index in `matchAt` gets a title the
+   *  "anthropic" filter matches (so 1-based rank `i + 1` is the fact under test) and every
+   *  other index gets a title that matches nothing in FILTERS.ai. Each article carries its own
+   *  64-char hex `pk` (`ART#` + the index left-padded with zeros) so no two share a `urlHash` --
+   *  a shared default `pk` across every entry would make `entries.map(...key=...)` collide. */
+  const buildArticles = (n: number, matchAt: ReadonlySet<number>) =>
+    Array.from({ length: n }, (_, i) =>
+      toFeedArticle(
+        rawArticle({
+          pk: `ART#${String(i).padStart(64, "0")}`,
+          title: matchAt.has(i) ? `Anthropic story ${i + 1}` : `Generic story ${i + 1}`,
+        }),
+      ),
+    );
+
+  it("renders the FILTER stamp line, with this section's own shown/total, in place of the day-status line", () => {
+    const matchAt = new Set(Array.from({ length: 12 }, (_, i) => i));
+    const articles = buildArticles(93, matchAt);
+    const def = resolveFilter("ai", "anthropic");
+    const { container } = render(
+      <FeedView section="ai" result={feedResult({ articles })} now={NOW} filterDef={def} />,
+    );
+    expect(container.querySelector('[data-testid="day-status"]')).toBeNull();
+    expect(screen.getByTestId("filter-status").textContent).toContain(
+      'Filtered by "Anthropic": 12 of 93 stories in view.',
+    );
+  });
+
+  it("keeps only the matching entries and their original day ranks (1, 4, 7 of 9), not renumbered", () => {
+    const matchAt = new Set([0, 3, 6]);
+    const articles = buildArticles(9, matchAt);
+    const def = resolveFilter("ai", "anthropic");
+    const { container } = render(
+      <FeedView section="ai" result={feedResult({ articles })} now={NOW} filterDef={def} />,
+    );
+    const rankTexts = Array.from(
+      container.querySelectorAll('[aria-hidden="true"][data-numeric]'),
+    ).map((el) => el.textContent);
+    expect(rankTexts).toEqual(["01", "04", "07"]);
+  });
+
+  it("renders 'No matches this day.' for a day with articles but zero matches, and still shows the FILTER stamp", () => {
+    const articles = buildArticles(5, new Set());
+    const def = resolveFilter("ai", "anthropic");
+    render(
+      <FeedView section="ai" result={feedResult({ articles })} now={NOW} filterDef={def} />,
+    );
+    expect(screen.getByText("No matches this day.")).toBeTruthy();
+    expect(screen.getByTestId("filter-status").textContent).toContain(
+      '0 of 5 stories in view',
+    );
+  });
+
+  it("keeps the day header link and count frame for a zero-match day (the sheet, not a bare message)", () => {
+    const articles = buildArticles(5, new Set());
+    const def = resolveFilter("ai", "anthropic");
+    render(
+      <FeedView section="ai" result={feedResult({ articles, day: "2026-08-18" })} now={NOW} filterDef={def} />,
+    );
+    expect(screen.getByRole("link", { name: "2026-08-18" }).getAttribute("href")).toBe(
+      "/day/2026-08-18",
+    );
+  });
+
+  it("does nothing extra when filterDef is not given -- day-status stays, no filter-status appears", () => {
+    const articles = buildArticles(3, new Set([0]));
+    const { container } = render(
+      <FeedView section="ai" result={feedResult({ articles })} now={NOW} />,
+    );
+    expect(container.querySelector('[data-testid="filter-status"]')).toBeNull();
+    expect(container.querySelector('[data-testid="day-status"]')).not.toBeNull();
+  });
+
+  it("keeps the existing empty-section message, not a filter message, when this section had zero articles that day", () => {
+    const def = resolveFilter("ai", "anthropic");
+    render(
+      <FeedView section="design" result={feedResult({ articles: [] })} now={NOW} filterDef={def} />,
+    );
+    expect(screen.getByText("No design stories for 2026-08-18.")).toBeTruthy();
+    expect(screen.queryByTestId("filter-status")).toBeNull();
+  });
+
+  it("labels the FILTER stamp with the free-text filter's own literal text, escaped -- markup-inert", () => {
+    const payload = "<script>alert(1)</script>";
+    const articles = buildArticles(2, new Set());
+    const def = resolveFilter("ai", payload);
+    const { container } = render(
+      <FeedView section="ai" result={feedResult({ articles })} now={NOW} filterDef={def} />,
+    );
+    expect(container.innerHTML).toContain("&lt;script&gt;");
+    expect(container.innerHTML).not.toContain("<script>alert(1)</script>");
   });
 });
 

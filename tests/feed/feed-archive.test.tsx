@@ -6,6 +6,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { FeedArchive } from "../../components/FeedArchive.js";
 import { MAX_ARCHIVE_DAYS } from "../../src/lib/feed/days.js";
+import { resolveFilter } from "../../src/lib/feed/filter.js";
 import type { FeedResult } from "../../src/lib/feed/read.js";
 import { toFeedArticle } from "../../src/lib/feed/shape.js";
 
@@ -113,6 +114,47 @@ describe("FeedArchive", () => {
     const results = [dayResult({ day: "2026-08-18" }), dayResult({ day: "2026-08-17" })];
     render(<FeedArchive section="ai" results={results} failedDays={0} now={NOW} days={7} basePath="/" />);
     expect(screen.queryByTestId("load-more-days")).toBeNull();
+  });
+
+  describe("filterDef -- C3 quick filters", () => {
+    // FeedArchive is not the component that renders chips or the FILTER stamp (FilterRow and
+    // FeedView do), but it is the only thing standing between the page's one resolved filter
+    // and the per-day FeedView calls it fans out to -- every day in the archive must see the
+    // same filter, not just the first one.
+    it("passes filterDef through to every day's FeedView, not just the first", () => {
+      const articles = [toFeedArticle(rawArticle({ title: "Anthropic ships a model" }))];
+      const def = resolveFilter("ai", "anthropic");
+      render(
+        <FeedArchive
+          section="ai"
+          results={[
+            dayResult({ day: "2026-08-18", articles }),
+            dayResult({ day: "2026-08-17", articles }),
+          ]}
+          failedDays={0}
+          now={NOW}
+          days={7}
+          basePath="/"
+          filterDef={def}
+        />,
+      );
+      expect(screen.getAllByTestId("filter-status")).toHaveLength(2);
+    });
+
+    it("renders no filter-status line at all when filterDef is not given", () => {
+      const articles = [toFeedArticle(rawArticle())];
+      render(
+        <FeedArchive
+          section="ai"
+          results={[dayResult({ day: "2026-08-18", articles })]}
+          failedDays={0}
+          now={NOW}
+          days={7}
+          basePath="/"
+        />,
+      );
+      expect(screen.queryByTestId("filter-status")).toBeNull();
+    });
   });
 
   describe("failedDays -- final review, M2", () => {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS } from "../src/lib/feed/days.js";
+import type { FilterDef } from "../src/lib/feed/filter.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
 import { FeedView } from "./FeedView.js";
@@ -25,6 +26,11 @@ export interface FeedArchiveProps {
    *  caller already knows which vertical's route this is, and reading it via a hook would force
    *  a client component onto something with no other reason to be one. */
   basePath: string;
+  /** The page's one resolved quick filter (spec 6.3), or `null`/omitted for the unfiltered
+   *  archive. Passed straight through to every day's `FeedView` unchanged -- the filter applies
+   *  identically to every rendered day, so there is exactly one def for the whole archive, not
+   *  one per day. */
+  filterDef?: FilterDef | null;
 }
 
 /** The exact shape `FeedView` already renders as "no ranked day has ever completed" (Task 5).
@@ -56,9 +62,17 @@ const NO_DAYS_RESULT: FeedResult = {
  * which is not the same fact as "no day has ever ranked" and must not be worded as though it
  * were.
  */
-export function FeedArchive({ section, results, failedDays, now, days, basePath }: FeedArchiveProps) {
+export function FeedArchive({
+  section,
+  results,
+  failedDays,
+  now,
+  days,
+  basePath,
+  filterDef,
+}: FeedArchiveProps) {
   if (results.length === 0 && failedDays === 0) {
-    return <FeedView section={section} result={NO_DAYS_RESULT} now={now} />;
+    return <FeedView section={section} result={NO_DAYS_RESULT} now={now} filterDef={filterDef} />;
   }
 
   // More days can only exist if `listDays` returned as many as were asked for -- fewer means
@@ -80,7 +94,13 @@ export function FeedArchive({ section, results, failedDays, now, days, basePath 
         </p>
       ) : null}
       {results.map((result) => (
-        <FeedView key={result.day} section={section} result={result} now={now} />
+        <FeedView
+          key={result.day}
+          section={section}
+          result={result}
+          now={now}
+          filterDef={filterDef}
+        />
       ))}
       {moreMayExist ? (
         <Link

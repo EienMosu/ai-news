@@ -1,6 +1,8 @@
 import { FeedArchive } from "../../../components/FeedArchive.js";
+import { FilterRow } from "../../../components/FilterRow.js";
 import { SectionNav } from "../../../components/SectionNav.js";
 import { parseDaysParam } from "../../../src/lib/feed/days.js";
+import { resolveFilter, sanitizeFilterParam } from "../../../src/lib/feed/filter.js";
 import { getRecentDays } from "../../../src/lib/feed/read.js";
 
 // See app/page.tsx for why this is required: without it, `pnpm build` prerenders this route
@@ -9,7 +11,13 @@ import { getRecentDays } from "../../../src/lib/feed/read.js";
 export const dynamic = "force-dynamic";
 
 interface DesignPageProps {
-  searchParams: Promise<{ days?: string | string[] }>;
+  searchParams: Promise<{ days?: string | string[]; f?: string | string[]; others?: string | string[] }>;
+}
+
+/** See app/page.tsx's identical helper -- only the first value of a repeated search param is
+ *  ever a deliberate value from a link or form this app renders. */
+function firstOf(raw: string | string[] | undefined): string | undefined {
+  return Array.isArray(raw) ? raw[0] : raw;
 }
 
 /**
@@ -19,8 +27,11 @@ interface DesignPageProps {
  * share one query shape instead of a filter chip over a combined feed.
  */
 export default async function DesignPage({ searchParams }: DesignPageProps) {
-  const { days: rawDays } = await searchParams;
+  const { days: rawDays, f: rawF, others: rawOthers } = await searchParams;
   const days = parseDaysParam(rawDays);
+  const activeF = sanitizeFilterParam(firstOf(rawF));
+  const filterDef = activeF !== null ? resolveFilter("design", activeF) : null;
+  const othersOpen = firstOf(rawOthers) === "1";
   const { results, failedDays } = await getRecentDays("design", days);
   const now = new Date();
 
@@ -28,6 +39,7 @@ export default async function DesignPage({ searchParams }: DesignPageProps) {
     <main data-field="design" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
       <SectionNav current="design" days={days} />
+      <FilterRow section="design" basePath="/design" activeF={activeF} othersOpen={othersOpen} days={days} />
       <FeedArchive
         section="design"
         results={results}
@@ -35,6 +47,7 @@ export default async function DesignPage({ searchParams }: DesignPageProps) {
         now={now}
         days={days}
         basePath="/design"
+        filterDef={filterDef}
       />
       </div>
     </main>
