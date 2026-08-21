@@ -1,4 +1,5 @@
 import { FeedArchive } from "../../components/FeedArchive.js";
+import { WorldGround } from "../../components/WorldGround.js";
 import { FilterRow } from "../../components/FilterRow.js";
 import { SectionNav } from "../../components/SectionNav.js";
 import { parseDaysParam } from "../../src/lib/feed/days.js";
@@ -55,6 +56,7 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <WorldGround field="ai" />
       <div className="mx-auto max-w-3xl">
       <SectionNav current="ai" days={days} />
       <FilterRow section="ai" basePath="/" activeF={activeF} othersOpen={othersOpen} days={days} />

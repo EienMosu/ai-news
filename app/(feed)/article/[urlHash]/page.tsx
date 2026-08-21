@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WorldGround } from "../../../../components/WorldGround.js";
 import { notFound } from "next/navigation";
 import { ScoreSignals } from "../../../../components/ScoreSignals.js";
 import { SectionNav } from "../../../../components/SectionNav.js";
@@ -88,6 +89,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   return (
     <main data-field={article.section ?? "ai"} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <WorldGround field={article.section ?? "ai"} />
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} asHeading={false} />
 

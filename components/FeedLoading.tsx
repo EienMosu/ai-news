@@ -1,4 +1,5 @@
 import type { Section } from "../src/types/article.js";
+import { WorldGround } from "./WorldGround.js";
 
 export interface FeedLoadingProps {
   /** The vertical being opened, or "ink" for the surfaces that belong to no vertical (/day,
@@ -25,6 +26,7 @@ export interface FeedLoadingProps {
 export function FeedLoading({ field }: FeedLoadingProps) {
   return (
     <main {...(field === "ink" ? { "data-ground": "ink" } : { "data-field": field })} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <WorldGround field={field} />
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 sm:mb-11">
           <h1 className="font-[family-name:var(--font-display)] text-[2.5rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:text-[3rem]">
