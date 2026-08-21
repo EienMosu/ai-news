@@ -11,9 +11,9 @@ web
 One user: the owner. He reads it on a phone and on a desktop **equally** — neither is the
 primary case, and he does not adapt his habits to the device.
 
-His job: find out what actually mattered in AI and design today without reading every headline
-published. The pipeline captures roughly 250 articles a day across 21 sources; he wants the top
-of that, not the whole of it.
+His job: find out what actually mattered in AI, design and cloud today without reading every
+headline published. The pipeline captures roughly 300 articles a day across 29 sources; he wants
+the top of that, not the whole of it.
 
 ## Product Purpose
 
@@ -46,10 +46,15 @@ reshuffle under him.
 
 ## Capabilities and Constraints
 
-- **Two verticals**, `ai` and `design`, as sibling destinations (`/`, `/design`), not a filter.
-  Their scores were never comparable — ranking allocates its input cap per section — so
-  interleaving them would rank design news last by construction.
-- **Routes:** the two feeds, `/day/[date]`, `/article/[urlHash]`, `/search`, plus `/api/ingest`
+- **Three verticals**, `ai`, `design` and `cloud`, as sibling destinations (`/`, `/design`,
+  `/cloud`), not a filter. Their scores were never comparable, since ranking allocates its
+  375-article cap fairly per section (roughly 125 each, a section with fewer candidates gives up
+  its unused share to the others), so interleaving them would rank the smaller verticals last by
+  construction.
+- **Quick filters**, one per section: five named topic chips plus an "Others" free-text box,
+  resolved from the URL by keyword match with zero model cost, narrowing what already ranked
+  rather than asking the ranker anything new.
+- **Routes:** the three feeds, `/day/[date]`, `/article/[urlHash]`, `/search`, plus `/api/ingest`
   as a manual capture trigger capped at 20 per day.
 - **The story page never fetches the article body.** It shows what the system knows — summary,
   why-it-matters, the score's signals, the other articles on the same story — and sends the

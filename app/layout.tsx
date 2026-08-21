@@ -42,19 +42,26 @@ export const metadata: Metadata = {
 // default arrangement -- a white page of same-size cards sorted by recency -- because this
 // product's whole claim is that something read the day and ranked it, and a card list
 // hides the ranking inside an order nobody can see.
-// AMENDMENT (2026-08-21): The paper grid was removed for a cleaner sheet.
-// AMENDMENT (2026-08-21): The masthead dropped one step so the section switch reads as the primary axis.
-// OWN-WORLD: Two drenched colour worlds, one per vertical (ink blue #16307f for AI,
-// vermilion #7e2412 for design), each carrying a bone paper sheet (#efe9dc) with a faint
-// graph tint. Bricolage Grotesque display, Literata prose, JetBrains Mono apparatus.
-// State is a boxed mono STAMP, never a hue, because red is invisible on vermilion.
+// AMENDMENT (2026-08-21): The paper grid was removed for a cleaner sheet; the shadow does
+// the lifting instead.
+// AMENDMENT (2026-08-21): The masthead dropped one step so the section switch reads as
+// the primary axis.
+// AMENDMENT (2026-08-21): A third colour world, deep pine, shipped for the Cloud
+// vertical; the ranking cap rose to 375 so every vertical keeps its fair share.
+// OWN-WORLD: Three drenched colour worlds, one per vertical: ink blue #16307f for AI,
+// vermilion #7e2412 for design, deep pine #1a432b for cloud, each carrying a clean bone
+// paper sheet (#efe9dc). Bricolage Grotesque display, Literata prose, JetBrains Mono
+// apparatus. State is a boxed mono STAMP, never a hue, because red is invisible on
+// vermilion.
 // STORY: The reader sees the day was closed and counted, scans entries at one fixed size,
 // notices the lead entry because it left the paper, and opens two or three.
-// FIRST VIEWPORT: Field edge to edge. Masthead left, vertical switch right, run-status
-// line in mono beneath. The newest day's sheet floats below it: date large in display,
-// ranked count and COMPLETE/PARTIAL stamped in mono beside it, entries as numbered rows.
-// The lead entry alone sits on the field, inverted — rank shows as ground, not as scale.
-// FORM: The Day's Dossier, pinned by the user from Mosby's Files, Illoca and The Matter of
+// FIRST VIEWPORT: An ink status rail sits above the field, outside every colour world. On
+// the field: the brand row (mark, wordmark and tagline left, Search right), then the
+// full-width section switch, then the quick-filter row, then a clear break before the
+// first day sheet. That sheet floats below all of it: date large in display, ranked count
+// and COMPLETE/PARTIAL stamped in mono beside it, entries as numbered rows. The lead entry
+// alone sits on the field, inverted: rank shows as ground, not as scale.
+// FORM: The Day's Dossier, pinned by the user from Mosby's Files and The Matter of
 // Design, overriding roll 017543fa (which assigned candidate 7, Proceedings Index).
 // FINISH: unreviewed and undocumented is unfinished; this build ends with the finish
 // review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
