@@ -29,6 +29,7 @@ export default defineConfig({
     alias: {
       "server-only": fileURLToPath(new URL("./tests/stubs/server-only.ts", import.meta.url)),
       "next/font/google": fileURLToPath(new URL("./tests/stubs/next-font-google.ts", import.meta.url)),
+      "next/cache": fileURLToPath(new URL("./tests/stubs/next-cache.ts", import.meta.url)),
     },
   },
 });

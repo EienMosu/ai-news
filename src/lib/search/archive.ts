@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 
 /**
  * The env var the Lambdas already read for the same repo (`src/lambda/rank.ts`,
@@ -36,7 +37,7 @@ function requireBackupRepo(): string {
  * items verbatim) -- so a parsed line can go straight through `toFeedArticle`, same as a GSI
  * item can.
  */
-export async function fetchArchiveDay(day: string): Promise<Record<string, unknown>[]> {
+async function fetchArchiveDayUncached(day: string): Promise<Record<string, unknown>[]> {
   const repo = requireBackupRepo();
   const url = `https://raw.githubusercontent.com/${repo}/main/archive/${day}.ndjson`;
   const res = await fetch(url);
@@ -51,3 +52,12 @@ export async function fetchArchiveDay(day: string): Promise<Record<string, unkno
     .filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
+
+/**
+ * Cached for a day: the archive holds CLOSED days pushed once by the rank backup, so a month
+ * of history fetched twice within 24h is the same bytes. Keyed on the day argument.
+ */
+export const fetchArchiveDay = unstable_cache(fetchArchiveDayUncached, ["fetchArchiveDay"], {
+  revalidate: 86_400,
+  tags: ["archive"],
+});
