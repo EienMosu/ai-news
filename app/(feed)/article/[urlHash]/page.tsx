@@ -185,7 +185,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           {isUnranked(article) ? (
             <p data-testid="ranking-degraded" className="mt-3">
               <span className="stamp">
-                New since last ranking — these signals are not a real score yet
+                New since last ranking: these signals are not a real score yet
               </span>
             </p>
           ) : null}
