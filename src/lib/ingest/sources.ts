@@ -107,4 +107,23 @@ export const SOURCES: SourceDef[] = [
     url: "https://sidebar.io/feed.xml" },
   { id: "awwwards", name: "Awwwards", kind: "rss", category: "community", section: "design",
     url: "https://www.awwwards.com/blog/feed" },
+
+  // Cloud vertical. All eight probed live and confirmed parsing cleanly through the
+  // existing parseFeed -- nothing in the ingest layer changes for these.
+  { id: "aws-news", name: "AWS News Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://aws.amazon.com/blogs/aws/feed/" },
+  { id: "azure", name: "Microsoft Azure Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://azure.microsoft.com/en-us/blog/feed/" },
+  { id: "gcp", name: "Google Cloud Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://cloudblog.withgoogle.com/rss/" },
+  { id: "cloudflare", name: "Cloudflare Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://blog.cloudflare.com/rss/" },
+  { id: "cncf", name: "CNCF", kind: "rss", category: "community", section: "cloud",
+    url: "https://www.cncf.io/feed/" },
+  { id: "hashicorp", name: "HashiCorp Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://www.hashicorp.com/blog/feed.xml" },
+  { id: "newstack", name: "The New Stack", kind: "rss", category: "news", section: "cloud",
+    url: "https://thenewstack.io/feed/" },
+  { id: "hn-cloud", name: "Hacker News (cloud)", kind: "hn", category: "community", section: "cloud",
+    url: "https://hn.algolia.com/api/v1/search_by_date?query=cloud&tags=story&numericFilters=points%3E20&hitsPerPage=50" },
 ];
