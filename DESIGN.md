@@ -217,3 +217,22 @@ the digits cycle, the stamp names the act, and the real counts land with the rea
 - **The zero-match filter sheet duplicates `DaySection`'s frame by hand** (the paper surface, the
   shadow, the header) instead of sharing it, so nothing pins the two in sync; a future change to
   `DaySection`'s own markup will not automatically reach this second copy. Accepted.
+
+## The reading room round (2026-08-21, owner-approved, all six)
+
+- **The story page is the reading room.** The document (title, provenance, rationale, summary,
+  the way out) sits on a paper sheet at a real reading measure (65ch, Literata 1.0625rem/1.65);
+  the instruments (ranking signals, cross-references) stay on the field around it. The outbound
+  link is the page's closing action and leaves the paper, the lead-entry inversion grammar.
+- **The ink ground.** `/day` and `/search` span every vertical, so they wear
+  `[data-ground="ink"]` (ink field, paper text), like the status rail; their loading shells
+  follow. The lead inversion lands ink-on-paper there, this ground's own voice.
+- **Dates read DD.MM.YYYY** (owner request); URLs and `dateTime` keep the ISO store key.
+- **The archive drawer.** Days behind the fold render as file-drawer tab spines (real `/day`
+  links from UTC key arithmetic, zero extra reads); "Open all older days" keeps the old
+  extend behaviour.
+- **The share card.** One static `opengraph-image` (ink ground, mark, wordmark, three world
+  blocks); Bricolage extra-bold committed under OFL because satori needs raw font bytes.
+- **The fold and the skip link.** The mark's corner draws itself once on load (the page's only
+  authored entrance besides the loader); a skip link jumps keyboard readers past the control
+  rows to `#stories`.
