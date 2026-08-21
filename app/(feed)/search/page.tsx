@@ -104,7 +104,7 @@ function SearchForm(
       </label>
       <button
         type="submit"
-        className="rounded bg-[var(--color-paper)] px-4 py-1.5 font-semibold text-[var(--field)] hover:opacity-85"
+        className="rounded bg-[var(--color-paper)] px-4 py-1.5 font-semibold text-[color:var(--field)] hover:opacity-85"
       >
         Search
       </button>

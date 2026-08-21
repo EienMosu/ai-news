@@ -161,7 +161,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             target="_blank"
             rel="noopener noreferrer"
             data-testid="original-link"
-            className="mt-6 inline-block rounded bg-[var(--color-paper)] px-4 py-2 text-sm font-semibold text-[var(--field)] no-underline hover:opacity-85"
+            className="mt-6 inline-block rounded bg-[var(--color-paper)] px-4 py-2 text-sm font-semibold text-[color:var(--field)] no-underline hover:opacity-85"
           >
             Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
           </a>

@@ -135,7 +135,7 @@ export function FeedArchive({
         <Link
           href={`${basePath}?days=${nextDays}`}
           data-testid="load-more-days"
-          className="apparatus mt-2 inline-block border border-current/45 px-4 py-2.5 no-underline transition-colors duration-200 hover:bg-[var(--color-paper)] hover:text-[var(--field)]"
+          className="apparatus mt-2 inline-block border border-current/45 px-4 py-2.5 no-underline transition-colors duration-200 hover:bg-[var(--color-paper)] hover:text-[color:var(--field)]"
         >
           Load older days
         </Link>
