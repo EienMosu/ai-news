@@ -29,6 +29,14 @@ export interface FilterRowProps {
 
 const CHIP_BASE = "apparatus no-underline px-2.5 py-1.5";
 const CHIP_INACTIVE = `${CHIP_BASE} border border-current/35 opacity-70 hover:opacity-100`;
+/** `filter-active-chip` (branch review I5): `currentColor` inside an active chip is
+ *  `var(--field)`, so the global `:focus-visible` ring (`2px solid currentColor`) draws field
+ *  on field -- 1.00:1 on all three worlds, invisible. This class's own `:focus-visible` rule
+ *  (globals.css) overrides just the outline colour to `var(--color-paper)` so the ring reads
+ *  against the field ground instead. Scoped to this class alone, not a bare selector on every
+ *  inverted control in the app -- `SectionNav`'s identical, pre-existing defect on the switch's
+ *  current cell is out of scope for this round. */
+const ACTIVE_CHIP_CLASS = `${CHIP_BASE} filter-active-chip`;
 const ACTIVE_STYLE = { background: "var(--color-paper)", color: "var(--field)" } as const;
 
 /** Builds `basePath?k=v&...`, dropping any entry whose value is `undefined` -- the one place
@@ -80,7 +88,13 @@ export function FilterRow({ section, basePath, activeF, othersOpen, days }: Filt
 
       {chips.map((chip) =>
         activeChip?.id === chip.id ? (
-          <Link key={chip.id} href={clearHref} className={CHIP_BASE} style={ACTIVE_STYLE} data-chip>
+          <Link
+            key={chip.id}
+            href={clearHref}
+            className={ACTIVE_CHIP_CLASS}
+            style={ACTIVE_STYLE}
+            aria-current="true"
+          >
             {chip.label}
           </Link>
         ) : (
@@ -88,7 +102,6 @@ export function FilterRow({ section, basePath, activeF, othersOpen, days }: Filt
             key={chip.id}
             href={buildHref(basePath, { f: chip.id, days: daysParam })}
             className={CHIP_INACTIVE}
-            data-chip
           >
             {chip.label}
           </Link>
@@ -96,7 +109,7 @@ export function FilterRow({ section, basePath, activeF, othersOpen, days }: Filt
       )}
 
       {freeTextActive ? (
-        <Link href={clearHref} className={CHIP_BASE} style={ACTIVE_STYLE} data-chip>
+        <Link href={clearHref} className={ACTIVE_CHIP_CLASS} style={ACTIVE_STYLE} aria-current="true">
           {activeF}
         </Link>
       ) : null}
@@ -111,8 +124,9 @@ export function FilterRow({ section, basePath, activeF, othersOpen, days }: Filt
             name="f"
             maxLength={40}
             placeholder="filter by any word"
+            aria-label="Filter by any word"
             defaultValue={freeTextActive && activeF !== null ? activeF : undefined}
-            className="apparatus rounded-none border-0 border-b border-current/35 bg-transparent px-1 py-1.5 placeholder:opacity-70 focus:outline-none"
+            className="apparatus rounded-none border-0 border-b border-current/35 bg-transparent px-1 py-1.5 placeholder:opacity-70"
           />
           <button type="submit" className="stamp">
             Filter
@@ -122,7 +136,7 @@ export function FilterRow({ section, basePath, activeF, othersOpen, days }: Filt
         <Link
           href={buildHref(basePath, { others: "1", f: activeF ?? undefined, days: daysParam })}
           className={CHIP_INACTIVE}
-          data-chip
+          aria-expanded={othersOpen}
         >
           Others
         </Link>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS } from "../src/lib/feed/days.js";
-import type { FilterDef } from "../src/lib/feed/filter.js";
+import { matchesFilter, type FilterDef } from "../src/lib/feed/filter.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
 import { FeedView } from "./FeedView.js";
@@ -84,6 +84,23 @@ export function FeedArchive({
   const moreMayExist = results.length + failedDays === days && days < MAX_ARCHIVE_DAYS;
   const nextDays = Math.min(days + ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS);
 
+  // Branch review M6: the FILTER stamp is a SECTION-wide summary -- task-C3-brief.md asked for
+  // shown/total "summed over the rendered days of this section", which is one number, not one
+  // per day. Summed here, once, across every day `results` actually holds, and rendered once
+  // above the whole list; `FeedView` no longer renders any filter-status line of its own (see
+  // its own doc comment). `matchesFilter` runs again here rather than reading a count back off
+  // each `FeedView` render -- a pure function over data already in hand, cheaper than plumbing a
+  // per-day count back up through a prop.
+  const filterTotals = filterDef
+    ? results.reduce(
+        (totals, result) => ({
+          shown: totals.shown + result.articles.filter((a) => matchesFilter(a, filterDef)).length,
+          total: totals.total + result.articles.length,
+        }),
+        { shown: 0, total: 0 },
+      )
+    : null;
+
   return (
     <>
       {failedDays > 0 ? (
@@ -91,6 +108,18 @@ export function FeedArchive({
           <span className="stamp">Incomplete</span>
           {failedDays} {failedDays === 1 ? "day" : "days"} could not be loaded just now; the
           sections below may be missing {failedDays === 1 ? "that day" : "those days"}.
+        </p>
+      ) : null}
+      {filterDef && filterTotals ? (
+        <p
+          data-testid="filter-status"
+          className="apparatus mb-6 flex flex-wrap items-center gap-x-2 gap-y-1.5 opacity-70"
+          data-numeric
+        >
+          <span className="stamp shrink-0">Filter</span>
+          <span>
+            {`Filtered by "${filterDef.label}": ${filterTotals.shown} of ${filterTotals.total} stories in view.`}
+          </span>
         </p>
       ) : null}
       {results.map((result) => (

@@ -116,7 +116,14 @@ describe("FeedView -- quick filters", () => {
       ),
     );
 
-  it("renders the FILTER stamp line, with this section's own shown/total, in place of the day-status line", () => {
+  // Branch review M6: the FILTER stamp line is a SECTION-wide summary (its own numbers are
+  // already "summed over the rendered days of this section", task-C3-brief.md), so it renders
+  // once, above the whole day list -- in `FeedArchive`, not once per day here. `FeedView` still
+  // suppresses its own per-day day-status line under a filter (the section-wide line above the
+  // list already covers "what is filtered"), but never renders a filter-status line itself --
+  // see `tests/feed/feed-archive.test.tsx` for the FILTER stamp's own render-once and
+  // summed-shown/total tests.
+  it("hides the day-status line under an active filter, without rendering its own filter-status line", () => {
     const matchAt = new Set(Array.from({ length: 12 }, (_, i) => i));
     const articles = buildArticles(93, matchAt);
     const def = resolveFilter("ai", "anthropic");
@@ -124,9 +131,7 @@ describe("FeedView -- quick filters", () => {
       <FeedView section="ai" result={feedResult({ articles })} now={NOW} filterDef={def} />,
     );
     expect(container.querySelector('[data-testid="day-status"]')).toBeNull();
-    expect(screen.getByTestId("filter-status").textContent).toContain(
-      'Filtered by "Anthropic": 12 of 93 stories in view.',
-    );
+    expect(container.querySelector('[data-testid="filter-status"]')).toBeNull();
   });
 
   it("keeps only the matching entries and their original day ranks (1, 4, 7 of 9), not renumbered", () => {
@@ -142,16 +147,13 @@ describe("FeedView -- quick filters", () => {
     expect(rankTexts).toEqual(["01", "04", "07"]);
   });
 
-  it("renders 'No matches this day.' for a day with articles but zero matches, and still shows the FILTER stamp", () => {
+  it("renders 'No matches this day.' for a day with articles but zero matches", () => {
     const articles = buildArticles(5, new Set());
     const def = resolveFilter("ai", "anthropic");
     render(
       <FeedView section="ai" result={feedResult({ articles })} now={NOW} filterDef={def} />,
     );
     expect(screen.getByText("No matches this day.")).toBeTruthy();
-    expect(screen.getByTestId("filter-status").textContent).toContain(
-      '0 of 5 stories in view',
-    );
   });
 
   it("keeps the day header link and count frame for a zero-match day (the sheet, not a bare message)", () => {
@@ -181,17 +183,6 @@ describe("FeedView -- quick filters", () => {
     );
     expect(screen.getByText("No design stories for 2026-08-18.")).toBeTruthy();
     expect(screen.queryByTestId("filter-status")).toBeNull();
-  });
-
-  it("labels the FILTER stamp with the free-text filter's own literal text, escaped -- markup-inert", () => {
-    const payload = "<script>alert(1)</script>";
-    const articles = buildArticles(2, new Set());
-    const def = resolveFilter("ai", payload);
-    const { container } = render(
-      <FeedView section="ai" result={feedResult({ articles })} now={NOW} filterDef={def} />,
-    );
-    expect(container.innerHTML).toContain("&lt;script&gt;");
-    expect(container.innerHTML).not.toContain("<script>alert(1)</script>");
   });
 });
 

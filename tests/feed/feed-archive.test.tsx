@@ -117,19 +117,23 @@ describe("FeedArchive", () => {
   });
 
   describe("filterDef -- C3 quick filters", () => {
-    // FeedArchive is not the component that renders chips or the FILTER stamp (FilterRow and
-    // FeedView do), but it is the only thing standing between the page's one resolved filter
-    // and the per-day FeedView calls it fans out to -- every day in the archive must see the
-    // same filter, not just the first one.
-    it("passes filterDef through to every day's FeedView, not just the first", () => {
-      const articles = [toFeedArticle(rawArticle({ title: "Anthropic ships a model" }))];
+    // Branch review M6: the FILTER stamp is a SECTION-wide summary, not a per-day one -- it
+    // must render exactly ONCE, above the whole day list, with shown/total summed across every
+    // rendered day, not once per day repeating the same section-wide number. The prior version
+    // of this test asserted `toHaveLength(2)` for two days, which pinned the exact defect M6
+    // named; this replaces it.
+    it("renders exactly one FILTER stamp above the day list, summing shown/total across every rendered day", () => {
+      const matchingArticle = (pk: string) =>
+        toFeedArticle(rawArticle({ pk: `ART#${pk.padStart(64, "0")}`, title: "Anthropic ships a model" }));
+      const nonMatchingArticle = (pk: string) =>
+        toFeedArticle(rawArticle({ pk: `ART#${pk.padStart(64, "0")}`, title: "Unrelated story" }));
       const def = resolveFilter("ai", "anthropic");
       render(
         <FeedArchive
           section="ai"
           results={[
-            dayResult({ day: "2026-08-18", articles }),
-            dayResult({ day: "2026-08-17", articles }),
+            dayResult({ day: "2026-08-18", articles: [matchingArticle("1"), nonMatchingArticle("2")] }),
+            dayResult({ day: "2026-08-17", articles: [matchingArticle("3"), matchingArticle("4"), nonMatchingArticle("5")] }),
           ]}
           failedDays={0}
           now={NOW}
@@ -138,7 +142,34 @@ describe("FeedArchive", () => {
           filterDef={def}
         />,
       );
-      expect(screen.getAllByTestId("filter-status")).toHaveLength(2);
+      // 2 days, 5 articles total, 3 matching (1 + 2) -- summed across both days, not per day.
+      expect(screen.getAllByTestId("filter-status")).toHaveLength(1);
+      expect(screen.getByTestId("filter-status").textContent).toContain(
+        'Filtered by "Anthropic": 3 of 5 stories in view.',
+      );
+    });
+
+    it("positions the FILTER stamp above the first day sheet, not after it", () => {
+      const def = resolveFilter("ai", "anthropic");
+      const articles = [toFeedArticle(rawArticle({ title: "Anthropic ships a model" }))];
+      const { container } = render(
+        <FeedArchive
+          section="ai"
+          results={[dayResult({ day: "2026-08-18", articles })]}
+          failedDays={0}
+          now={NOW}
+          days={7}
+          basePath="/"
+          filterDef={def}
+        />,
+      );
+      const status = container.querySelector('[data-testid="filter-status"]');
+      const firstHeading = container.querySelector("h2");
+      expect(status).not.toBeNull();
+      expect(firstHeading).not.toBeNull();
+      expect(
+        status!.compareDocumentPosition(firstHeading!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
     it("renders no filter-status line at all when filterDef is not given", () => {
@@ -154,6 +185,25 @@ describe("FeedArchive", () => {
         />,
       );
       expect(screen.queryByTestId("filter-status")).toBeNull();
+    });
+
+    it("labels the FILTER stamp with the free-text filter's own literal text, escaped -- markup-inert", () => {
+      const payload = "<script>alert(1)</script>";
+      const articles = [toFeedArticle(rawArticle())];
+      const def = resolveFilter("ai", payload);
+      const { container } = render(
+        <FeedArchive
+          section="ai"
+          results={[dayResult({ day: "2026-08-18", articles })]}
+          failedDays={0}
+          now={NOW}
+          days={7}
+          basePath="/"
+          filterDef={def}
+        />,
+      );
+      expect(container.innerHTML).toContain("&lt;script&gt;");
+      expect(container.innerHTML).not.toContain("<script>alert(1)</script>");
     });
   });
 

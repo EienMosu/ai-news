@@ -133,4 +133,30 @@ describe("DaySection", () => {
     expect(leadLinks.length).toBe(1);
     expect(leadLinks[0]?.textContent).toContain("Day's actual rank one");
   });
+
+  it("inverts the first entry given even when the day's #1 story was filtered out entirely (branch review I2)", () => {
+    // Every fixture above keeps rank 1 among the survivors, so `lead={i === 0}` and the wrong
+    // `lead={entry.rank === 1}` produce identical output for all of them -- a day whose #1 story
+    // was itself filtered out is the only shape that tells the two apart. Ranks 4, 7, 9 out of a
+    // 10-story day: the day's real lead (rank 1) is absent, so the first SURVIVING entry (rank
+    // 4) must be the one that inverts -- `entry.rank === 1` would invert nothing at all here.
+    const articleFour = toFeedArticle(raw({ pk: `ART#${"d".repeat(64)}`, title: "Day's actual rank four" }));
+    const articleSeven = toFeedArticle(raw({ pk: `ART#${"e".repeat(64)}`, title: "Day's actual rank seven" }));
+    const articleNine = toFeedArticle(raw({ pk: `ART#${"f".repeat(64)}`, title: "Day's actual rank nine" }));
+    const entries: RankedEntry[] = [
+      { article: articleFour, rank: 4 },
+      { article: articleSeven, rank: 7 },
+      { article: articleNine, rank: 9 },
+    ];
+
+    const { container } = render(
+      <DaySection day="2026-08-18" entries={entries} totalInDay={10} now={NOW} />,
+    );
+
+    expect(rankTexts(container)).toEqual(["04", "07", "09"]);
+
+    const leadLinks = container.querySelectorAll("a[data-lead]");
+    expect(leadLinks.length).toBe(1);
+    expect(leadLinks[0]?.textContent).toContain("Day's actual rank four");
+  });
 });

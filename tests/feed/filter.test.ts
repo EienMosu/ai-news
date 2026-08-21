@@ -220,6 +220,14 @@ describe("resolveFilter", () => {
       synonyms: ["figma"],
     });
   });
+
+  // Branch review M3: defensive, since every real caller sanitises first -- but an empty or
+  // whitespace-only `f`, however it arrives, must match nothing (`synonyms: []`), never a def
+  // whose `.includes("")` synonym matches every article.
+  it("returns a matches-nothing def, not a matches-everything one, for an empty or whitespace-only f", () => {
+    expect(matchesFilter(article({ title: "anything at all" }), resolveFilter("ai", ""))).toBe(false);
+    expect(matchesFilter(article({ title: "anything at all" }), resolveFilter("ai", "   "))).toBe(false);
+  });
 });
 
 describe("sanitizeFilterParam", () => {
@@ -257,5 +265,29 @@ describe("sanitizeFilterParam", () => {
 
   it("leaves a short, clean value unchanged", () => {
     expect(sanitizeFilterParam("nvidia")).toBe("nvidia");
+  });
+
+  // Branch review M1: the old regex was ASCII-only (`/[\x00-\x1f\x7f]/`) and missed every
+  // Unicode control/format character -- U+202E (RTL override) is the sharpest example, since it
+  // visually reverses everything after it wherever the sanitised string is later rendered.
+  it("strips a right-to-left override character (U+202E), not just ASCII control chars", () => {
+    expect(sanitizeFilterParam("meta\u202Edata")).toBe("metadata");
+  });
+
+  it("returns null for a value that is nothing but a zero-width space (U+200B)", () => {
+    // The exact defect M1 named: an invisible-only `f` used to sanitise to a non-null, invisible
+    // active chip that matched nothing on every day, with no way for the reader to tell why.
+    expect(sanitizeFilterParam("\u200B")).toBeNull();
+  });
+
+  // Branch review M2: `.slice(0, 40)` counts UTF-16 code units, so 39 ordinary characters plus
+  // one emoji (a surrogate pair -- two units) used to keep the emoji's high surrogate and drop
+  // its low surrogate, leaving a lone surrogate that serialises as U+FFFD. Code-point-aware
+  // slicing (`[...s]`) either keeps the whole emoji or drops it whole, never splits it.
+  it("keeps a trailing emoji intact at the 40 code point boundary, never a lone surrogate", () => {
+    const raw = "a".repeat(39) + "\u{1F389}";
+    const result = sanitizeFilterParam(raw);
+    expect(result).toBe(raw);
+    expect([...(result ?? "")]).toHaveLength(40);
   });
 });

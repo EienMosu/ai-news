@@ -96,28 +96,15 @@ export function FeedView({ section, result, now, filterDef }: FeedViewProps) {
     ? allEntries.filter((entry) => matchesFilter(entry.article, filterDef))
     : allEntries;
 
-  // A filter narrowing an empty section (this day had nothing here to begin with) has nothing
-  // to report -- the empty-section message below already says so, and "Filtered by X: 0 of 0"
-  // beside it would restate the same fact in a more confusing way. The unfiltered day-status
-  // line keeps its own, older rule unchanged: it renders whenever `llmRankedInDay` is known,
-  // regardless of whether this section had any articles that day (a day-wide fact, not a
-  // per-section one).
-  const showFilterStatus = filterDef != null && articles.length > 0;
-
+  // Branch review M6: the FILTER stamp line is a section-wide summary, not a per-day one (its
+  // shown/total are already summed across every rendered day, task-C3-brief.md), so it renders
+  // exactly once per section view, above the whole day list -- in `FeedArchive`, never here.
+  // `FeedView` still suppresses its own per-day day-status line under an active filter (the
+  // section-wide FILTER line above the list already covers what is filtered), it just no
+  // longer renders a replacement line of its own.
   return (
     <>
-      {showFilterStatus ? (
-        <p
-          data-testid="filter-status"
-          className="apparatus mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 opacity-70"
-          data-numeric
-        >
-          <span className="stamp shrink-0">Filter</span>
-          <span>
-            {`Filtered by "${filterDef.label}": ${matchedEntries.length} of ${articles.length} stories in view.`}
-          </span>
-        </p>
-      ) : llmRankedInDay !== null ? (
+      {filterDef == null && llmRankedInDay !== null ? (
         <p
           data-testid="day-status"
           className="apparatus mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 opacity-70"
