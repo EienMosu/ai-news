@@ -30,6 +30,59 @@ const nextConfig: NextConfig = {
   experimental: {
     extensionAlias: { ".js": [".ts", ".tsx", ".js"] },
   },
+
+  /*
+    Security headers. The live responses carried only HSTS (Vercel's own), so the audit on
+    2026-08-21 found CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy and
+    Permissions-Policy all absent.
+
+    The CSP is written from what this app actually does, not from a template:
+    - `default-src 'none'` first, so anything not named below is refused outright.
+    - `img-src https: data:` is the one wide directive and it has to be: article thumbnails come
+      from whatever host published the story, an open set by nature. `http:` is deliberately NOT
+      allowed, so a feed offering an insecure image gets no mixed-content request.
+    - `style-src 'unsafe-inline'`: next/font injects an inline style block. The app's own inline
+      style tag is gone (the overscroll ground moved to a `:has()` rule in globals.css), so this
+      is Next's need, not ours.
+    - `script-src 'self' 'unsafe-inline'`: this app ships zero client components, but Next still
+      emits its inline bootstrap. Nothing loads script from another origin.
+    - `frame-ancestors 'none'` plus `X-Frame-Options: DENY` say the same thing twice on purpose:
+      the header covers browsers that ignore the directive.
+    - `form-action 'self'`: the Others filter is a GET form; it must never be retargetable.
+    - `object-src 'none'`, `base-uri 'none'`: no plugins, and no injected `<base>` able to
+      re-point every relative URL on the page.
+  */
+  async headers() {
+    const csp = [
+      "default-src 'none'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' https: data:",
+      "font-src 'self'",
+      "connect-src 'self'",
+      "form-action 'self'",
+      "base-uri 'none'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "upgrade-insecure-requests",
+    ].join("; ");
+
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: csp },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

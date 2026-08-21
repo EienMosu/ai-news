@@ -76,8 +76,31 @@
 }
 
 html {
-  background: var(--field);
+  background: var(--color-field-ai);
   color-scheme: dark;
+}
+
+/*
+  The overscroll ground. The browser paints pull-to-refresh and rubber-band areas from the ROOT
+  element, but the world lives on `<main data-field>` further down, so the root used to resolve
+  `--field` to its own default and every vertical flashed AI blue at the edges.
+
+  `:has()` lets the root read the world from the page below it, scoped to `main`
+  because the section switch puts `data-field` on every vertical's LINK too, with no inline style tag and no
+  per-page component to keep in sync (the earlier fix used both). A browser without `:has()`
+  simply keeps the default above, which is the pre-fix behaviour, not a broken one.
+*/
+html:has(main[data-field="design"]),
+html:has(main[data-field="design"]) body {
+  background: var(--color-field-design);
+}
+html:has(main[data-field="cloud"]),
+html:has(main[data-field="cloud"]) body {
+  background: var(--color-field-cloud);
+}
+html:has(main[data-ground="ink"]),
+html:has(main[data-ground="ink"]) body {
+  background: var(--color-ink);
 }
 
 body {

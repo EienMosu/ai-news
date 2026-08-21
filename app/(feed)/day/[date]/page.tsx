@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { WorldGround } from "../../../../components/WorldGround.js";
 import { DaySection } from "../../../../components/DaySection.js";
 import { dayStatusLine } from "../../../../components/FeedView.js";
 import { SectionNav } from "../../../../components/SectionNav.js";
@@ -66,7 +65,6 @@ export default async function DayPage({ params }: DayPageProps) {
 
   return (
     <main data-ground="ink" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
-      <WorldGround field="ink" />
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} />
 
