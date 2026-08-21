@@ -8,10 +8,10 @@ export interface FeedViewProps {
   now: Date;
 }
 
-const SECTION_LABELS: Record<Section, string> = { ai: "AI", design: "design" };
+const SECTION_LABELS: Record<Section, string> = { ai: "AI", design: "design", cloud: "cloud" };
 
 /**
- * The day-status line. `llmRankedInDay`/`truncatedInDay` are totals across BOTH verticals (see
+ * The day-status line. `llmRankedInDay`/`truncatedInDay` are totals across every vertical (see
  * the doc comment on `FeedResult` in src/lib/feed/read.ts), so this sentence names the day
  * explicitly rather than reading like a count of the section list rendered beneath it -- "264
  * ranked" beside 40 AI cards would otherwise look like it described those 40.
@@ -41,7 +41,7 @@ export function dayStatusLine(
   day: string,
 ): string {
   const rankedPart =
-    `${llmRankedInDay} ${llmRankedInDay === 1 ? "story" : "stories"} ranked across both sections on ${day}`;
+    `${llmRankedInDay} ${llmRankedInDay === 1 ? "story" : "stories"} ranked across all sections on ${day}`;
   const truncatedPart =
     truncatedInDay !== null && truncatedInDay > 0
       ? `, ${truncatedInDay} truncated by the day's ranking cap`

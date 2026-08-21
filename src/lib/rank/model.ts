@@ -27,23 +27,47 @@ export const RANK_MODEL = "global.anthropic.claude-sonnet-4-6";
  * allocator in allocate.ts still splits that 250 fairly across sections exactly as it split
  * 200.
  *
- * Cost, finished all the way to the number that matters (the monthly bill, not one run):
- * measured baseline was 12,862 input + 14,206 output tokens = $0.25 for a 200-article FINAL
- * run. Raising the cap to 250 sends ~25% more input tokens per run, so one FINAL (06:00) run
- * now costs roughly $0.31 — that alone is ~$9.30/month at 30 runs. But this file's cap isn't
- * the only thing that changed the bill: there are now TWO rank runs a day (see `resolveDay` in
- * src/lambda/rank.ts), and the second, INTERIM (18:00), run is not free just because it's
- * smaller. It sees a partial day — most, not all, of a day's articles have usually posted by
- * 18:00 Europe/Istanbul, so it stays comfortably under the 250 cap and its input cost scales
- * down with article count — call it roughly $0.15–0.20/run, or ~$4.50–6.00/month at 30 runs.
- * Combined, that lands the real monthly figure near **$14–15/month**, against the $25/month
- * budget alarm and the owner's stated $20–30 ceiling: comfortable headroom, not a rounding
- * error away from tripping the alarm. This is the number to revisit before adding a third run.
+ * Cost, priced from the real prompt shape rather than input tokens alone (branch review, I2:
+ * an earlier version of this comment priced only the cheap side and its conclusion did not
+ * follow from its own arithmetic). The per-candidate line (prompt.ts, SUMMARY_CHARS_FOR_RANKING
+ * = 300) measures out to ~97 input tokens/candidate at ~3.9 chars/token. At $3/M input and
+ * $15/M output (Sonnet 4.6; adaptive thinking is billed as output), the marginal cost per
+ * candidate is 97 tok x $3/M + ~50 tok x $15/M = ~$0.00104, of which OUTPUT is ~72% -- the
+ * side this comment used to attribute the cap raise to is the smaller ~28%. There are two rank
+ * runs a day (`resolveDay` in src/lambda/rank.ts): FINAL (06:00) sees the full day, INTERIM
+ * (18:00) a partial one, so it costs less per run without a separate estimate here.
+ *
+ * Raised again, 250 to 375, when the Cloud vertical shipped (spec theslowwire-design.md §5.1,
+ * "Ranking budget"). allocateRankingCap already splits the cap fairly by section and needed no
+ * change; but a third vertical against an unchanged cap would have quietly cut every section's
+ * own fair share too -- ai and design each held 125 of the old 250, back when there were only
+ * two sections; 375 across three sections keeps that same 125 per section rather than shrinking
+ * it to make room for cloud.
+ *
+ * With cloud's per-source `maxItems` caps in place (src/lib/ingest/sources.ts), realistic total
+ * supply lands near 300-330 candidates/day rather than saturating 375 -- roughly +$5/month over
+ * the previous baseline, landing near $20/month total. The cap-saturated case (every section at
+ * its ceiling, every run) costs more, but is itself bounded by those same per-source `maxItems`
+ * caps rather than open-ended, so 375 is a ceiling on spend, not only on candidate count.
+ * Revisit this estimate once the first live 375-candidate day's real
+ * inputTokens/outputTokens/thinkingTokens land -- src/lambda/rank.ts already logs all three.
  */
-export const RANK_INPUT_CAP = 250;
+export const RANK_INPUT_CAP = 375;
 
-/** Caps thinking PLUS response text, not response text alone. Spec §6. */
-export const MAX_TOKENS = 32_000;
+/**
+ * Caps thinking PLUS response text, not response text alone. Spec §6.
+ *
+ * Raised 32,000 to 48,000 alongside RANK_INPUT_CAP's 250 to 375 (branch review, I1): the
+ * response JSON grows in near-lockstep with candidate count -- one schema item per candidate --
+ * so a 50% bigger input cap sends roughly 50% more response tokens into the same ceiling that
+ * adaptive thinking (bedrock.ts) also draws from. Left at 32,000, this was not a graceful
+ * degradation: bedrock.ts throws TruncationError on stop_reason === "max_tokens", no byHash
+ * entries get written for that run, and the whole day falls back to its degraded capture score
+ * -- silent to a reader, since the day just looks unranked. 48,000 restores the same thinking
+ * headroom this cap left at 32,000 against the smaller 250-candidate input, instead of quietly
+ * shrinking it under the bigger one.
+ */
+export const MAX_TOKENS = 48_000;
 
 /**
  * ~600s. Task 8 sets the rank Lambda's timeout to 900s so this fires with 300s to spare: a

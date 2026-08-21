@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { RANKING_SCHEMA, buildRankPrompt, translateIds } from "../../src/lib/rank/prompt.js";
+import { RANKING_SCHEMA, SECTION_GUIDE, buildRankPrompt, translateIds } from "../../src/lib/rank/prompt.js";
+import { SECTIONS } from "../../src/types/article.js";
 
 const candidate = (n: number) => ({
   urlHash: String(n).padStart(64, "0"),
@@ -88,6 +89,27 @@ describe("buildRankPrompt", () => {
     const description = RANKING_SCHEMA.properties.items.items.properties.importance.description;
     expect(description).toContain("within the article's own section");
     expect(description).not.toMatch(/^0-100\. 90\+ is a major model or capability release/);
+  });
+
+  it("carries a field guide naming every SECTIONS entry, so a fourth vertical without an entry cannot ship silently", () => {
+    // SECTION_GUIDE is typed Record<Section, string> (src/lib/rank/prompt.ts), so a SECTIONS
+    // entry with no matching key already fails to typecheck; this is the runtime half of that
+    // guarantee. The guide is unconditional -- present regardless of which candidates are
+    // passed -- precisely so the model has a definition for a vertical even on a day when it
+    // has no candidates yet (cloud, on its first live day). Mutation: dropping the cloud entry
+    // from SECTION_GUIDE, or dropping the guide line from buildRankPrompt's template, makes
+    // this fail the moment SECTIONS holds more than two entries.
+    const { text } = buildRankPrompt([candidate(1)]);
+    SECTIONS.forEach((section) => {
+      expect(SECTION_GUIDE[section]).toBeTruthy();
+      expect(text).toContain(section);
+    });
+  });
+
+  it("names the cloud vertical exactly as specified", () => {
+    expect(SECTION_GUIDE.cloud).toBe(
+      "cloud: cloud platforms and infrastructure (AWS, Azure, GCP, Kubernetes, CDN and edge, cloud economics, major outages)",
+    );
   });
 });
 

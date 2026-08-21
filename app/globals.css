@@ -3,10 +3,11 @@
 /*
   THE DAY'S DOSSIER — the world, in one place.
 
-  Two colour worlds, one per vertical: the AI feed is drenched ink blue, the design feed
-  vermilion. Switching verticals changes world rather than filtering a list. Every component
-  therefore has to survive on either field, which is why nothing below hard-codes a field colour:
-  a route sets --field once on <main data-field>, and everything else derives.
+  Three colour worlds, one per vertical: the AI feed is drenched ink blue, the design feed
+  vermilion, the cloud feed deep pine. Switching verticals changes world rather than filtering a
+  list. Every component therefore has to survive on any field, which is why nothing below
+  hard-codes a field colour: a route sets --field once on <main data-field>, and everything else
+  derives.
 
   Status never depends on hue. Spec §8 talks in amber and red, but red is invisible on the
   vermilion field, so state ships as a STAMP — a boxed, letterspaced mono word — and the word is
@@ -27,10 +28,11 @@
   --color-paper: #efe9dc;
   --color-paper-edge: #ded6c4;
 
-  /* The two worlds. Deep enough that bone type clears 4.5:1 at the softest step the design
-     uses (0.70) -- measured, not judged: AI 5.83:1, design 4.89:1. */
+  /* The three worlds. Deep enough that bone type clears 4.5:1 at the softest step the design
+     uses (0.70) -- measured, not judged: AI 5.83:1, design 4.89:1, cloud 5.69:1. */
   --color-field-ai: #16307f;
   --color-field-design: #7e2412;
+  --color-field-cloud: #1a432b;
 
   --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
   --font-text: var(--font-literata), Georgia, serif;
@@ -58,6 +60,11 @@
 [data-field="design"] {
   --field: var(--color-field-design);
   --on-field: #f6ece7;
+}
+
+[data-field="cloud"] {
+  --field: var(--color-field-cloud);
+  --on-field: #eef2e9;
 }
 
 html {

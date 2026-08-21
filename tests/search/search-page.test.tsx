@@ -147,6 +147,21 @@ describe("SearchPage -- section scope (decision 3)", () => {
     await SearchPage({ searchParams: searchParams({ q: "claude", section: "both" }) });
     expect(searchRecentDays).toHaveBeenCalledWith(expect.any(Array), "both", "claude");
   });
+
+  it("passes 'cloud' through when ?section=cloud, instead of silently collapsing to the default 'ai' -- branch review C1", async () => {
+    vi.mocked(searchRecentDays).mockResolvedValue(recentOutcome());
+    vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
+    await SearchPage({ searchParams: searchParams({ q: "claude", section: "cloud" }) });
+    expect(searchRecentDays).toHaveBeenCalledWith(expect.any(Array), "cloud", "claude");
+  });
+
+  it("offers a Cloud option in the section select, not just AI/Design/Both -- branch review C1", async () => {
+    render(await SearchPage({ searchParams: searchParams() }));
+    const select = screen.getByLabelText("Section") as HTMLSelectElement;
+    const values = [...select.options].map((o) => o.value);
+    expect(values).toContain("cloud");
+    expect(screen.getByRole("option", { name: "Cloud" })).toBeTruthy();
+  });
 });
 
 describe("SearchPage -- recent/archive split (decisions 1 and 2)", () => {

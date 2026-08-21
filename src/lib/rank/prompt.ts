@@ -1,4 +1,5 @@
 import { truncate } from "../core/text.js";
+import { SECTIONS, type Section } from "../../types/article.js";
 
 export const SUMMARY_CHARS_FOR_RANKING = 300;
 
@@ -8,8 +9,8 @@ export interface RankCandidate {
   summary: string;
   sourceName: string;
   category: string;
-  /** The topic vertical ("ai" | "design"). Told to the model so it scores importance within
-   *  the article's own field rather than against the other vertical. */
+  /** The topic vertical (e.g. "ai", "design", "cloud"). Told to the model so it scores
+   *  importance within the article's own field rather than against another vertical's. */
   section: string;
   publishedAt: string | null;
   /**
@@ -51,10 +52,10 @@ export const RANKING_SCHEMA = {
             type: "number",
             description:
               "0-100, scored within the article's own section (see each line's tag) -- " +
-              "never compare an ai article against a design one. 90+ is a major release " +
-              "or landmark result IN THAT FIELD, or changes what its practitioners do this " +
-              "week. 50 is routine industry news. Below 20 is marketing, funding minutiae, " +
-              "or rehashed coverage.",
+              "never compare an article against one from a different section. 90+ is a major " +
+              "release or landmark result IN THAT FIELD, or changes what its practitioners do " +
+              "this week. 50 is routine industry news. Below 20 is marketing, funding " +
+              "minutiae, or rehashed coverage.",
           },
           clusterId: {
             type: "string",
@@ -83,15 +84,38 @@ export const RANKING_SCHEMA = {
 
 /**
  * Names the sections actually present, generically -- the allocator in `allocate.ts` is
- * already N-section generic and well tested; this used to be the one place in the pipeline
+ * already N-section generic and well tested; this was one of the last places in the pipeline
  * that still assumed exactly two ("ai" and "design"), so a third section would have shipped
  * with a prompt lying to the model about how many verticals it was scoring across.
+ *
+ * The `importance` field description above and the preamble sentence in `buildRankPrompt`
+ * below carried the same two-vertical assumption in hardcoded prose (branch review, I4) -- both
+ * fixed alongside this one, so a fourth vertical now only needs a `SECTION_GUIDE` entry, not a
+ * grep for stray "ai"/"design" wording elsewhere in this file.
  */
 function describeSections(sections: string[]): string {
   if (sections.length === 0) return "no sections";
   if (sections.length === 1) return `one section: ${sections[0]}`;
   return `${sections.length} sections: ${sections.join(", ")}`;
 }
+
+/**
+ * A one-line field guide for each vertical the product covers, told to the model on every call
+ * regardless of which sections happen to have candidates today. `describeSections` above only
+ * names the sections actually present in THIS run's candidates; this is what keeps the model
+ * from having to guess what belongs in a vertical it has no candidates for yet -- cloud, on its
+ * first live day, is exactly why this exists.
+ *
+ * Typed `Record<Section, string>`, not `Record<string, string>`, so a fourth entry added to
+ * `SECTIONS` fails to typecheck here until it gets a guide line too -- the same guarantee
+ * `SECTION_LABEL` already gives `components/SectionNav.tsx`. `tests/rank/prompt.test.ts` also
+ * asserts this at runtime, since a build that skips typechecking would otherwise miss it.
+ */
+export const SECTION_GUIDE: Record<Section, string> = {
+  ai: "ai: artificial intelligence research, models, and products (frontier labs, model releases, developer tooling, AI policy)",
+  design: "design: design tools, practice, and products (interface design, prototyping, design systems, creative tooling)",
+  cloud: "cloud: cloud platforms and infrastructure (AWS, Azure, GCP, Kubernetes, CDN and edge, cloud economics, major outages)",
+};
 
 /** Ordinal ids keep 64-char hashes out of the token bill — see the cost table in the plan. */
 export function buildRankPrompt(candidates: RankCandidate[]): {
@@ -108,10 +132,12 @@ export function buildRankPrompt(candidates: RankCandidate[]): {
   });
 
   const sections = [...new Set(candidates.map((c) => c.section))];
+  const guide = SECTIONS.map((s) => SECTION_GUIDE[s]).join("; ");
   const text =
     `Here are ${candidates.length} articles captured today, spanning ${describeSections(sections)}. ` +
-    `Score each one's importance within its OWN section, never against the other, ` +
+    `Score each one's importance within its OWN section, never against another section, ` +
     `and group articles covering the same underlying story.\n\n` +
+    `Section field guide -- ${guide}.\n\n` +
     `Return an entry for EVERY id below. Use the id exactly as written.\n\n` +
     lines.join("\n\n");
 

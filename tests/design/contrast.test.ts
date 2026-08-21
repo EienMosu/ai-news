@@ -59,6 +59,31 @@ function token(name: string): string {
   return value;
 }
 
+/**
+ * Reads `--on-field` out of one specific `[data-field="X"]` rule in globals.css, not the file's
+ * first occurrence (branch review, M4). `token()` above matches the first `name:` it finds
+ * anywhere in the file, which is fine for the field colours -- each `--color-field-*` name is
+ * declared exactly once, in `:root` -- but `--on-field` is declared once per world, under the
+ * identical property name, inside `[data-field="ai"]`/`[data-field="design"]`/
+ * `[data-field="cloud"]`. A grounds table that paired each world's field colour (read live) with
+ * its on-colour as a literal in this file meant mutating `[data-field="cloud"] { --on-field }`
+ * in globals.css could not fail this suite at all: nothing here ever read that block. Locating
+ * the block by its own selector first, then reading `--on-field` only inside it, is what makes
+ * this test measure the value actually shipped for that specific world rather than a copy of it
+ * pinned here.
+ */
+function onFieldFor(selector: string): string {
+  const css = readFileSync("app/globals.css", "utf8");
+  const at = css.indexOf(`${selector} {`);
+  if (at === -1) throw new Error(`selector ${selector} not found in globals.css`);
+  const open = css.indexOf("{", at);
+  const close = css.indexOf("}", open);
+  const block = css.slice(open + 1, close);
+  const value = block.match(/--on-field:\s*(#[0-9a-fA-F]{6})/)?.[1];
+  if (value === undefined) throw new Error(`--on-field not found inside ${selector}'s block`);
+  return value;
+}
+
 describe("contrast maths", () => {
   it("agrees with the known extremes, so a passing suite below means something", () => {
     expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 1);
@@ -72,14 +97,20 @@ describe("contrast maths", () => {
 });
 
 describe("shipped grounds clear the floor at the softest opacity in use", () => {
+  // The third element is the `[data-field="X"]` selector to read --on-field from -- not a
+  // literal hex pinned in this file (branch review, M4) -- so a mutation to either half of a
+  // world's pairing, the field colour or its on-colour, is read live off globals.css and can
+  // fail this suite.
   const grounds: Array<[string, string, string]> = [
-    ["ai field", "--color-field-ai", "#f3eee2"],
-    ["design field", "--color-field-design", "#f6ece7"],
+    ["ai field", "--color-field-ai", '[data-field="ai"]'],
+    ["design field", "--color-field-design", '[data-field="design"]'],
+    ["cloud field", "--color-field-cloud", '[data-field="cloud"]'],
   ];
 
-  for (const [label, tokenName, onColour] of grounds) {
+  for (const [label, tokenName, selector] of grounds) {
     it(`${label} carries its text at ${MIN_TEXT_OPACITY}% opacity`, () => {
       const field = token(tokenName);
+      const onColour = onFieldFor(selector);
       const ratio = contrast(composite(onColour, field, MIN_TEXT_OPACITY / 100), field);
       expect(ratio, `${label} (${field}) measured ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(FLOOR);
     });

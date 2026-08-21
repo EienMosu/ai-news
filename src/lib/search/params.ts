@@ -1,4 +1,4 @@
-import type { Section } from "../../types/article.js";
+import { SECTIONS, type Section } from "../../types/article.js";
 import { RECENT_WINDOW_DAYS, isValidDay, subtractDays } from "./range.js";
 
 /**
@@ -20,15 +20,24 @@ export function parseQueryParam(raw: string | string[] | undefined): string {
 export type SearchScope = Section | "both";
 
 /**
- * Parses `?section=` into a `SearchScope`. Anything other than the literal strings `"ai"`,
- * `"design"`, or `"both"` -- missing, a repeated param, or garbage -- falls back to `fallback`,
- * which the page passes as its own notion of "the current vertical" (decision 3: search runs
- * against the current vertical by default). There is no vertical-specific default baked into
- * this function itself, on purpose: this file has no idea which page linked here.
+ * Parses `?section=` into a `SearchScope`. Anything other than `"both"` or a real member of
+ * `SECTIONS` -- missing, a repeated param, or garbage -- falls back to `fallback`, which the
+ * page passes as its own notion of "the current vertical" (decision 3: search runs against the
+ * current vertical by default). There is no vertical-specific default baked into this function
+ * itself, on purpose: this file has no idea which page linked here.
+ *
+ * Checked against `SECTIONS` rather than a hand-written list of literals (branch review, C1):
+ * `SearchScope = Section | "both"` widens automatically whenever `SECTIONS` gains a vertical,
+ * but a hardcoded `raw === "ai" || raw === "design"` does not widen with it -- the compiler
+ * cannot catch that gap because this is a runtime string comparison, not an exhaustive check.
+ * That is exactly how `?section=cloud` silently collapsed to `fallback` until this fix: cloud
+ * shipped in `SECTIONS`, `SectionNav` already links `/search?section=cloud` from `/cloud`, and
+ * this function still only recognised the first two verticals. Deriving the check from
+ * `SECTIONS` means a fifth vertical cannot regress this the same way.
  */
 export function parseSectionParam(raw: string | string[] | undefined, fallback: Section): SearchScope {
   if (raw === "both") return "both";
-  if (raw === "ai" || raw === "design") return raw;
+  if (typeof raw === "string" && (SECTIONS as readonly string[]).includes(raw)) return raw as Section;
   return fallback;
 }
 

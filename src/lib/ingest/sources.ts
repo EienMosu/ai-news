@@ -107,4 +107,41 @@ export const SOURCES: SourceDef[] = [
     url: "https://sidebar.io/feed.xml" },
   { id: "awwwards", name: "Awwwards", kind: "rss", category: "community", section: "design",
     url: "https://www.awwwards.com/blog/feed" },
+
+  // Cloud vertical. All eight probed live and confirmed parsing cleanly through the
+  // existing parseFeed -- nothing in the ingest layer changes for these.
+  //
+  // aws-news/azure/gcp keep the 1.0 lab weight (branch review, I5 ruling): the big-three
+  // platform announcements are this vertical's primary sources for its owner, an AWS solutions
+  // architect, and the LLM importance weight still separates marketing from substance within
+  // that weight class. cloudflare and hashicorp drop to news (0.7) instead -- vendor blogs one
+  // step removed from that primary-platform role, the same distinction design's own sources
+  // draw above.
+  { id: "aws-news", name: "AWS News Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://aws.amazon.com/blogs/aws/feed/" },
+  { id: "azure", name: "Microsoft Azure Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://azure.microsoft.com/en-us/blog/feed/" },
+  { id: "gcp", name: "Google Cloud Blog", kind: "rss", category: "lab", section: "cloud",
+    url: "https://cloudblog.withgoogle.com/rss/" },
+  { id: "cloudflare", name: "Cloudflare Blog", kind: "rss", category: "news", section: "cloud",
+    url: "https://blog.cloudflare.com/rss/" },
+  { id: "cncf", name: "CNCF", kind: "rss", category: "community", section: "cloud",
+    url: "https://www.cncf.io/feed/" },
+  { id: "hashicorp", name: "HashiCorp Blog", kind: "rss", category: "news", section: "cloud",
+    url: "https://www.hashicorp.com/blog/feed.xml" },
+  // maxItems: 30 (branch review, M6) -- a high-volume feed; capped so 8 cloud sources cannot
+  // alone push a day's aggregate supply toward saturating RANK_INPUT_CAP (model.ts) and the
+  // cost ceiling it bounds.
+  { id: "newstack", name: "The New Stack", kind: "rss", category: "news", section: "cloud",
+    maxItems: 30,
+    url: "https://thenewstack.io/feed/" },
+  // Dedupe is keyed on urlHash (capture.ts), and `hn` (query=AI, section "ai") sits earlier in
+  // this registry than `hn-cloud` -- so a story matching both queries is captured by `hn` first
+  // and stored as section "ai"; the cloud copy is silently dropped (branch review, I3). Accepted:
+  // first-capture wins, and this is a real overlap in practice ("AI inference on AWS", "GPU
+  // capacity at Azure"). hitsPerPage and maxItems both trimmed to 25 (from the ai `hn` source's
+  // 50/unset) to bound cloud's day-one supply -- see the cap-saturation note on RANK_INPUT_CAP.
+  { id: "hn-cloud", name: "Hacker News (cloud)", kind: "hn", category: "community", section: "cloud",
+    maxItems: 25,
+    url: "https://hn.algolia.com/api/v1/search_by_date?query=cloud&tags=story&numericFilters=points%3E20&hitsPerPage=25" },
 ];

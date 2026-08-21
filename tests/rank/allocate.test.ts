@@ -165,33 +165,33 @@ describe("allocateRankingCap", () => {
     expect(bySection(last35, "ai")).toHaveLength(35);
   });
 
-  it("honors the production RANK_INPUT_CAP (250), splitting fairly across sections without exceeding it", () => {
-    // Mirrors the real day shape after Change 1: at 21 sources the live dry run produces
-    // ~230/day, so this run is deliberately padded past that (265 total, three sections) to
-    // prove the boundary at the ACTUAL production constant rather than an arbitrary test cap.
-    //
-    // Water-filling by ascending group size: video (30, smallest) gets floor(250/3)=83 but
-    // only has 30, so it takes all 30 and returns 1 unused slot; design (65) then sees
-    // floor(220/2)=110, takes all 65, returns another unused slot; ai (170, largest) sees
-    // floor(155/1)=155 and takes 155 -- 30+65+155=250 exactly, ai's remaining 15 truncated.
-    const design = make("design", 65, 1000);
-    const ai = make("ai", 170, 900);
-    const video = make("video", 30, 800);
-    const result = allocateRankingCap([...design, ...ai, ...video], RANK_INPUT_CAP);
+  it("honors the production RANK_INPUT_CAP (375), splitting it evenly across three sections of equal supply", () => {
+    // The cap was raised from 250 to 375 when the Cloud vertical shipped (spec
+    // theslowwire-design.md §5.1): allocateRankingCap already splits fairly by section (no
+    // change there), so a third vertical without a matching cap raise would have quietly cut
+    // ai and design's own fair share too. 375 across 3 sections keeps every section's share at
+    // 125 -- the same per-section share ai and design already had at the old 250/2-section
+    // cap. 200 candidates per section is deliberately more than any section's 125 share, so
+    // every section's selection is bounded by the SHARE, not by its own supply -- exactly the
+    // boundary this constant exists to police.
+    const ai = make("ai", 200, 1000);
+    const design = make("design", 200, 900);
+    const cloud = make("cloud", 200, 800);
+    const result = allocateRankingCap([...ai, ...design, ...cloud], RANK_INPUT_CAP);
     const selected = result.slice(0, RANK_INPUT_CAP);
 
-    // Mutation: reverting the export in src/lib/rank/model.ts from `RANK_INPUT_CAP = 250` back
-    // to `200` makes `RANK_INPUT_CAP` read 200 here too (it's the same import), so
-    // `selected.length` becomes 200 instead of 250 and the per-section split shifts to
-    // design=65/ai=105/video=30 -- wrong on every assertion below.
-    expect(RANK_INPUT_CAP).toBe(250);
-    expect(selected).toHaveLength(250);
-    expect(bySection(selected, "video")).toHaveLength(30);
-    expect(bySection(selected, "design")).toHaveLength(65);
-    expect(bySection(selected, "ai")).toHaveLength(155);
+    // Mutation: reverting the export in src/lib/rank/model.ts from `RANK_INPUT_CAP = 375` back
+    // to `250` makes `RANK_INPUT_CAP` read 250 here too (it's the same import), so
+    // `selected.length` becomes 250 instead of 375 and each section's share drops from 125 to
+    // roughly 83 -- wrong on every assertion below.
+    expect(RANK_INPUT_CAP).toBe(375);
+    expect(selected).toHaveLength(375);
+    expect(bySection(selected, "ai")).toHaveLength(125);
+    expect(bySection(selected, "design")).toHaveLength(125);
+    expect(bySection(selected, "cloud")).toHaveLength(125);
     // The allocator never hands out more than the cap, even once every section's fair share
     // and its own full supply are both accounted for.
-    expect(result).toHaveLength(265);
+    expect(result).toHaveLength(600);
     expect(selected.length).toBeLessThanOrEqual(RANK_INPUT_CAP);
   });
 });

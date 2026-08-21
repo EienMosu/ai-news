@@ -59,7 +59,7 @@ describe("SectionNav", () => {
       });
     });
 
-    it("every SECTIONS entry has a SECTION_LABEL entry, and today's labels read AI and Design literally -- so a new section cannot ship unlabelled, and a wrong value in the map cannot pass by matching itself", () => {
+    it("every SECTIONS entry has a SECTION_LABEL entry, and today's labels read AI, Design and Cloud literally -- so a new section cannot ship unlabelled, and a wrong value in the map cannot pass by matching itself", () => {
       for (const section of SECTIONS) {
         expect(SECTION_LABEL[section]).toBeTruthy();
       }
@@ -67,13 +67,14 @@ describe("SectionNav", () => {
       render(<SectionNav current={null} />);
       const nav = screen.getByRole("navigation", { name: "Sections" });
       const texts = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(texts).toEqual(["AI", "Design"]);
+      expect(texts).toEqual(["AI", "Design", "Cloud"]);
     });
 
-    it("renders both section links with the right hrefs", () => {
+    it("renders every section link with the right href", () => {
       render(<SectionNav current={null} />);
       expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/");
       expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
+      expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("href")).toBe("/cloud");
     });
 
     it("carries data-field on each switch link matching its own section", () => {
@@ -81,6 +82,9 @@ describe("SectionNav", () => {
       expect(screen.getByRole("link", { name: "AI" }).getAttribute("data-field")).toBe("ai");
       expect(screen.getByRole("link", { name: "Design" }).getAttribute("data-field")).toBe(
         "design",
+      );
+      expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("data-field")).toBe(
+        "cloud",
       );
     });
 
@@ -108,6 +112,15 @@ describe("SectionNav", () => {
 
     it("marks neither link current when current is null", () => {
       render(<SectionNav current={null} />);
+      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
+      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    });
+
+    it("marks the Cloud link current via aria-current when current is 'cloud', and leaves AI/Design uncurrent", () => {
+      render(<SectionNav current="cloud" />);
+      expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("aria-current")).toBe(
+        "page",
+      );
       expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
       expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
     });
@@ -164,13 +177,14 @@ describe("SectionNav", () => {
       expect(screen.getByRole("link", { name: "Search" }).getAttribute("aria-current")).toBeNull();
     });
 
-    it("adding the Search link does not disturb the name-scoped AI/Design assertions elsewhere in this file", () => {
-      // Every other test in this file finds "AI" and "Design" by exact accessible name via
-      // getByRole("link", { name: ... }) -- a third link cannot make those ambiguous. This test
-      // just states that invariant explicitly, since the review that asked for this link
-      // verified it by inspection; this is what pins it as an executable fact instead.
+    it("adding the Search link does not disturb the name-scoped AI/Design/Cloud assertions elsewhere in this file", () => {
+      // Every other test in this file finds "AI", "Design" and "Cloud" by exact accessible name
+      // via getByRole("link", { name: ... }) -- a fourth link (Search, alongside the three
+      // section links) cannot make those ambiguous. This test just states that invariant
+      // explicitly, since the review that asked for this link verified it by inspection; this
+      // is what pins it as an executable fact instead.
       render(<SectionNav current="ai" />);
-      expect(screen.getAllByRole("link")).toHaveLength(3);
+      expect(screen.getAllByRole("link")).toHaveLength(4);
       expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
     });
   });
