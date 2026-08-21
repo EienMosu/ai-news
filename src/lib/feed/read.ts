@@ -33,6 +33,24 @@ import { unstable_cache } from "next/cache";
 const HEAVY_READ_TTL_SECONDS = 3600;
 const RUN_STATUS_TTL_SECONDS = 300;
 
+/**
+ * The two store primitives the feed composes from, cached at THEIR keys: the day list by its
+ * count, each day's items by the day. Section is deliberately absent from both keys -- queryDay
+ * returns all sections and bySection filters in memory, so one warm entry serves every
+ * vertical. getRecentDays itself is NOT wrapped: wrapping the composition on (section, count)
+ * was the first cut, and it tripled the day Queries across three sections for identical bytes.
+ */
+const cachedListDays = unstable_cache(
+  async (count: number) => listDays(docClient(), requireTableName(), count),
+  ["listDays"],
+  { revalidate: HEAVY_READ_TTL_SECONDS, tags: ["days"] },
+);
+const cachedQueryDay = unstable_cache(
+  async (day: string) => queryDay(docClient(), requireTableName(), day),
+  ["queryDay"],
+  { revalidate: HEAVY_READ_TTL_SECONDS, tags: ["days"] },
+);
+
 
 const DAY_STATUSES = ["complete", "partial"] as const;
 const LAST_RUN_STATUSES = ["ok", "skipped", "failed"] as const;
@@ -142,13 +160,11 @@ export interface RecentDaysOutcome {
  * that positional order in its result no matter the completion order underneath; a rejection
  * removes an entry from the middle without reordering the rest.
  */
-async function getRecentDaysUncached(section: Section, count: number): Promise<RecentDaysOutcome> {
-  const table = requireTableName();
-  const client = docClient();
-  const days = await listDays(client, table, Math.min(count, MAX_ARCHIVE_DAYS));
+export async function getRecentDays(section: Section, count: number): Promise<RecentDaysOutcome> {
+  const days = await cachedListDays(Math.min(count, MAX_ARCHIVE_DAYS));
 
   const settled = await Promise.allSettled(days.map(async (day): Promise<FeedResult> => {
-    const items = await queryDay(client, table, day.day);
+    const items = await cachedQueryDay(day.day);
     return {
       articles: bySection(items.map(toFeedArticle), section),
       day: day.day,
@@ -168,10 +184,6 @@ async function getRecentDaysUncached(section: Section, count: number): Promise<R
   return { results, failedDays };
 }
 
-export const getRecentDays = unstable_cache(getRecentDaysUncached, ["getRecentDays"], {
-  revalidate: HEAVY_READ_TTL_SECONDS,
-  tags: ["days"],
-});
 
 
 /**

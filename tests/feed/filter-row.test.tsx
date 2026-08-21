@@ -6,6 +6,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { FilterRow } from "../../components/FilterRow.js";
 import { FILTERS } from "../../src/lib/feed/filter.js";
+import { DEFAULT_ARCHIVE_DAYS } from "../../src/lib/feed/days.js";
 
 afterEach(cleanup);
 
@@ -71,7 +72,7 @@ describe("FilterRow", () => {
 
     it("omits ?days= from the active chip's clear link when days is the default", () => {
       render(
-        <FilterRow section="ai" basePath="/" activeF="anthropic" othersOpen={false} days={7} />,
+        <FilterRow section="ai" basePath="/" activeF="anthropic" othersOpen={false} days={DEFAULT_ARCHIVE_DAYS} />,
       );
       expect(screen.getByRole("link", { name: "Anthropic" }).getAttribute("href")).toBe("/");
     });
@@ -140,7 +141,7 @@ describe("FilterRow", () => {
     });
 
     it("omits days from inactive chip hrefs when days is the default", () => {
-      render(<FilterRow section="ai" basePath="/" activeF={null} othersOpen={false} days={7} />);
+      render(<FilterRow section="ai" basePath="/" activeF={null} othersOpen={false} days={DEFAULT_ARCHIVE_DAYS} />);
       expect(screen.getByRole("link", { name: "OpenAI" }).getAttribute("href")).toBe("/?f=openai");
     });
   });
@@ -284,7 +285,7 @@ describe("FilterRow", () => {
 
     it("omits the hidden days input when days is the default", () => {
       const { container } = render(
-        <FilterRow section="ai" basePath="/" activeF={null} othersOpen={true} days={7} />,
+        <FilterRow section="ai" basePath="/" activeF={null} othersOpen={true} days={DEFAULT_ARCHIVE_DAYS} />,
       );
       expect(container.querySelector('input[type="hidden"][name="days"]')).toBeNull();
     });
