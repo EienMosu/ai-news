@@ -75,10 +75,26 @@ export const SOURCES: SourceDef[] = [
   { id: "hn", name: "Hacker News", kind: "hn", category: "community", section: "ai",
     url: "https://hn.algolia.com/api/v1/search_by_date?query=AI&tags=story&numericFilters=points%3E20&hitsPerPage=50" },
   // Reddit's JSON endpoints 403 without OAuth; the .rss route needs no key.
-  { id: "reddit-localllama", name: "r/LocalLLaMA", kind: "rss", category: "community", section: "ai",
-    url: "https://www.reddit.com/r/LocalLLaMA/hot.rss" },
-  { id: "reddit-ml", name: "r/MachineLearning", kind: "rss", category: "community", section: "ai",
-    url: "https://www.reddit.com/r/MachineLearning/hot.rss" },
+  { id: "hn-local", name: "Hacker News (local models)", kind: "hn", category: "community", section: "ai",
+    // Replaces reddit-localllama (2026-08-21): same Reddit datacenter block. The local-model
+    // community signal via the HN firehose instead; dedupe keys on urlHash, so overlap with the
+    // main hn query stores once under whichever captured first.
+    maxItems: 25,
+    url: "https://hn.algolia.com/api/v1/search_by_date?query=llama&tags=story&numericFilters=points%3E20&hitsPerPage=25" },
+  { id: "simonwillison", name: "Simon Willison", kind: "rss", category: "community", section: "ai",
+    // Replaces reddit-ml (2026-08-21): Reddit 403s datacenter IPs, zero items ever landed from
+    // the Lambda. Same community seat, a feed that answers from AWS.
+    maxItems: 15,
+    url: "https://simonwillison.net/atom/everything/" },
+  { id: "meta-ai", name: "Meta AI (Engineering)", kind: "rss", category: "lab", section: "ai",
+    maxItems: 15,
+    url: "https://engineering.fb.com/category/ai-research/feed/" },
+  { id: "qwen", name: "Qwen", kind: "rss", category: "lab", section: "ai",
+    maxItems: 10,
+    url: "https://qwenlm.github.io/blog/index.xml" },
+  { id: "mistral", name: "Mistral AI", kind: "rss", category: "lab", section: "ai",
+    maxItems: 10,
+    url: "https://mistral.ai/rss.xml" },
   { id: "hfpapers", name: "HF Daily Papers", kind: "hfPapers", category: "research", section: "ai",
     url: "https://huggingface.co/api/daily_papers?limit=20" },
 
@@ -90,6 +106,9 @@ export const SOURCES: SourceDef[] = [
   // to "fix" by inventing one -- it is why the ranking cap is allocated per section rather than
   // by a single global sort (design's ceiling is the 0.7 `news` weight, never the 1.0 `lab`
   // weight an AI source can reach).
+  { id: "apple-newsroom", name: "Apple Newsroom", kind: "rss", category: "news", section: "design",
+    maxItems: 15,
+    url: "https://www.apple.com/newsroom/rss-feed.rss" },
   { id: "smashing", name: "Smashing Magazine", kind: "rss", category: "news", section: "design",
     url: "https://www.smashingmagazine.com/feed/" },
   { id: "alistapart", name: "A List Apart", kind: "rss", category: "news", section: "design",
