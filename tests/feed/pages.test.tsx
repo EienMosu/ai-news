@@ -30,6 +30,7 @@ import Home from "../../app/(feed)/page.js";
 import type { FeedResult, RecentDaysOutcome } from "../../src/lib/feed/read.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
 import { toFeedArticle } from "../../src/lib/feed/shape.js";
+import { DEFAULT_ARCHIVE_DAYS } from "../../src/lib/feed/days.js";
 
 /** A minimal, fully-typed raw article -- only the fields the fixture-driven filter tests below
  *  actually vary (`pk` for a unique `urlHash`, `title`) need overriding per call. Mirrors the
@@ -71,7 +72,7 @@ describe("Home (app/page.tsx)", () => {
   it("asks getRecentDays for the 'ai' section", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
-    expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
+    expect(getRecentDays).toHaveBeenCalledWith("ai", DEFAULT_ARCHIVE_DAYS);
   });
 
   it("marks the AI nav link current, not Design", async () => {
@@ -99,10 +100,10 @@ describe("Home (app/page.tsx)", () => {
     expect(getRecentDays).toHaveBeenCalledWith("ai", 20);
   });
 
-  it("defaults to 7 days when no `days` param is given", async () => {
+  it("defaults to DEFAULT_ARCHIVE_DAYS when no `days` param is given", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
-    expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
+    expect(getRecentDays).toHaveBeenCalledWith("ai", DEFAULT_ARCHIVE_DAYS);
   });
 
   it("clamps an out-of-range `days` value before calling getRecentDays, rather than passing the raw request through", async () => {
@@ -114,7 +115,7 @@ describe("Home (app/page.tsx)", () => {
   it("ignores a garbage `days` value, falling back to the default rather than rendering it as requested", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams({ days: "banana" }) }));
-    expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
+    expect(getRecentDays).toHaveBeenCalledWith("ai", DEFAULT_ARCHIVE_DAYS);
   });
 
   it("renders a section for every day getRecentDays returns, newest first", async () => {
@@ -146,13 +147,13 @@ describe("Home (app/page.tsx)", () => {
   });
 
   it("points its load-more link at /, not /design", async () => {
-    const results = Array.from({ length: 7 }, (_, i) => ({
+    const results = Array.from({ length: DEFAULT_ARCHIVE_DAYS }, (_, i) => ({
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await Home({ searchParams: searchParams() }));
-    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=14");
+    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=10");
   });
 
   it("passes the parsed/clamped `days` value to FeedArchive, not a raw coercion of the request -- fix round 1, F5", async () => {
@@ -165,14 +166,14 @@ describe("Home (app/page.tsx)", () => {
     // correctly-parsed count), `moreMayExist` (`results.length === days`) is `7 === 7` when the
     // real clamped value reaches the component, and `7 === -5` -- silently false, hiding a real
     // load-more link -- when the raw coercion does.
-    const results = Array.from({ length: 7 }, (_, i) => ({
+    const results = Array.from({ length: DEFAULT_ARCHIVE_DAYS }, (_, i) => ({
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await Home({ searchParams: searchParams({ days: "-5" }) }));
-    expect(getRecentDays).toHaveBeenCalledWith("ai", 7);
-    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=14");
+    expect(getRecentDays).toHaveBeenCalledWith("ai", DEFAULT_ARCHIVE_DAYS);
+    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/?days=10");
   });
 
   it("carries a non-default `days` value into the SectionNav links -- fix round 1, F9", async () => {
@@ -200,7 +201,7 @@ describe("DesignPage (app/design/page.tsx)", () => {
   it("asks getRecentDays for the 'design' section", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams() }));
-    expect(getRecentDays).toHaveBeenCalledWith("design", 7);
+    expect(getRecentDays).toHaveBeenCalledWith("design", DEFAULT_ARCHIVE_DAYS);
   });
 
   it("marks the Design nav link current, not AI", async () => {
@@ -229,13 +230,13 @@ describe("DesignPage (app/design/page.tsx)", () => {
   });
 
   it("points its load-more link at /design, not /", async () => {
-    const results = Array.from({ length: 7 }, (_, i) => ({
+    const results = Array.from({ length: DEFAULT_ARCHIVE_DAYS }, (_, i) => ({
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await DesignPage({ searchParams: searchParams() }));
-    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/design?days=14");
+    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/design?days=10");
   });
 
   it("shows the no-ranked-day-at-all message when getRecentDays returns no days", async () => {
@@ -293,7 +294,7 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
   it("asks getRecentDays for the 'cloud' section", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await CloudPage({ searchParams: searchParams() }));
-    expect(getRecentDays).toHaveBeenCalledWith("cloud", 7);
+    expect(getRecentDays).toHaveBeenCalledWith("cloud", DEFAULT_ARCHIVE_DAYS);
   });
 
   it("marks the Cloud nav link current, not AI or Design", async () => {
@@ -323,13 +324,13 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
   });
 
   it("points its load-more link at /cloud, not / or /design", async () => {
-    const results = Array.from({ length: 7 }, (_, i) => ({
+    const results = Array.from({ length: DEFAULT_ARCHIVE_DAYS }, (_, i) => ({
       ...EMPTY_DAY_RESULT,
       day: `2026-08-${18 - i}`,
     }));
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await CloudPage({ searchParams: searchParams() }));
-    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/cloud?days=14");
+    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/cloud?days=10");
   });
 
   it("shows the no-ranked-day-at-all message when getRecentDays returns no days", async () => {

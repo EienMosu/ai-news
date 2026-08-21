@@ -6,6 +6,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { SECTION_LABEL, SectionNav } from "../../components/SectionNav.js";
 import { SECTIONS } from "../../src/types/article.js";
+import { DEFAULT_ARCHIVE_DAYS } from "../../src/lib/feed/days.js";
 
 afterEach(cleanup);
 
@@ -140,7 +141,7 @@ describe("SectionNav", () => {
     });
 
     it("omits ?days= from both links when `days` equals the default", () => {
-      render(<SectionNav current="ai" days={7} />);
+      render(<SectionNav current="ai" days={DEFAULT_ARCHIVE_DAYS} />);
       expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
     });
 

@@ -18,14 +18,14 @@
  * one (fix round 1, F7).
  *
  * `DEFAULT_ARCHIVE_DAYS` (the initial count) and `ARCHIVE_STEP_DAYS` (how far "Load older days"
- * advances) are separate constants, even though both happen to be `7` today, because they answer
+ * advances) are separate constants, even though both happen to be `5` today (owner request, 2026-08-21: lighter first paint, load five more per step), because they answer
  * different questions -- changing the initial page size should not silently also change the
  * load-more increment (fix round 1, F8).
  */
 export const MIN_ARCHIVE_DAYS = 1;
 export const MAX_ARCHIVE_DAYS = 30;
-export const DEFAULT_ARCHIVE_DAYS = 7;
-export const ARCHIVE_STEP_DAYS = 7;
+export const DEFAULT_ARCHIVE_DAYS = 5;
+export const ARCHIVE_STEP_DAYS = 5;
 
 /**
  * Parses a `searchParams.days` value into a safe day count. A URL is user input, never trusted

@@ -16,9 +16,9 @@ describe("the data cache contract", () => {
   const read = readFileSync("src/lib/feed/read.ts", "utf8");
   const archive = readFileSync("src/lib/search/archive.ts", "utf8");
 
-  const WRAPPED = ["getRecentDays", "getDay", "getArticle", "getArchive", "getRunStatus"];
+  const WRAPPED = ["getDay", "getArticle", "getArchive", "getRunStatus"];
 
-  it("exports every store read as the wrapped constant", () => {
+  it("exports the single-key store reads as wrapped constants", () => {
     for (const fn of WRAPPED) {
       expect(read, fn).toContain(`export const ${fn} = unstable_cache(${fn}Uncached`);
       expect(read, `${fn} must not leak an uncached export`).not.toContain(
@@ -26,6 +26,16 @@ describe("the data cache contract", () => {
       );
     }
     expect(archive).toContain("export const fetchArchiveDay = unstable_cache(fetchArchiveDayUncached");
+  });
+
+  it("caches the feed at the day level, never keyed on section", () => {
+    // Keyed on (section, count), /design and /cloud re-ran identical day Queries into their own
+    // entries and a section switch missed the cache. The primitives carry the cache; the
+    // composition must stay unwrapped.
+    expect(read).toContain('unstable_cache(\n  async (count: number) => listDays(');
+    expect(read).toContain('unstable_cache(\n  async (day: string) => queryDay(');
+    expect(read).not.toContain("unstable_cache(getRecentDaysUncached");
+    expect(read).toMatch(/export async function getRecentDays\(section: Section/);
   });
 
   it("keeps request-scoped time out of every cached signature", () => {
