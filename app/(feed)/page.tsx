@@ -1,7 +1,16 @@
 import { FeedArchive } from "../../components/FeedArchive.js";
+import { FilterRow } from "../../components/FilterRow.js";
 import { SectionNav } from "../../components/SectionNav.js";
 import { parseDaysParam } from "../../src/lib/feed/days.js";
+import { resolveFilter, sanitizeFilterParam } from "../../src/lib/feed/filter.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
+
+/** `searchParams` may repeat a param (`?f=a&f=b`); only the first occurrence is ever a
+ *  deliberate value from a link or form this app itself renders, so an array collapses to its
+ *  first entry -- the same treatment `parseDaysParam` already gives a repeated `?days=`. */
+function firstOf(raw: string | string[] | undefined): string | undefined {
+  return Array.isArray(raw) ? raw[0] : raw;
+}
 
 // Without this, Next statically prerenders this page at build time -- it calls `getRecentDays`,
 // which hits DynamoDB during `pnpm build` and fails with "TABLE_NAME environment variable is
@@ -18,7 +27,7 @@ export const dynamic = "force-dynamic";
  * `params`, on the sibling prop Next also promise-wraps.
  */
 interface HomeProps {
-  searchParams: Promise<{ days?: string | string[] }>;
+  searchParams: Promise<{ days?: string | string[]; f?: string | string[]; others?: string | string[] }>;
 }
 
 /**
@@ -36,8 +45,11 @@ interface HomeProps {
  * `results`, which is only ever the days that DID resolve.
  */
 export default async function Home({ searchParams }: HomeProps) {
-  const { days: rawDays } = await searchParams;
+  const { days: rawDays, f: rawF, others: rawOthers } = await searchParams;
   const days = parseDaysParam(rawDays);
+  const activeF = sanitizeFilterParam(firstOf(rawF));
+  const filterDef = activeF !== null ? resolveFilter("ai", activeF) : null;
+  const othersOpen = firstOf(rawOthers) === "1";
   const { results, failedDays } = await getRecentDays("ai", days);
   const now = new Date();
 
@@ -45,6 +57,7 @@ export default async function Home({ searchParams }: HomeProps) {
     <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
       <SectionNav current="ai" days={days} />
+      <FilterRow section="ai" basePath="/" activeF={activeF} othersOpen={othersOpen} days={days} />
       <FeedArchive
         section="ai"
         results={results}
@@ -52,6 +65,7 @@ export default async function Home({ searchParams }: HomeProps) {
         now={now}
         days={days}
         basePath="/"
+        filterDef={filterDef}
       />
       </div>
     </main>

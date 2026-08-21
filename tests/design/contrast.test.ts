@@ -128,6 +128,26 @@ describe("shipped grounds clear the floor at the softest opacity in use", () => 
     const ratio = contrast(composite(token("--color-paper"), ink, MIN_TEXT_OPACITY / 100), ink);
     expect(ratio, `ink rail measured ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(FLOOR);
   });
+
+  // Branch review M9: the switch's current cell and every active filter chip invert with the
+  // SAME pairing -- inline `{ background: "var(--color-paper)", color: "var(--field)" }` -- and
+  // nothing in this suite had ever measured it. Full opacity (not MIN_TEXT_OPACITY): this
+  // pairing has no opacity reduction applied anywhere it is used. Measured by hand before this
+  // guard existed: ai 9.84:1, design 8.08:1, cloud 9.23:1 -- so a future field lightening (or a
+  // paper darkening) that eats into that headroom fails this test rather than passing silently
+  // until it crosses the floor unnoticed.
+  for (const [label, tokenName] of [
+    ["ai field", "--color-field-ai"],
+    ["design field", "--color-field-design"],
+    ["cloud field", "--color-field-cloud"],
+  ] as const) {
+    it(`the paper/field inversion (active chip, switch) clears the floor for ${label}`, () => {
+      const field = token(tokenName);
+      const paper = token("--color-paper");
+      const ratio = contrast(field, paper);
+      expect(ratio, `${label} on paper (${field} on ${paper}) measured ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(FLOOR);
+    });
+  }
 });
 
 describe("no component ships text below the floor", () => {

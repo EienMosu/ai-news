@@ -5,7 +5,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ArticleCard } from "../../components/ArticleCard.js";
-import { DaySection } from "../../components/DaySection.js";
 import { toFeedArticle } from "../../src/lib/feed/shape.js";
 
 // `test.globals` is false in vitest.config.ts (this suite always imports its own `afterEach`
@@ -216,43 +215,6 @@ describe("ArticleCard", () => {
   });
 });
 
-describe("DaySection", () => {
-  it("shows the count of the articles it is actually rendering", () => {
-    const items = [
-      raw({ pk: `ART#${"a".repeat(64)}` }),
-      raw({ pk: `ART#${"b".repeat(64)}` }),
-    ].map(toFeedArticle);
-    render(<DaySection day="2026-08-18" articles={items} now={NOW} />);
-    expect(screen.getByText("2 stories")).toBeTruthy();
-  });
-
-  it("uses singular 'story' for exactly one article", () => {
-    const items = [toFeedArticle(raw())];
-    render(<DaySection day="2026-08-18" articles={items} now={NOW} />);
-    expect(screen.getByText("1 story")).toBeTruthy();
-  });
-
-  it("renders one card per article, preserving the given (score) order", () => {
-    const items = [
-      raw({ pk: `ART#${"a".repeat(64)}`, title: "First" }),
-      raw({ pk: `ART#${"b".repeat(64)}`, title: "Second" }),
-    ].map(toFeedArticle);
-    const { container } = render(<DaySection day="2026-08-18" articles={items} now={NOW} />);
-    const titles = Array.from(container.querySelectorAll("h3")).map((h) => h.textContent);
-    expect(titles).toEqual(["First", "Second"]);
-  });
-
-  it("shows the day string in the header", () => {
-    render(<DaySection day="2026-08-18" articles={[]} now={NOW} />);
-    expect(screen.getByText("2026-08-18")).toBeTruthy();
-  });
-
-  it("links the header date to its own day page -- fix round 1, F3", () => {
-    // Before this fix, nothing inside the app pointed at /day/[date] at all -- it was reachable
-    // only by typing a URL. The header date is the obvious anchor for it.
-    render(<DaySection day="2026-08-18" articles={[]} now={NOW} />);
-    expect(screen.getByRole("link", { name: "2026-08-18" }).getAttribute("href")).toBe(
-      "/day/2026-08-18",
-    );
-  });
-});
+// DaySection's own tests moved to tests/feed/day-section.test.tsx (Task C2) once it took
+// ranked entries plus totalInDay instead of a bare articles array -- a signature no longer
+// shared with ArticleCard's own props, so it no longer belongs in this file.

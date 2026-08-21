@@ -29,6 +29,20 @@ import CloudPage from "../../app/(feed)/cloud/page.js";
 import Home from "../../app/(feed)/page.js";
 import type { FeedResult, RecentDaysOutcome } from "../../src/lib/feed/read.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
+import { toFeedArticle } from "../../src/lib/feed/shape.js";
+
+/** A minimal, fully-typed raw article -- only the fields the fixture-driven filter tests below
+ *  actually vary (`pk` for a unique `urlHash`, `title`) need overriding per call. Mirrors the
+ *  identical helper in `tests/feed/feed-view.test.tsx`. */
+const rawArticle = (over: Record<string, unknown> = {}) => ({
+  pk: `ART#${"a".repeat(64)}`, sk: "A", title: "T", summary: "s", imageUrl: null,
+  url: "https://e.com/p", source: "techcrunch", sourceName: "TechCrunch",
+  category: "news", section: "design", publishedAt: "2026-08-18T09:00:00.000Z",
+  clusterId: null, corroborationToday: null, whyItMatters: null, score: 500,
+  scoreVersion: "v1", points: null, pointsImputed: true, llmImportance: null,
+  firstSeenAt: "2026-08-18T10:00:00.000Z",
+  ...over,
+});
 
 afterEach(() => {
   cleanup();
@@ -248,6 +262,31 @@ describe("DesignPage (app/design/page.tsx)", () => {
 
   // See the identical note at the end of the `Home` describe block above -- the same removal,
   // same reason, same replacement.
+
+  // Branch review I1: spec 6.4's own route bullet ("/design?f=figma returns 200 and contains
+  // only matching cards, fixture-driven") had no test anywhere in the suite. This is that test.
+  describe("quick filters -- branch review I1", () => {
+    it("filters to only matching cards for /design?f=figma (spec 6.4), and composes with days=1", async () => {
+      const matching = toFeedArticle(
+        rawArticle({ pk: `ART#${"a".repeat(64)}`, title: "Figma ships new prototyping tools" }),
+      );
+      const nonMatching = toFeedArticle(
+        rawArticle({ pk: `ART#${"b".repeat(64)}`, title: "Adobe updates its suite" }),
+      );
+      vi.mocked(getRecentDays).mockResolvedValue(
+        outcome([{ ...EMPTY_DAY_RESULT, articles: [matching, nonMatching] }]),
+      );
+      render(await DesignPage({ searchParams: searchParams({ f: "figma", days: "1" }) }));
+
+      // Composes with days: the same request also asked for a 1-day archive.
+      expect(getRecentDays).toHaveBeenCalledWith("design", 1);
+      expect(screen.getByText("Figma ships new prototyping tools")).toBeTruthy();
+      expect(screen.queryByText("Adobe updates its suite")).toBeNull();
+      expect(screen.getByTestId("filter-status").textContent).toContain(
+        'Filtered by "Figma": 1 of 2 stories in view.',
+      );
+    });
+  });
 });
 
 describe("CloudPage (app/cloud/page.tsx)", () => {
@@ -313,5 +352,42 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await CloudPage({ searchParams: searchParams({ days: "14" }) }));
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
+  });
+
+  // Branch review I1: "PR C widens [the copy-paste] seam from four coupled strings to six per
+  // page: `resolveFilter("cloud", ...)` and `<FilterRow section="cloud" ...>`. Neither is
+  // pinned." Both mutations were proven, by hand, to survive the full 930-test suite. These
+  // three tests close that gap for CloudPage; DesignPage's analogous fixture test lives above.
+  describe("quick filters -- branch review I1", () => {
+    it("resolves f against the cloud filter table, not ai's -- kills a resolveFilter(section) mutation", async () => {
+      // "Amazon Web Services" is a synonym of cloud's known "aws" filter (a plain string, spec
+      // 6.2) but contains no literal "aws" substring anywhere in it. Resolved against "ai"
+      // instead of "cloud" (the mutation), "aws" is not a known ai id, so it becomes a free-text
+      // def whose only synonym is the literal string "aws" -- which this title does not match at
+      // all, and whose label reads lowercase "aws" rather than the known chip's "AWS".
+      const matching = toFeedArticle(
+        rawArticle({ pk: `ART#${"c".repeat(64)}`, title: "Amazon Web Services adds a feature" }),
+      );
+      vi.mocked(getRecentDays).mockResolvedValue(
+        outcome([{ ...EMPTY_DAY_RESULT, articles: [matching] }]),
+      );
+      render(await CloudPage({ searchParams: searchParams({ f: "aws" }) }));
+      expect(screen.getByText("Amazon Web Services adds a feature")).toBeTruthy();
+      expect(screen.getByTestId("filter-status").textContent).toContain('Filtered by "AWS"');
+    });
+
+    it("renders the cloud section's own chips in FilterRow, not ai's -- kills a FilterRow section prop mutation", async () => {
+      vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+      render(await CloudPage({ searchParams: searchParams() }));
+      expect(screen.getByRole("link", { name: "AWS" })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Anthropic" })).toBeNull();
+    });
+
+    it("opens the Others form when others=1 is in searchParams", async () => {
+      vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+      render(await CloudPage({ searchParams: searchParams({ others: "1" }) }));
+      expect(screen.getByRole("textbox", { name: "Filter by any word" })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Others" })).toBeNull();
+    });
   });
 });

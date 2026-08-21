@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS } from "../src/lib/feed/days.js";
+import { matchesFilter, type FilterDef } from "../src/lib/feed/filter.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
 import { FeedView } from "./FeedView.js";
@@ -25,6 +26,11 @@ export interface FeedArchiveProps {
    *  caller already knows which vertical's route this is, and reading it via a hook would force
    *  a client component onto something with no other reason to be one. */
   basePath: string;
+  /** The page's one resolved quick filter (spec 6.3), or `null`/omitted for the unfiltered
+   *  archive. Passed straight through to every day's `FeedView` unchanged -- the filter applies
+   *  identically to every rendered day, so there is exactly one def for the whole archive, not
+   *  one per day. */
+  filterDef?: FilterDef | null;
 }
 
 /** The exact shape `FeedView` already renders as "no ranked day has ever completed" (Task 5).
@@ -56,9 +62,17 @@ const NO_DAYS_RESULT: FeedResult = {
  * which is not the same fact as "no day has ever ranked" and must not be worded as though it
  * were.
  */
-export function FeedArchive({ section, results, failedDays, now, days, basePath }: FeedArchiveProps) {
+export function FeedArchive({
+  section,
+  results,
+  failedDays,
+  now,
+  days,
+  basePath,
+  filterDef,
+}: FeedArchiveProps) {
   if (results.length === 0 && failedDays === 0) {
-    return <FeedView section={section} result={NO_DAYS_RESULT} now={now} />;
+    return <FeedView section={section} result={NO_DAYS_RESULT} now={now} filterDef={filterDef} />;
   }
 
   // More days can only exist if `listDays` returned as many as were asked for -- fewer means
@@ -70,6 +84,23 @@ export function FeedArchive({ section, results, failedDays, now, days, basePath 
   const moreMayExist = results.length + failedDays === days && days < MAX_ARCHIVE_DAYS;
   const nextDays = Math.min(days + ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS);
 
+  // Branch review M6: the FILTER stamp is a SECTION-wide summary -- task-C3-brief.md asked for
+  // shown/total "summed over the rendered days of this section", which is one number, not one
+  // per day. Summed here, once, across every day `results` actually holds, and rendered once
+  // above the whole list; `FeedView` no longer renders any filter-status line of its own (see
+  // its own doc comment). `matchesFilter` runs again here rather than reading a count back off
+  // each `FeedView` render -- a pure function over data already in hand, cheaper than plumbing a
+  // per-day count back up through a prop.
+  const filterTotals = filterDef
+    ? results.reduce(
+        (totals, result) => ({
+          shown: totals.shown + result.articles.filter((a) => matchesFilter(a, filterDef)).length,
+          total: totals.total + result.articles.length,
+        }),
+        { shown: 0, total: 0 },
+      )
+    : null;
+
   return (
     <>
       {failedDays > 0 ? (
@@ -79,8 +110,26 @@ export function FeedArchive({ section, results, failedDays, now, days, basePath 
           sections below may be missing {failedDays === 1 ? "that day" : "those days"}.
         </p>
       ) : null}
+      {filterDef && filterTotals ? (
+        <p
+          data-testid="filter-status"
+          className="apparatus mb-6 flex flex-wrap items-center gap-x-2 gap-y-1.5 opacity-70"
+          data-numeric
+        >
+          <span className="stamp shrink-0">Filter</span>
+          <span>
+            {`Filtered by "${filterDef.label}": ${filterTotals.shown} of ${filterTotals.total} stories in view.`}
+          </span>
+        </p>
+      ) : null}
       {results.map((result) => (
-        <FeedView key={result.day} section={section} result={result} now={now} />
+        <FeedView
+          key={result.day}
+          section={section}
+          result={result}
+          now={now}
+          filterDef={filterDef}
+        />
       ))}
       {moreMayExist ? (
         <Link

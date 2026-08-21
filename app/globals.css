@@ -174,6 +174,30 @@ a {
     padding-block: 0.85rem;
     min-height: 44px;
   }
+
+  /* The quick-filter row (FilterRow)'s own controls get the identical treatment, for the
+     identical reason -- a target sized for a mouse cursor is too small on a touch screen.
+     Scoped to `nav[aria-label="Quick filters"]` rather than a bare attribute selector (branch
+     review M10): the previous `[data-chip]` rule covered only the chip/Others links and would
+     have applied to any future, unrelated `data-chip` anywhere in the app; this also covers the
+     Others form's text input and its Filter submit button, which the old selector missed
+     entirely. */
+  nav[aria-label="Quick filters"] a,
+  nav[aria-label="Quick filters"] input,
+  nav[aria-label="Quick filters"] button {
+    padding-block: 0.85rem;
+    min-height: 44px;
+  }
+}
+
+/* Branch review I5: `:focus-visible` (above) draws its ring in `currentColor`, which on an
+   active filter chip (`.filter-active-chip`, `FilterRow.tsx`) is `var(--field)` -- field on
+   field, 1.00:1, invisible on all three worlds. Overriding just the outline colour to the paper
+   tone keeps the ring visible against the field ground the chip is inverted onto. Scoped to
+   this one class, not applied to `SectionNav`'s identical (pre-existing) current-cell defect,
+   which is out of scope for this round. */
+.filter-active-chip:focus-visible {
+  outline-color: var(--color-paper);
 }
 
 /*

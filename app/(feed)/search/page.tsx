@@ -240,7 +240,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           No results for &quot;{query}&quot;.
         </p>
       ) : (
-        results.map((r) => <DaySection key={r.day} day={r.day} articles={r.articles} now={now} />)
+        results.map((r) => (
+          <DaySection
+            key={r.day}
+            day={r.day}
+            entries={r.articles.map((article, i) => ({ article, rank: i + 1 }))}
+            totalInDay={r.articles.length}
+            now={now}
+          />
+        ))
       )}
       </div>
     </main>

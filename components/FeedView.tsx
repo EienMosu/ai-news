@@ -1,11 +1,21 @@
+import Link from "next/link";
+import { matchesFilter, type FilterDef } from "../src/lib/feed/filter.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
-import { DaySection } from "./DaySection.js";
+import { DaySection, type RankedEntry } from "./DaySection.js";
 
 export interface FeedViewProps {
   section: Section;
   result: FeedResult;
   now: Date;
+  /** The active quick filter (spec 6.3), or `null`/omitted for the unfiltered feed. Resolved
+   *  once per page via `resolveFilter` and threaded down through `FeedArchive` unchanged -- this
+   *  is the one place that actually runs `matchesFilter` against this day's articles, which is
+   *  what lets it filter WITHOUT losing each entry's original day rank: ranks come off the full,
+   *  unfiltered `entries` array (index-based, exactly as before) and only then get narrowed down
+   *  to the matches, so a survivor keeps the rank number it always had (shared-preamble.md's
+   *  "Filter states" paragraph; `DaySection`'s own contract for `RankedEntry`). */
+  filterDef?: FilterDef | null;
 }
 
 const SECTION_LABELS: Record<Section, string> = { ai: "AI", design: "design", cloud: "cloud" };
@@ -67,7 +77,7 @@ export function dayStatusLine(
  * this omits the line rather than hand `dayStatusLine` a fallback `0` it would then report as
  * fact.
  */
-export function FeedView({ section, result, now }: FeedViewProps) {
+export function FeedView({ section, result, now, filterDef }: FeedViewProps) {
   const { day, articles, status, llmRankedInDay, truncatedInDay } = result;
 
   if (day === null) {
@@ -78,9 +88,23 @@ export function FeedView({ section, result, now }: FeedViewProps) {
     );
   }
 
+  // Built from the FULL, unfiltered article list before any filter narrows it down -- `rank` is
+  // `i + 1` here and nowhere else, so a filtered render below still hands DaySection each
+  // survivor's real day rank (01, 04, 07) instead of silently renumbering from 1.
+  const allEntries: RankedEntry[] = articles.map((article, i) => ({ article, rank: i + 1 }));
+  const matchedEntries = filterDef
+    ? allEntries.filter((entry) => matchesFilter(entry.article, filterDef))
+    : allEntries;
+
+  // Branch review M6: the FILTER stamp line is a section-wide summary, not a per-day one (its
+  // shown/total are already summed across every rendered day, task-C3-brief.md), so it renders
+  // exactly once per section view, above the whole day list -- in `FeedArchive`, never here.
+  // `FeedView` still suppresses its own per-day day-status line under an active filter (the
+  // section-wide FILTER line above the list already covers what is filtered), it just no
+  // longer renders a replacement line of its own.
   return (
     <>
-      {llmRankedInDay !== null ? (
+      {filterDef == null && llmRankedInDay !== null ? (
         <p
           data-testid="day-status"
           className="apparatus mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 opacity-70"
@@ -98,8 +122,31 @@ export function FeedView({ section, result, now }: FeedViewProps) {
         <p data-testid="feed-empty-section" className="font-[family-name:var(--font-text)] text-[1.0625rem] italic opacity-80">
           No {SECTION_LABELS[section]} stories for {day}.
         </p>
+      ) : filterDef && matchedEntries.length === 0 ? (
+        // A zero-match day still keeps its sheet (shared-preamble.md's "Filter states"
+        // paragraph) -- the header and paper frame, reused from `DaySection`'s own markup
+        // rather than duplicating the whole component for one extra line, plus the notice that
+        // says so explicitly instead of a blank paper panel that looks broken.
+        <section className="mb-10 sm:mb-14">
+          <div
+            data-surface="paper"
+            className="px-4 pb-2 pt-5 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] sm:px-7 sm:pb-4 sm:pt-7"
+          >
+            <header className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 sm:mb-6">
+              <h2 className="font-[family-name:var(--font-display)] text-[1.75rem] font-extrabold leading-none tracking-[-0.028em] sm:text-[2.25rem]">
+                <Link href={`/day/${day}`} className="no-underline hover:underline" data-numeric>
+                  {day}
+                </Link>
+              </h2>
+              <span className="apparatus opacity-70" data-numeric>
+                0 of {articles.length} stories
+              </span>
+            </header>
+            <p className="apparatus opacity-70">No matches this day.</p>
+          </div>
+        </section>
       ) : (
-        <DaySection day={day} articles={articles} now={now} />
+        <DaySection day={day} entries={matchedEntries} totalInDay={articles.length} now={now} />
       )}
     </>
   );

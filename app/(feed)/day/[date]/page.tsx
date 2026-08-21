@@ -79,7 +79,12 @@ export default async function DayPage({ params }: DayPageProps) {
           This day ranked but produced no stories in either vertical.
         </p>
       ) : (
-        <DaySection day={date} articles={result.articles} now={now} />
+        <DaySection
+          day={date}
+          entries={result.articles.map((article, i) => ({ article, rank: i + 1 }))}
+          totalInDay={result.articles.length}
+          now={now}
+        />
       )}
       </div>
     </main>
