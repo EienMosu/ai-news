@@ -66,7 +66,7 @@ export function SectionNav({ current, days, asHeading = true }: SectionNavProps)
             className="mt-1 h-[26px] w-[26px] shrink-0"
           >
             <path d="M4 3h11l7 7v13H4z" fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d="M15 3v7h7" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M15 3v7h7" fill="none" stroke="currentColor" strokeWidth="2" className="mark-fold" />
           </svg>
 
           <div>

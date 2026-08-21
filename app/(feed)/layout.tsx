@@ -64,6 +64,7 @@ export default async function FeedLayout({ children }: { children: ReactNode }) 
           design feed a blue bar over a vermilion page. Guessing was the wrong repair — the run
           status is a fact about the pipeline, not about the vertical you happen to be reading, so
           sitting outside both colour worlds is what it actually means. */}
+      <a href="#stories" className="skip-link apparatus">Skip to the stories</a>
       <div className="bg-[var(--color-ink)] px-5 py-2.5 text-[color:var(--color-paper)] sm:px-8">
         <div className="mx-auto max-w-3xl">{await RunStatusLine({ now })}</div>
       </div>

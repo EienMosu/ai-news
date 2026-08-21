@@ -143,6 +143,7 @@ export function FeedArchive({
           </span>
         </p>
       ) : null}
+      <div id="stories">
       {results.map((result) => (
         <FeedView
           key={result.day}
@@ -152,6 +153,7 @@ export function FeedArchive({
           filterDef={filterDef}
         />
       ))}
+      </div>
       {moreMayExist ? (
         /* The drawer: the days behind the fold, shown as the file-drawer tab spines they are in
            this world. Each spine is a real /day link derived from the last rendered day by
