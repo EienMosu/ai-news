@@ -1,5 +1,4 @@
 import { DaySection } from "../../../components/DaySection.js";
-import { WorldGround } from "../../../components/WorldGround.js";
 import { SectionNav, SECTION_LABEL } from "../../../components/SectionNav.js";
 import { istanbulDay } from "../../../src/lib/core/day.js";
 import { parseQueryParam, parseSectionParam, parseSinceParam, type SearchScope } from "../../../src/lib/search/params.js";
@@ -166,7 +165,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   if (query === "") {
     return (
       <main data-ground="ink" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
-      <WorldGround field="ink" />
       <div className="mx-auto max-w-3xl">
         <SectionNav current={null} />
         <h1 className="mb-4 text-xl font-bold text-current">Search</h1>
@@ -208,7 +206,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <main data-ground="ink" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
-      <WorldGround field="ink" />
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} />
       <h1 className="mb-4 text-xl font-bold text-current">Search</h1>

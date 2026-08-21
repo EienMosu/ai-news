@@ -1,5 +1,4 @@
 import { FeedArchive } from "../../../components/FeedArchive.js";
-import { WorldGround } from "../../../components/WorldGround.js";
 import { FilterRow } from "../../../components/FilterRow.js";
 import { SectionNav } from "../../../components/SectionNav.js";
 import { parseDaysParam } from "../../../src/lib/feed/days.js";
@@ -41,7 +40,6 @@ export default async function CloudPage({ searchParams }: CloudPageProps) {
 
   return (
     <main data-field="cloud" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
-      <WorldGround field="cloud" />
       <div className="mx-auto max-w-3xl">
       <SectionNav current="cloud" days={days} />
       <FilterRow section="cloud" basePath="/cloud" activeF={activeF} othersOpen={othersOpen} days={days} />
