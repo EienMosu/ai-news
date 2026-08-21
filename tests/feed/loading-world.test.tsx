@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import AiLoading from "../../app/(feed)/loading.js";
 import DesignLoading from "../../app/(feed)/design/loading.js";
+import CloudLoading from "../../app/(feed)/cloud/loading.js";
 
 /**
  * The wait belongs to a world.
@@ -22,8 +23,18 @@ describe("the loading shell wears its own vertical", () => {
     expect(markup).not.toContain('data-field="ai"');
   });
 
+  it("waits in pine for the cloud feed", () => {
+    const markup = renderToStaticMarkup(<CloudLoading />);
+    expect(markup).toContain('data-field="cloud"');
+    expect(markup).not.toContain('data-field="ai"');
+  });
+
   it("shows the counter and the stamp in both, not a spinner", () => {
-    for (const shell of [renderToStaticMarkup(<AiLoading />), renderToStaticMarkup(<DesignLoading />)]) {
+    for (const shell of [
+      renderToStaticMarkup(<AiLoading />),
+      renderToStaticMarkup(<DesignLoading />),
+      renderToStaticMarkup(<CloudLoading />),
+    ]) {
       expect(shell).toContain("odo");
       expect(shell).toContain("Ranking");
     }

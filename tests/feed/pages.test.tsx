@@ -25,6 +25,7 @@ vi.mock("../../src/lib/feed/read.js", () => ({
 }));
 
 import DesignPage from "../../app/(feed)/design/page.js";
+import CloudPage from "../../app/(feed)/cloud/page.js";
 import Home from "../../app/(feed)/page.js";
 import type { FeedResult, RecentDaysOutcome } from "../../src/lib/feed/read.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
@@ -247,4 +248,70 @@ describe("DesignPage (app/design/page.tsx)", () => {
 
   // See the identical note at the end of the `Home` describe block above -- the same removal,
   // same reason, same replacement.
+});
+
+describe("CloudPage (app/cloud/page.tsx)", () => {
+  it("asks getRecentDays for the 'cloud' section", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    render(await CloudPage({ searchParams: searchParams() }));
+    expect(getRecentDays).toHaveBeenCalledWith("cloud", 7);
+  });
+
+  it("marks the Cloud nav link current, not AI or Design", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    render(await CloudPage({ searchParams: searchParams() }));
+    expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("passes its own section through to the rendered day, not either other one", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    render(await CloudPage({ searchParams: searchParams() }));
+    expect(screen.getByText("No cloud stories for 2026-08-18.")).toBeTruthy();
+  });
+
+  it("reads `days` from the awaited searchParams and passes the parsed count to getRecentDays", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    render(await CloudPage({ searchParams: searchParams({ days: "20" }) }));
+    expect(getRecentDays).toHaveBeenCalledWith("cloud", 20);
+  });
+
+  it("clamps an out-of-range `days` value before calling getRecentDays", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    render(await CloudPage({ searchParams: searchParams({ days: "1000" }) }));
+    expect(getRecentDays).toHaveBeenCalledWith("cloud", 30);
+  });
+
+  it("points its load-more link at /cloud, not / or /design", async () => {
+    const results = Array.from({ length: 7 }, (_, i) => ({
+      ...EMPTY_DAY_RESULT,
+      day: `2026-08-${18 - i}`,
+    }));
+    vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
+    render(await CloudPage({ searchParams: searchParams() }));
+    expect(screen.getByTestId("load-more-days").getAttribute("href")).toBe("/cloud?days=14");
+  });
+
+  it("shows the no-ranked-day-at-all message when getRecentDays returns no days", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome());
+    const { container } = render(await CloudPage({ searchParams: searchParams() }));
+    expect(container.querySelector('[data-testid="feed-empty-no-day"]')).not.toBeNull();
+  });
+
+  it("passes getRecentDays' failedDays through to FeedArchive, surfacing a failure notice", async () => {
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT], 1));
+    render(await CloudPage({ searchParams: searchParams() }));
+    expect(screen.getByTestId("feed-days-failed").textContent).toContain("1 day");
+  });
+
+  it("carries a non-default `days` value into the SectionNav links", async () => {
+    const results = Array.from({ length: 14 }, (_, i) => ({
+      ...EMPTY_DAY_RESULT,
+      day: `2026-08-${18 - i}`,
+    }));
+    vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
+    render(await CloudPage({ searchParams: searchParams({ days: "14" }) }));
+    expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
+  });
 });

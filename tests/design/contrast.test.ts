@@ -75,6 +75,7 @@ describe("shipped grounds clear the floor at the softest opacity in use", () => 
   const grounds: Array<[string, string, string]> = [
     ["ai field", "--color-field-ai", "#f3eee2"],
     ["design field", "--color-field-design", "#f6ece7"],
+    ["cloud field", "--color-field-cloud", "#eef2e9"],
   ];
 
   for (const [label, tokenName, onColour] of grounds) {
