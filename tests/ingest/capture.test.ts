@@ -170,23 +170,24 @@ describe("captureAll", () => {
     expect(r.quarantined["techcrunch"]).toBe(0);
   });
 
-  // Fix 2: Reddit must be registered, or a dead Reddit feed could not even
-  // report a zero.
-  it("registers both Reddit sources under the community category", () => {
-    const localllama = SOURCES.find((s) => s.id === "reddit-localllama");
-    const ml = SOURCES.find((s) => s.id === "reddit-ml");
-    expect(localllama).toMatchObject({
+  // Fix 2's claim survives the 2026-08-21 replacement: the community seats must stay
+  // registered, or a dead community feed could not even report a zero. Reddit itself is gone
+  // (403s datacenter IPs, zero items ever landed); the seats now belong to the replacements.
+  it("registers the community replacements for the dead Reddit pair", () => {
+    const simon = SOURCES.find((s) => s.id === "simonwillison");
+    const local = SOURCES.find((s) => s.id === "hn-local");
+    expect(simon).toMatchObject({
       kind: "rss",
       category: "community",
-      name: "r/LocalLLaMA",
-      url: "https://www.reddit.com/r/LocalLLaMA/hot.rss",
+      section: "ai",
+      url: "https://simonwillison.net/atom/everything/",
     });
-    expect(ml).toMatchObject({
-      kind: "rss",
+    expect(local).toMatchObject({
+      kind: "hn",
       category: "community",
-      name: "r/MachineLearning",
-      url: "https://www.reddit.com/r/MachineLearning/hot.rss",
+      section: "ai",
     });
+    expect(SOURCES.some((s) => s.id.startsWith("reddit"))).toBe(false);
   });
 
   // Fix 3: on a cross-source collision, content fields stay first-writer-wins,
