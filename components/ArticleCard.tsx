@@ -88,7 +88,13 @@ export function ArticleCard({ article, now, rank, lead = false }: ArticleCardPro
             </p>
           ) : null}
 
-          <p className="mt-3 max-w-[68ch] font-[family-name:var(--font-text)] text-[0.9375rem] leading-[1.6] opacity-80">
+          {/* Scraped summaries sometimes carry a raw pasted URL with no space to break on (a
+              Reddit post body copying a link twice, for example). Without break-words that
+              single unbroken run overflows this box's own width without ever making the box
+              itself wider, so it is invisible to any check that only measures element rects; it
+              still inflates the document's scrollWidth and, on mobile, the layout viewport
+              itself. break-words lets the browser break the token instead of pushing past it. */}
+          <p className="mt-3 max-w-[68ch] break-words font-[family-name:var(--font-text)] text-[0.9375rem] leading-[1.6] opacity-80">
             {article.summary}
           </p>
 
