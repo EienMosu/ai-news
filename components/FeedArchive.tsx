@@ -72,10 +72,10 @@ const ARCHIVE_DRAWER_SPINES = 5;
  * 86400s units can never skip or double a day across DST, which local-time stepping would.
  * Days that turn out empty are fine: /day renders an honest empty state.
  */
-function olderDays(results: { day: string }[], count: number): string[] {
-  const last = results[results.length - 1];
-  if (last === undefined) return [];
-  const t = Date.parse(`${last.day}T00:00:00.000Z`);
+function olderDays(results: { day: string | null }[], count: number): string[] {
+  const lastDay = [...results].reverse().find((r) => r.day !== null)?.day;
+  if (lastDay === undefined || lastDay === null) return [];
+  const t = Date.parse(`${lastDay}T00:00:00.000Z`);
   if (Number.isNaN(t)) return [];
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(t - (i + 1) * 86_400_000);

@@ -17,7 +17,14 @@ import { pathToFileURL } from "node:url";
 /** Routes that are SUPPOSED to be static. Anything else appearing is a failure; anything here
  *  going missing is too, because that means a static route quietly became dynamic. */
 // /icon.svg joined the set with the favicon (Task A3); next prerenders metadata icons.
-const EXPECTED_STATIC = ["/_global-error", "/_not-found", "/icon.svg", "/robots.txt"];
+// /opengraph-image is the static share card: prerendered on purpose, zero per-request cost.
+const EXPECTED_STATIC = [
+  "/_global-error",
+  "/_not-found",
+  "/icon.svg",
+  "/opengraph-image",
+  "/robots.txt",
+];
 
 export function checkRoutes(manifestPath = ".next/prerender-manifest.json"): number {
   let raw: string;

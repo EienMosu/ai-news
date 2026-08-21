@@ -28,6 +28,14 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  /* Absolute URLs for og:image and friends. VERCEL_PROJECT_PRODUCTION_URL tracks the project
+     through renames, so the coming theslowwire rename needs no edit here; the localhost
+     fallback only ever serves local builds. */
+  metadataBase: new URL(
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "http://localhost:3000",
+  ),
   title: "The Slow Wire",
   description: "Each day’s news, ranked by importance, not recency.",
 };
