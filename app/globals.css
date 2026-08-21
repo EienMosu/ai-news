@@ -62,6 +62,14 @@
   --on-field: #f6ece7;
 }
 
+/* The neutral ground. /day and /search span every vertical, so painting them one section's
+   field claims something false; like the status rail, what belongs to no world wears ink. The
+   lead-entry inversion then lands ink-on-paper, which is this ground's own voice. */
+[data-ground="ink"] {
+  --field: var(--color-ink);
+  --on-field: var(--color-paper);
+}
+
 [data-field="cloud"] {
   --field: var(--color-field-cloud);
   --on-field: #eef2e9;

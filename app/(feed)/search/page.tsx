@@ -164,7 +164,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   if (query === "") {
     return (
-      <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+      <main data-ground="ink" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
         <SectionNav current={null} />
         <h1 className="mb-4 text-xl font-bold text-current">Search</h1>
@@ -205,7 +205,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const results = [...recentOutcome.days, ...archiveOutcome.days];
 
   return (
-    <main data-field="ai" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+    <main data-ground="ink" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} />
       <h1 className="mb-4 text-xl font-bold text-current">Search</h1>

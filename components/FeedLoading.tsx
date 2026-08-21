@@ -1,9 +1,10 @@
 import type { Section } from "../src/types/article.js";
 
 export interface FeedLoadingProps {
-  /** The vertical being opened. The wait belongs to a world, so it is painted in that world's
-   *  field -- a shared shell hard-coded to one vertical flashes the wrong colour on the other. */
-  field: Section;
+  /** The vertical being opened, or "ink" for the surfaces that belong to no vertical (/day,
+   *  /search). The wait belongs to a ground, so it is painted in that ground's colour; a shared
+   *  shell hard-coded to one vertical flashes the wrong colour on the others. */
+  field: Section | "ink";
 }
 
 /**
@@ -23,7 +24,7 @@ export interface FeedLoadingProps {
  */
 export function FeedLoading({ field }: FeedLoadingProps) {
   return (
-    <main data-field={field} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+    <main {...(field === "ink" ? { "data-ground": "ink" } : { "data-field": field })} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 sm:mb-11">
           <h1 className="font-[family-name:var(--font-display)] text-[2.5rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:text-[3rem]">
