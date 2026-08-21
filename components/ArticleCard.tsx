@@ -56,8 +56,13 @@ export function ArticleCard({ article, now, rank, lead = false }: ArticleCardPro
         ) : null}
 
         <div className="min-w-0 flex-1">
+          {/* Same ink-overflow class as the summary below: a scraped title with no break
+              opportunity in a long run paints past this box without ever making the box
+              itself measure wider, invisible to a rect sweep, and inflates the mobile layout
+              viewport (the 745px defect A4 diagnosed on the summary paragraph). break-words is
+              the same one-class guard, applied here because the input is exactly as hostile. */}
           <h3
-            className="font-[family-name:var(--font-display)] text-[1.0625rem] font-semibold leading-[1.25] tracking-[-0.011em] underline-offset-[0.22em] group-hover:underline sm:text-[1.1875rem]"
+            className="break-words font-[family-name:var(--font-display)] text-[1.0625rem] font-semibold leading-[1.25] tracking-[-0.011em] underline-offset-[0.22em] group-hover:underline sm:text-[1.1875rem]"
             style={{ textWrap: "balance" }}
           >
             {article.title}
@@ -82,13 +87,19 @@ export function ArticleCard({ article, now, rank, lead = false }: ArticleCardPro
           {article.whyItMatters !== null ? (
             <p
               data-testid="why-it-matters"
-              className="mt-3 border-l border-current pl-3 font-[family-name:var(--font-text)] text-[0.9375rem] italic leading-[1.5]"
+              className="mt-3 break-words border-l border-current pl-3 font-[family-name:var(--font-text)] text-[0.9375rem] italic leading-[1.5]"
             >
               {article.whyItMatters}
             </p>
           ) : null}
 
-          <p className="mt-3 max-w-[68ch] font-[family-name:var(--font-text)] text-[0.9375rem] leading-[1.6] opacity-80">
+          {/* Scraped summaries sometimes carry a raw pasted URL with no space to break on (a
+              Reddit post body copying a link twice, for example). Without break-words that
+              single unbroken run overflows this box's own width without ever making the box
+              itself wider, so it is invisible to any check that only measures element rects; it
+              still inflates the document's scrollWidth and, on mobile, the layout viewport
+              itself. break-words lets the browser break the token instead of pushing past it. */}
+          <p className="mt-3 max-w-[68ch] break-words font-[family-name:var(--font-text)] text-[0.9375rem] leading-[1.6] opacity-80">
             {article.summary}
           </p>
 

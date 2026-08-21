@@ -28,7 +28,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI News",
+  title: "The Slow Wire",
+  description: "Each day’s news, ranked by importance, not recency.",
 };
 
 //
@@ -36,10 +37,13 @@ export const metadata: Metadata = {
 // Not rendered: a JSX comment is stripped at compile time. The shipped record of this
 // world is DESIGN.md.
 //
-// THESIS: A day that was judged, shown as the file it was judged in. Refuses the reader's
-// default arrangement — a white page of same-size cards sorted by recency — because this
+// THESIS: The Slow Wire
+// A day that was judged, shown as the file it was judged in. Refuses the reader's
+// default arrangement -- a white page of same-size cards sorted by recency -- because this
 // product's whole claim is that something read the day and ranked it, and a card list
 // hides the ranking inside an order nobody can see.
+// AMENDMENT (2026-08-21): The paper grid was removed for a cleaner sheet.
+// AMENDMENT (2026-08-21): The masthead dropped one step so the section switch reads as the primary axis.
 // OWN-WORLD: Two drenched colour worlds, one per vertical (ink blue #16307f for AI,
 // vermilion #7e2412 for design), each carrying a bone paper sheet (#efe9dc) with a faint
 // graph tint. Bricolage Grotesque display, Literata prose, JetBrains Mono apparatus.

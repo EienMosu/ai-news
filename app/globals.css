@@ -41,6 +41,20 @@
   --on-field: #f3eee2;
 }
 
+/*
+  Explicit even for the default world, not just design: the section switch's hover preview (A2)
+  puts `data-field` on cell links nested inside whichever `<main data-field>` is currently
+  ambient. On the design page that ambient value is design's red, and custom properties only
+  re-derive on an element that a selector matches directly -- inheritance alone would leave an
+  AI cell showing the page's red on hover instead of its own blue. Every section needs its own
+  rule here so hovering back to it always re-derives that section's own colours, regardless of
+  which world the switch is currently sitting in.
+*/
+[data-field="ai"] {
+  --field: var(--color-field-ai);
+  --on-field: #f3eee2;
+}
+
 [data-field="design"] {
   --field: var(--color-field-design);
   --on-field: #f6ece7;
@@ -129,15 +143,10 @@ a {
 }
 
 /*
-  The paper panel. A sheet laid on the field, with a faint graph tint — the drafting-canvas move
-  from Illoca, kept faint enough that prose sits on it comfortably.
+  The paper panel. A clean sheet laid on the field; the shadow does the lifting.
 */
 [data-surface="paper"] {
   background-color: var(--color-paper);
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--color-ink) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--color-ink) 5%, transparent) 1px, transparent 1px);
-  background-size: 1.5rem 1.5rem;
   color: var(--color-ink);
 }
 
@@ -148,6 +157,15 @@ a {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Coarse pointers only: raises the section switch's tap target to 44px without adding bulk to
+   the mouse-driven desktop layout, where the box is already comfortably clickable. */
+@media (pointer: coarse) {
+  nav[aria-label="Sections"] a {
+    padding-block: 0.85rem;
+    min-height: 44px;
   }
 }
 
