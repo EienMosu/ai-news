@@ -91,18 +91,26 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} asHeading={false} />
 
-      <article>
+      <article
+        data-surface="paper"
+        className="px-5 pb-7 pt-6 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] sm:px-9 sm:pb-9 sm:pt-8"
+      >
         {article.imageUrl !== null ? (
           <img
             src={article.imageUrl}
             alt=""
-            className="mb-4 w-full rounded object-cover"
+            className="mb-5 w-full object-cover"
           />
         ) : null}
 
-        <h1 className="text-2xl font-bold text-current">{article.title}</h1>
+        <h1
+          className="font-[family-name:var(--font-display)] text-[1.5rem] font-extrabold leading-[1.12] tracking-[-0.025em] sm:text-[2rem]"
+          style={{ textWrap: "balance" }}
+        >
+          {article.title}
+        </h1>
 
-        <p data-testid="meta" className="mt-2 text-sm opacity-75">
+        <p data-testid="meta" className="apparatus mt-3 opacity-75">
           {article.sourceName !== "" ? `${article.sourceName} · ` : null}
           <time dateTime={article.publishedAt ?? undefined}>
             {relativeTime(article.publishedAt, now)}
@@ -134,13 +142,18 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         {article.whyItMatters !== null ? (
           <p
             data-testid="why-it-matters"
-            className="mt-4 border-l border-current/35 pl-4 font-[family-name:var(--font-text)] text-[1.0625rem] italic leading-[1.55]"
+            className="mt-6 max-w-[62ch] border-l-[1px] border-current pl-4 font-[family-name:var(--font-text)] text-[1.1875rem] italic leading-[1.55]"
           >
             {article.whyItMatters}
           </p>
         ) : null}
 
-        <p data-testid="summary" className="mt-4 opacity-85">{article.summary}</p>
+        <p
+          data-testid="summary"
+          className="mt-5 max-w-[65ch] font-[family-name:var(--font-text)] text-[1.0625rem] leading-[1.65] opacity-85"
+        >
+          {article.summary}
+        </p>
 
         {/* Plain `<a>`, not `next/link`: this leaves the app for the original source, which is
          *  exactly the case `next/link`'s soft-navigation model does not apply to (decision 8).
@@ -161,18 +174,22 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             target="_blank"
             rel="noopener noreferrer"
             data-testid="original-link"
-            className="mt-6 inline-block rounded bg-[var(--color-paper)] px-4 py-2 text-sm font-semibold text-[color:var(--field)] no-underline hover:opacity-85"
+            className="mt-8 inline-block px-5 py-3 font-[family-name:var(--font-display)] text-[0.9375rem] font-semibold no-underline transition-opacity hover:opacity-90"
+            style={{ background: "var(--field)", color: "var(--on-field)" }}
           >
             Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
           </a>
         ) : (
-          <p data-testid="original-link-unavailable" className="mt-6 text-sm opacity-75">
+          <p data-testid="original-link-unavailable" className="apparatus mt-8 opacity-75">
             Original source link unavailable.
           </p>
         )}
+      </article>
 
-        <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide opacity-75">
+      {/* The instruments stay on the field, outside the document -- the same split the feed
+          teaches: paper carries what was written, the field carries what the system knows. */}
+      <section className="mt-8">
+          <h2 className="apparatus opacity-75">
             Ranking signals
           </h2>
           {/* `isUnranked` (scoreVersion === "v1-degraded") means the model never scored this
@@ -203,7 +220,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
         {siblings.length > 0 ? (
           <section data-testid="siblings" className="mt-8">
-            <h2 className="text-sm font-semibold uppercase tracking-wide opacity-75">
+            <h2 className="apparatus opacity-75">
               Also covered by
             </h2>
             <ul className="mt-2 flex flex-col gap-1.5">
@@ -225,7 +242,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             </ul>
           </section>
         ) : null}
-      </article>
       </div>
     </main>
   );
