@@ -190,13 +190,13 @@ a {
   }
 }
 
-/* Branch review I5: `:focus-visible` (above) draws its ring in `currentColor`, which on an
-   active filter chip (`.filter-active-chip`, `FilterRow.tsx`) is `var(--field)` -- field on
-   field, 1.00:1, invisible on all three worlds. Overriding just the outline colour to the paper
-   tone keeps the ring visible against the field ground the chip is inverted onto. Scoped to
-   this one class, not applied to `SectionNav`'s identical (pre-existing) current-cell defect,
-   which is out of scope for this round. */
-.filter-active-chip:focus-visible {
+/* Branch review I5 (and the same pre-existing defect on the switch's current cell):
+   `:focus-visible` (above) draws its ring in `currentColor`, which on a paper-inverted control
+   is `var(--field)` -- field on field, 1.00:1, invisible on all three worlds. Overriding just
+   the outline colour to the paper tone keeps the ring visible against the field ground. Applied
+   to both inverted controls: the active filter chip and the switch's current cell. */
+.filter-active-chip:focus-visible,
+.switch-current:focus-visible {
   outline-color: var(--color-paper);
 }
 

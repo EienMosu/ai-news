@@ -50,7 +50,13 @@ describe("SectionNav", () => {
       expect(within(nav).getAllByRole("link")).toHaveLength(SECTIONS.length);
     });
 
-    it("labels every switch link from the SECTION_LABEL map, in SECTIONS order", () => {
+    it("gives the current cell the switch-current class the focus-ring override targets", () => {
+    render(<SectionNav current="design" />);
+    expect(screen.getByRole("link", { name: "Design" }).className).toContain("switch-current");
+    expect(screen.getByRole("link", { name: "AI" }).className).not.toContain("switch-current");
+  });
+
+  it("labels every switch link from the SECTION_LABEL map, in SECTIONS order", () => {
       render(<SectionNav current={null} />);
       const nav = screen.getByRole("navigation", { name: "Sections" });
       const links = within(nav).getAllByRole("link");

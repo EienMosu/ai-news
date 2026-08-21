@@ -104,7 +104,7 @@ export function SectionNav({ current, days, asHeading = true }: SectionNavProps)
                 "apparatus min-w-0 flex-1 border-current/35 px-2 py-3 text-center font-bold",
                 "no-underline transition-colors duration-200 [&+a]:border-l",
                 isCurrent
-                  ? ""
+                  ? "switch-current"
                   : "opacity-70 hover:opacity-100 hover:bg-[var(--field)] hover:text-[var(--on-field)]",
               ].join(" ")}
               style={
