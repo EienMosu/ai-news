@@ -26,6 +26,7 @@ export interface SectionNavProps {
 export const SECTION_LABEL: Record<Section, string> = {
   ai: "AI",
   design: "Design",
+  cloud: "Cloud",
 };
 
 const MASTHEAD_CLASS =

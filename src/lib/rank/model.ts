@@ -39,8 +39,16 @@ export const RANK_MODEL = "global.anthropic.claude-sonnet-4-6";
  * Combined, that lands the real monthly figure near **$14–15/month**, against the $25/month
  * budget alarm and the owner's stated $20–30 ceiling: comfortable headroom, not a rounding
  * error away from tripping the alarm. This is the number to revisit before adding a third run.
+ *
+ * Raised again, 250 to 375, when the Cloud vertical shipped (spec theslowwire-design.md §5.1,
+ * "Ranking budget"). allocateRankingCap already splits the cap fairly by section and needed no
+ * change; but a third vertical against an unchanged cap would have quietly cut every section's
+ * own fair share too -- ai and design each held 125 of the old 250 (2 sections); 375 across 3
+ * sections keeps that same 125 per section rather than shrinking it to make room for cloud.
+ * Cloud's own sources (Task B2) are not live yet, so there is no live day to re-measure cost
+ * against -- revisit the monthly figure above once they are.
  */
-export const RANK_INPUT_CAP = 250;
+export const RANK_INPUT_CAP = 375;
 
 /** Caps thinking PLUS response text, not response text alone. Spec §6. */
 export const MAX_TOKENS = 32_000;

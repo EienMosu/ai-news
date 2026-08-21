@@ -18,7 +18,7 @@ export const SOURCE_WEIGHTS: Record<Category, number> = {
  * the topic VERTICAL a reader navigates between. A design *lab* announcement and an AI *lab*
  * announcement share a category and differ only in section.
  */
-export const SECTIONS = ["ai", "design"] as const;
+export const SECTIONS = ["ai", "design", "cloud"] as const;
 export type Section = (typeof SECTIONS)[number];
 
 /**

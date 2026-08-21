@@ -1,4 +1,5 @@
 import { truncate } from "../core/text.js";
+import { SECTIONS, type Section } from "../../types/article.js";
 
 export const SUMMARY_CHARS_FOR_RANKING = 300;
 
@@ -93,6 +94,24 @@ function describeSections(sections: string[]): string {
   return `${sections.length} sections: ${sections.join(", ")}`;
 }
 
+/**
+ * A one-line field guide for each vertical the product covers, told to the model on every call
+ * regardless of which sections happen to have candidates today. `describeSections` above only
+ * names the sections actually present in THIS run's candidates; this is what keeps the model
+ * from having to guess what belongs in a vertical it has no candidates for yet -- cloud, on its
+ * first live day, is exactly why this exists.
+ *
+ * Typed `Record<Section, string>`, not `Record<string, string>`, so a fourth entry added to
+ * `SECTIONS` fails to typecheck here until it gets a guide line too -- the same guarantee
+ * `SECTION_LABEL` already gives `components/SectionNav.tsx`. `tests/rank/prompt.test.ts` also
+ * asserts this at runtime, since a build that skips typechecking would otherwise miss it.
+ */
+export const SECTION_GUIDE: Record<Section, string> = {
+  ai: "ai: artificial intelligence research, models, and products (frontier labs, model releases, developer tooling, AI policy)",
+  design: "design: design tools, practice, and products (interface design, prototyping, design systems, creative tooling)",
+  cloud: "cloud: cloud platforms and infrastructure (AWS, Azure, GCP, Kubernetes, CDN and edge, cloud economics, major outages)",
+};
+
 /** Ordinal ids keep 64-char hashes out of the token bill — see the cost table in the plan. */
 export function buildRankPrompt(candidates: RankCandidate[]): {
   text: string;
@@ -108,10 +127,12 @@ export function buildRankPrompt(candidates: RankCandidate[]): {
   });
 
   const sections = [...new Set(candidates.map((c) => c.section))];
+  const guide = SECTIONS.map((s) => SECTION_GUIDE[s]).join("; ");
   const text =
     `Here are ${candidates.length} articles captured today, spanning ${describeSections(sections)}. ` +
     `Score each one's importance within its OWN section, never against the other, ` +
     `and group articles covering the same underlying story.\n\n` +
+    `Section field guide -- ${guide}.\n\n` +
     `Return an entry for EVERY id below. Use the id exactly as written.\n\n` +
     lines.join("\n\n");
 

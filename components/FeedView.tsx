@@ -8,7 +8,7 @@ export interface FeedViewProps {
   now: Date;
 }
 
-const SECTION_LABELS: Record<Section, string> = { ai: "AI", design: "design" };
+const SECTION_LABELS: Record<Section, string> = { ai: "AI", design: "design", cloud: "cloud" };
 
 /**
  * The day-status line. `llmRankedInDay`/`truncatedInDay` are totals across BOTH verticals (see
