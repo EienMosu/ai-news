@@ -21,19 +21,23 @@ const DESIGN_SOURCES = [
 ] as const;
 const CLOUD_SOURCES = [
   { id: "aws-news", name: "AWS News Blog", category: "lab",
-    url: "https://aws.amazon.com/blogs/aws/feed/" },
+    url: "https://aws.amazon.com/blogs/aws/feed/", maxItems: undefined },
   { id: "azure", name: "Microsoft Azure Blog", category: "lab",
-    url: "https://azure.microsoft.com/en-us/blog/feed/" },
+    url: "https://azure.microsoft.com/en-us/blog/feed/", maxItems: undefined },
   { id: "gcp", name: "Google Cloud Blog", category: "lab",
-    url: "https://cloudblog.withgoogle.com/rss/" },
-  { id: "cloudflare", name: "Cloudflare Blog", category: "lab",
-    url: "https://blog.cloudflare.com/rss/" },
+    url: "https://cloudblog.withgoogle.com/rss/", maxItems: undefined },
+  // I5 ruling (branch review): cloudflare/hashicorp are vendor blogs one step removed from the
+  // big-three platforms above, so they hold the news (0.7) weight, not lab (1.0).
+  { id: "cloudflare", name: "Cloudflare Blog", category: "news",
+    url: "https://blog.cloudflare.com/rss/", maxItems: undefined },
   { id: "cncf", name: "CNCF", category: "community",
-    url: "https://www.cncf.io/feed/" },
-  { id: "hashicorp", name: "HashiCorp Blog", category: "lab",
-    url: "https://www.hashicorp.com/blog/feed.xml" },
+    url: "https://www.cncf.io/feed/", maxItems: undefined },
+  { id: "hashicorp", name: "HashiCorp Blog", category: "news",
+    url: "https://www.hashicorp.com/blog/feed.xml", maxItems: undefined },
+  // M6: capped at 30 (a high-volume feed) so cloud's aggregate day-one supply cannot alone
+  // saturate RANK_INPUT_CAP.
   { id: "newstack", name: "The New Stack", category: "news",
-    url: "https://thenewstack.io/feed/" },
+    url: "https://thenewstack.io/feed/", maxItems: 30 },
 ] as const;
 const AI_IDS = [
   "techcrunch", "verge", "arstechnica", "venturebeat", "mittr", "openai", "deepmind",
@@ -81,7 +85,7 @@ describe("section", () => {
     }
   });
 
-  it("puts every RSS source on the cloud vertical, with the right id/name/category/url/kind", () => {
+  it("puts every RSS source on the cloud vertical, with the right id/name/category/url/kind/maxItems", () => {
     // Mutation: changing any one field of any one entry above (e.g. aws-news's url, or
     // cncf's category from "community" to "lab") makes this fail on that field.
     for (const expected of CLOUD_SOURCES) {
@@ -92,17 +96,33 @@ describe("section", () => {
       expect(s?.url).toBe(expected.url);
       expect(s?.kind).toBe("rss");
       expect(s?.section).toBe("cloud");
+      expect(s?.maxItems, `${expected.id} maxItems`).toBe(expected.maxItems);
     }
   });
 
-  it("keeps hn-cloud on the cloud vertical with the right shape", () => {
+  it("keeps aws-news, azure and gcp at the lab weight -- I5 ruling: primary platform sources for this vertical's owner", () => {
+    for (const id of ["aws-news", "azure", "gcp"]) {
+      const s = SOURCES.find((x) => x.id === id);
+      expect(s?.category, `${id} must stay category "lab"`).toBe("lab");
+    }
+  });
+
+  it("drops cloudflare and hashicorp to the news weight, not lab -- I5 ruling", () => {
+    for (const id of ["cloudflare", "hashicorp"]) {
+      const s = SOURCES.find((x) => x.id === id);
+      expect(s?.category, `${id} must be category "news"`).toBe("news");
+    }
+  });
+
+  it("keeps hn-cloud on the cloud vertical with the right shape, bounded per M6", () => {
     const s = SOURCES.find((x) => x.id === "hn-cloud");
     expect(s, "hn-cloud is missing from SOURCES").toBeDefined();
     expect(s?.name).toBe("Hacker News (cloud)");
     expect(s?.category).toBe("community");
-    expect(s?.url).toBe("https://hn.algolia.com/api/v1/search_by_date?query=cloud&tags=story&numericFilters=points%3E20&hitsPerPage=50");
+    expect(s?.url).toBe("https://hn.algolia.com/api/v1/search_by_date?query=cloud&tags=story&numericFilters=points%3E20&hitsPerPage=25");
     expect(s?.kind).toBe("hn");
     expect(s?.section).toBe("cloud");
+    expect(s?.maxItems).toBe(25);
     expect(SOURCES.filter((s) => s.section === "cloud")).toHaveLength(8);
   });
 });

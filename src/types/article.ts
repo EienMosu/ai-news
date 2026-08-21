@@ -12,11 +12,11 @@ export const SOURCE_WEIGHTS: Record<Category, number> = {
 };
 
 /**
- * The reader-facing topic vertical (AI news vs. design news), not to be confused with
- * `Category` above. The two are orthogonal: `category` is the source's TYPE — news / lab /
- * community / research — and drives `SOURCE_WEIGHTS` in the scoring formula; `section` is
- * the topic VERTICAL a reader navigates between. A design *lab* announcement and an AI *lab*
- * announcement share a category and differ only in section.
+ * The reader-facing topic vertical (AI news, design news, cloud news, and whatever this list
+ * grows to next), not to be confused with `Category` above. The two are orthogonal: `category`
+ * is the source's TYPE -- news / lab / community / research -- and drives `SOURCE_WEIGHTS` in the
+ * scoring formula; `section` is the topic VERTICAL a reader navigates between. A design *lab*
+ * announcement and an AI *lab* announcement share a category and differ only in section.
  */
 export const SECTIONS = ["ai", "design", "cloud"] as const;
 export type Section = (typeof SECTIONS)[number];

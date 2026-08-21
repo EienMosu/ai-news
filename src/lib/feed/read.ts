@@ -26,14 +26,14 @@ const asNumberOrNull = (v: unknown): number | null => (typeof v === "number" ? v
 /**
  * A day's worth of feed articles plus the metadata the UI needs to say what it is looking at.
  *
- * `llmRankedInDay` and `truncatedInDay` are day totals across BOTH verticals, not counts of
+ * `llmRankedInDay` and `truncatedInDay` are day totals across every vertical, not counts of
  * `articles` -- the model's ranking cap and corroboration pass run once per day, not once per
  * section, so there is no per-section equivalent to report. The "InDay" suffix is deliberate:
  * a plain `llmRanked` sitting beside a section-filtered `articles` array would read, at the
  * call site, as if it described that array -- the same hazard Spec §7 calls out for the
  * sibling `articleCount` field ("a header reading '23 stories' ... must be computed from the
  * filtered list, not read from the meta item"). A header built on this value must say
- * "40 ranked across both sections today", never "40 of this section's articles were ranked".
+ * "40 ranked across all sections today", never "40 of this section's articles were ranked".
  */
 export interface FeedResult {
   articles: FeedArticle[];
@@ -145,7 +145,7 @@ export async function getRecentDays(section: Section, count: number): Promise<Re
 
 /**
  * The named day, unfiltered by section -- `/day/[date]` deep-links to a specific date and
- * shows both verticals. Unlike `getRecentDays`, the day is a caller-supplied fact, not something
+ * shows every vertical. Unlike `getRecentDays`, the day is a caller-supplied fact, not something
  * this function discovers itself from `listDays`, so `day` in the result is always the input,
  * even when nothing was found for it.
  *

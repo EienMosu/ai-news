@@ -9,8 +9,8 @@ export interface RankCandidate {
   summary: string;
   sourceName: string;
   category: string;
-  /** The topic vertical ("ai" | "design"). Told to the model so it scores importance within
-   *  the article's own field rather than against the other vertical. */
+  /** The topic vertical (e.g. "ai", "design", "cloud"). Told to the model so it scores
+   *  importance within the article's own field rather than against another vertical's. */
   section: string;
   publishedAt: string | null;
   /**
@@ -52,10 +52,10 @@ export const RANKING_SCHEMA = {
             type: "number",
             description:
               "0-100, scored within the article's own section (see each line's tag) -- " +
-              "never compare an ai article against a design one. 90+ is a major release " +
-              "or landmark result IN THAT FIELD, or changes what its practitioners do this " +
-              "week. 50 is routine industry news. Below 20 is marketing, funding minutiae, " +
-              "or rehashed coverage.",
+              "never compare an article against one from a different section. 90+ is a major " +
+              "release or landmark result IN THAT FIELD, or changes what its practitioners do " +
+              "this week. 50 is routine industry news. Below 20 is marketing, funding " +
+              "minutiae, or rehashed coverage.",
           },
           clusterId: {
             type: "string",
@@ -84,9 +84,14 @@ export const RANKING_SCHEMA = {
 
 /**
  * Names the sections actually present, generically -- the allocator in `allocate.ts` is
- * already N-section generic and well tested; this used to be the one place in the pipeline
+ * already N-section generic and well tested; this was one of the last places in the pipeline
  * that still assumed exactly two ("ai" and "design"), so a third section would have shipped
  * with a prompt lying to the model about how many verticals it was scoring across.
+ *
+ * The `importance` field description above and the preamble sentence in `buildRankPrompt`
+ * below carried the same two-vertical assumption in hardcoded prose (branch review, I4) -- both
+ * fixed alongside this one, so a fourth vertical now only needs a `SECTION_GUIDE` entry, not a
+ * grep for stray "ai"/"design" wording elsewhere in this file.
  */
 function describeSections(sections: string[]): string {
   if (sections.length === 0) return "no sections";
@@ -130,7 +135,7 @@ export function buildRankPrompt(candidates: RankCandidate[]): {
   const guide = SECTIONS.map((s) => SECTION_GUIDE[s]).join("; ");
   const text =
     `Here are ${candidates.length} articles captured today, spanning ${describeSections(sections)}. ` +
-    `Score each one's importance within its OWN section, never against the other, ` +
+    `Score each one's importance within its OWN section, never against another section, ` +
     `and group articles covering the same underlying story.\n\n` +
     `Section field guide -- ${guide}.\n\n` +
     `Return an entry for EVERY id below. Use the id exactly as written.\n\n` +

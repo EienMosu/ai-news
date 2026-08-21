@@ -39,6 +39,10 @@ describe("parseSectionParam", () => {
     expect(parseSectionParam("both", "ai")).toBe("both");
   });
 
+  it("returns 'cloud' when given 'cloud' -- the branch's own SectionNav emits ?section=cloud from /cloud", () => {
+    expect(parseSectionParam("cloud", "ai")).toBe("cloud");
+  });
+
   it("falls back to the caller's fallback for a missing value", () => {
     expect(parseSectionParam(undefined, "design")).toBe("design");
   });
