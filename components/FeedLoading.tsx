@@ -26,8 +26,8 @@ export function FeedLoading({ field }: FeedLoadingProps) {
     <main data-field={field} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 sm:mb-11">
-          <h1 className="font-[family-name:var(--font-display)] text-[2.5rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:text-[3.5rem]">
-            AI&nbsp;News
+          <h1 className="font-[family-name:var(--font-display)] text-[2.5rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:text-[3rem]">
+            The Slow&nbsp;Wire
           </h1>
           <p className="apparatus opacity-70">Opening the file</p>
         </div>

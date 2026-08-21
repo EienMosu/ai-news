@@ -59,10 +59,15 @@ describe("SectionNav", () => {
       });
     });
 
-    it("every SECTIONS entry has a SECTION_LABEL entry -- so a new section cannot ship unlabelled", () => {
+    it("every SECTIONS entry has a SECTION_LABEL entry, and today's labels read AI and Design literally -- so a new section cannot ship unlabelled, and a wrong value in the map cannot pass by matching itself", () => {
       for (const section of SECTIONS) {
         expect(SECTION_LABEL[section]).toBeTruthy();
       }
+
+      render(<SectionNav current={null} />);
+      const nav = screen.getByRole("navigation", { name: "Sections" });
+      const texts = within(nav).getAllByRole("link").map((link) => link.textContent);
+      expect(texts).toEqual(["AI", "Design"]);
     });
 
     it("renders both section links with the right hrefs", () => {

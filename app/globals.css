@@ -165,6 +165,7 @@ a {
 @media (pointer: coarse) {
   nav[aria-label="Sections"] a {
     padding-block: 0.85rem;
+    min-height: 44px;
   }
 }
 
