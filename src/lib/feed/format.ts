@@ -41,3 +41,18 @@ export function formatDayKey(day: string): string {
   const [y, m, d] = day.split("-");
   return `${d}.${m}.${y}`;
 }
+
+import type { Section } from "../../types/article.js";
+
+/**
+ * The canonical article URL, section-first: `/article/<section>/<urlHash>`.
+ *
+ * The section rides in the path for exactly one reason: `loading.tsx` files receive no params,
+ * so a single dynamic article route could only ever show ONE world's loading shell -- and it
+ * showed the AI blue on every vertical (owner report). Three literal section segments each
+ * carry their own shell. `null` section (items stored before validation) files under ai, and
+ * the page redirects to the canonical path when the stored section disagrees with the URL.
+ */
+export function articlePath(section: Section | null, urlHash: string): string {
+  return `/article/${section ?? "ai"}/${urlHash}`;
+}

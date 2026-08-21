@@ -119,7 +119,7 @@ describe("ArticleCard", () => {
     const article = toFeedArticle(raw());
     const { container } = render(<ArticleCard article={article} now={NOW} />);
     const link = container.querySelector("a");
-    expect(link?.getAttribute("href")).toBe(`/article/${"a".repeat(64)}`);
+    expect(link?.getAttribute("href")).toBe(`/article/ai/${"a".repeat(64)}`);
   });
 
   it("wraps the relative time in a <time> element carrying the ISO publishedAt as dateTime", () => {

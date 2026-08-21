@@ -20,7 +20,7 @@ vi.mock("../../src/lib/feed/read.js", () => ({
   getDay: vi.fn(),
 }));
 
-import ArticlePage from "../../app/(feed)/article/[urlHash]/page.js";
+import { ArticlePageImpl } from "../../app/(feed)/article/article-page-impl.js";
 import { getArticle, getDay } from "../../src/lib/feed/read.js";
 import { toArticleDetail, toFeedArticle } from "../../src/lib/feed/shape.js";
 
@@ -94,7 +94,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     // (a found article), independent of the 404 behaviour.
     vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null }));
 
-    await ArticlePage({ params: params(HASH) });
+    await ArticlePageImpl({ pathSection: "ai", params: params(HASH) });
 
     expect(getArticle).toHaveBeenCalledWith(HASH);
   });
@@ -110,7 +110,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
 
     let caught: unknown;
     try {
-      await ArticlePage({ params: params(HASH) });
+      await ArticlePageImpl({ pathSection: "ai", params: params(HASH) });
     } catch (err) {
       caught = err;
     }
@@ -121,7 +121,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
   it("does not call getDay when the article is missing", async () => {
     vi.mocked(getArticle).mockResolvedValue(null);
 
-    await expect(ArticlePage({ params: params(HASH) })).rejects.toThrow();
+    await expect(ArticlePageImpl({ pathSection: "ai", params: params(HASH) })).rejects.toThrow();
     expect(getDay).not.toHaveBeenCalled();
   });
 
@@ -135,7 +135,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     it("404s WITHOUT ever calling getArticle for a hash that is not 64 lowercase-hex characters", async () => {
       let caught: unknown;
       try {
-        await ArticlePage({ params: params("not-a-hash") });
+        await ArticlePageImpl({ pathSection: "ai", params: params("not-a-hash") });
       } catch (err) {
         caught = err;
       }
@@ -149,7 +149,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
 
       let caught: unknown;
       try {
-        await ArticlePage({ params: params(upper) });
+        await ArticlePageImpl({ pathSection: "ai", params: params(upper) });
       } catch (err) {
         caught = err;
       }
@@ -161,7 +161,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     it("still calls getArticle for a well-formed hash", async () => {
       vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null }));
 
-      await ArticlePage({ params: params(HASH) });
+      await ArticlePageImpl({ pathSection: "ai", params: params(HASH) });
 
       expect(getArticle).toHaveBeenCalledWith(HASH);
     });
@@ -173,7 +173,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, clusterId: "2026-08-18#gpt6", corroborationToday: 3 }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.queryByTestId("siblings")).toBeNull();
       expect(getDay).not.toHaveBeenCalled();
@@ -188,7 +188,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: "2026-08-18", clusterId: null }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.queryByTestId("siblings")).toBeNull();
       expect(getDay).not.toHaveBeenCalled();
@@ -199,7 +199,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: "2026-08-18", clusterId: `__self__:${HASH}` }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.queryByTestId("siblings")).toBeNull();
       expect(getDay).not.toHaveBeenCalled();
@@ -210,7 +210,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: "2026-08-18", clusterId: "2026-08-18#gpt6", corroborationToday: 2 }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(getDay).toHaveBeenCalledWith("2026-08-18");
     });
@@ -238,10 +238,10 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         ],
       });
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       const siblingLink = screen.getByRole("link", { name: "The Verge" });
-      expect(siblingLink.getAttribute("href")).toBe(`/article/${SIBLING_HASH}`);
+      expect(siblingLink.getAttribute("href")).toBe(`/article/ai/${SIBLING_HASH}`);
       expect(screen.queryByRole("link", { name: "TechCrunch" })).toBeNull();
     });
 
@@ -263,7 +263,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         ],
       });
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(
         screen.getByRole("link", { name: "A degraded sibling with no source name" }),
@@ -274,7 +274,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
   it("renders SectionNav with neither vertical current", async () => {
     vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null }));
 
-    render(await ArticlePage({ params: params(HASH) }));
+    render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
     expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
@@ -285,7 +285,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
       detail({ ingestDay: null, url: "https://example.com/original-story" }),
     );
 
-    const { container } = render(await ArticlePage({ params: params(HASH) }));
+    const { container } = render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
     const link = container.querySelector('[data-testid="original-link"]');
     expect(link?.getAttribute("href")).toBe("https://example.com/original-story");
@@ -304,7 +304,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, url: "javascript:alert(1)" }),
       );
 
-      const { container } = render(await ArticlePage({ params: params(HASH) }));
+      const { container } = render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(container.querySelector('[data-testid="original-link"]')).toBeNull();
       expect(screen.getByTestId("original-link-unavailable")).toBeTruthy();
@@ -315,7 +315,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, url: "javascript:alert(1)", title: "GPT-6 ships" }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByText("GPT-6 ships")).toBeTruthy();
     });
@@ -327,7 +327,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, publishedAtSource: "fallback" }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByTestId("published-guessed")).toBeTruthy();
     });
@@ -337,7 +337,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, publishedAtSource: "feed" }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.queryByTestId("published-guessed")).toBeNull();
       expect(screen.queryByTestId("published-provenance-unknown")).toBeNull();
@@ -352,7 +352,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, publishedAtSource: null }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByTestId("published-provenance-unknown")).toBeTruthy();
       expect(screen.queryByTestId("published-guessed")).toBeNull();
@@ -365,7 +365,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, whyItMatters: "Because it changes the frontier." }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByTestId("why-it-matters").textContent).toBe(
         "Because it changes the frontier.",
@@ -375,7 +375,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     it("renders no whyItMatters element when it is null", async () => {
       vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null, whyItMatters: null }));
 
-      const { container } = render(await ArticlePage({ params: params(HASH) }));
+      const { container } = render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(container.querySelector('[data-testid="why-it-matters"]')).toBeNull();
     });
@@ -392,7 +392,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         }),
       );
 
-      const { container } = render(await ArticlePage({ params: params(HASH) }));
+      const { container } = render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       const why = container.querySelector('[data-testid="why-it-matters"]');
       const summary = container.querySelector('[data-testid="summary"]');
@@ -414,7 +414,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, scoreVersion: "v1-degraded" }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByTestId("ranking-degraded")).toBeTruthy();
     });
@@ -422,7 +422,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     it("shows no marker for a normally-ranked article", async () => {
       vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null, scoreVersion: "v1" }));
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.queryByTestId("ranking-degraded")).toBeNull();
     });
@@ -441,7 +441,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByTestId("source-weight").textContent).toBe("1 (lab)");
       expect(screen.getByTestId("llm-importance").textContent).toBe("77 / 100");
@@ -460,7 +460,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, publishedAt: "2099-01-01T00:00:00.000Z" }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByTestId("recency").textContent).toContain("1.00");
     });
@@ -470,7 +470,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         detail({ ingestDay: null, publishedAt: "2000-01-01T00:00:00.000Z" }),
       );
 
-      render(await ArticlePage({ params: params(HASH) }));
+      render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(screen.getByTestId("recency").textContent).toContain("0.00");
     });
@@ -504,7 +504,7 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         "Because <model> matters, unlike <script>alert(2)</script> which is prose quoted here.";
       vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null, summary, whyItMatters }));
 
-      const { container } = render(await ArticlePage({ params: params(HASH) }));
+      const { container } = render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(container.querySelector("script")).toBeNull();
       expect(screen.getByTestId("summary").textContent).toBe(summary);
@@ -520,10 +520,21 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
         "The <model> improved, unlike <script>alert(4)</script> which is prose quoted here.";
       vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null, title }));
 
-      const { container } = render(await ArticlePage({ params: params(HASH) }));
+      const { container } = render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
       expect(container.querySelector("script")).toBeNull();
       expect(container.querySelector("h1")?.textContent).toBe(title);
     });
+  });
+});
+
+describe("the canonical section path", () => {
+  it("redirects to the stored section when the URL claims another", async () => {
+    // next/navigation's redirect throws NEXT_REDIRECT; asserting on the throw pins both that
+    // the mismatch redirects and where it lands.
+    vi.mocked(getArticle).mockResolvedValue(detail());
+    await expect(
+      ArticlePageImpl({ pathSection: "design", params: params(HASH) }),
+    ).rejects.toMatchObject({ digest: expect.stringContaining(`/article/ai/${HASH}`) });
   });
 });

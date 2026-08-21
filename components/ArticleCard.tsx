@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { hasCorroboration, isUnranked, type FeedArticle } from "../src/lib/feed/shape.js";
-import { relativeTime } from "../src/lib/feed/format.js";
+import { articlePath, relativeTime } from "../src/lib/feed/format.js";
 
 export interface ArticleCardProps {
   article: FeedArticle;
@@ -34,7 +34,7 @@ export function ArticleCard({ article, now, rank, lead = false }: ArticleCardPro
 
   return (
     <Link
-      href={`/article/${article.urlHash}`}
+      href={articlePath(article.section, article.urlHash)}
       data-lead={lead ? "" : undefined}
       className={[
         "group relative block no-underline transition-[background-color,color] duration-200",
