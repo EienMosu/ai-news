@@ -84,7 +84,7 @@ describe("Home (app/page.tsx)", () => {
   it("passes its own section through to the rendered day, not the other one", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
-    expect(screen.getByText("No AI stories for 2026-08-18.")).toBeTruthy();
+    expect(screen.getByText("No AI stories for 18.08.2026.")).toBeTruthy();
   });
 
   it("reads `days` from the awaited searchParams (a Promise, not a plain object) and passes the parsed count to getRecentDays", async () => {
@@ -127,8 +127,8 @@ describe("Home (app/page.tsx)", () => {
       { ...EMPTY_DAY_RESULT, day: "2026-08-17" },
     ]));
     render(await Home({ searchParams: searchParams() }));
-    const newer = screen.getByText("No AI stories for 2026-08-18.");
-    const older = screen.getByText("No AI stories for 2026-08-17.");
+    const newer = screen.getByText("No AI stories for 18.08.2026.");
+    const older = screen.getByText("No AI stories for 17.08.2026.");
     expect(newer.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -213,7 +213,7 @@ describe("DesignPage (app/design/page.tsx)", () => {
   it("passes its own section through to the rendered day, not the other one", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams() }));
-    expect(screen.getByText("No design stories for 2026-08-18.")).toBeTruthy();
+    expect(screen.getByText("No design stories for 18.08.2026.")).toBeTruthy();
   });
 
   it("reads `days` from the awaited searchParams and passes the parsed count to getRecentDays", async () => {
@@ -307,7 +307,7 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
   it("passes its own section through to the rendered day, not either other one", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await CloudPage({ searchParams: searchParams() }));
-    expect(screen.getByText("No cloud stories for 2026-08-18.")).toBeTruthy();
+    expect(screen.getByText("No cloud stories for 18.08.2026.")).toBeTruthy();
   });
 
   it("reads `days` from the awaited searchParams and passes the parsed count to getRecentDays", async () => {

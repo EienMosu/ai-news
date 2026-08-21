@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { FeedArticle } from "../src/lib/feed/shape.js";
 import { ArticleCard } from "./ArticleCard.js";
+import { formatDayKey } from "../src/lib/feed/format.js";
 
 /** One entry on a day sheet: the article, paired with its rank within the day. Rank travels
  *  with the entry rather than being derived from array position, so a filtered subset of a day
@@ -62,7 +63,7 @@ export function DaySection({ day, entries, totalInDay, now }: DaySectionProps) {
         <header className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 sm:mb-6">
           <h2 className="font-[family-name:var(--font-display)] text-[1.75rem] font-extrabold leading-none tracking-[-0.028em] sm:text-[2.25rem]">
             <Link href={`/day/${day}`} className="no-underline hover:underline" data-numeric>
-              {day}
+              {formatDayKey(day)}
             </Link>
           </h2>
           <span className="apparatus opacity-70" data-numeric>

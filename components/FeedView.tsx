@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { matchesFilter, type FilterDef } from "../src/lib/feed/filter.js";
+import { formatDayKey } from "../src/lib/feed/format.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
 import { DaySection, type RankedEntry } from "./DaySection.js";
@@ -51,7 +52,7 @@ export function dayStatusLine(
   day: string,
 ): string {
   const rankedPart =
-    `${llmRankedInDay} ${llmRankedInDay === 1 ? "story" : "stories"} ranked across all sections on ${day}`;
+    `${llmRankedInDay} ${llmRankedInDay === 1 ? "story" : "stories"} ranked across all sections on ${formatDayKey(day)}`;
   const truncatedPart =
     truncatedInDay !== null && truncatedInDay > 0
       ? `, ${truncatedInDay} truncated by the day's ranking cap`
@@ -120,7 +121,7 @@ export function FeedView({ section, result, now, filterDef }: FeedViewProps) {
 
       {articles.length === 0 ? (
         <p data-testid="feed-empty-section" className="font-[family-name:var(--font-text)] text-[1.0625rem] italic opacity-80">
-          No {SECTION_LABELS[section]} stories for {day}.
+          No {SECTION_LABELS[section]} stories for {formatDayKey(day)}.
         </p>
       ) : filterDef && matchedEntries.length === 0 ? (
         // A zero-match day still keeps its sheet (shared-preamble.md's "Filter states"
@@ -135,7 +136,7 @@ export function FeedView({ section, result, now, filterDef }: FeedViewProps) {
             <header className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 sm:mb-6">
               <h2 className="font-[family-name:var(--font-display)] text-[1.75rem] font-extrabold leading-none tracking-[-0.028em] sm:text-[2.25rem]">
                 <Link href={`/day/${day}`} className="no-underline hover:underline" data-numeric>
-                  {day}
+                  {formatDayKey(day)}
                 </Link>
               </h2>
               <span className="apparatus opacity-70" data-numeric>

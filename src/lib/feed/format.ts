@@ -29,3 +29,15 @@ export function relativeTime(iso: string | null, now: Date): string {
   if (diffMs < DAY_MS) return `${Math.floor(diffMs / HOUR_MS)}h ago`;
   return `${Math.floor(diffMs / DAY_MS)}d ago`;
 }
+
+/**
+ * A store day key (`YYYY-MM-DD`) as the reader sees it: `DD.MM.YYYY` (owner request,
+ * 2026-08-21; dots are the Turkish convention his "dd,mm,yyyy" shorthand pointed at).
+ * Pure string re-arrangement, deliberately: parsing through `Date` would re-introduce the
+ * timezone class of bug for zero benefit, and the key's shape is already validated upstream.
+ * URLs and `<time dateTime>` keep the ISO key; only rendered text goes through this.
+ */
+export function formatDayKey(day: string): string {
+  const [y, m, d] = day.split("-");
+  return `${d}.${m}.${y}`;
+}

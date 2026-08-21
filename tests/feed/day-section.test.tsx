@@ -81,12 +81,12 @@ describe("DaySection", () => {
 
   it("shows the day string in the header", () => {
     render(<DaySection day="2026-08-18" entries={[]} totalInDay={0} now={NOW} />);
-    expect(screen.getByText("2026-08-18")).toBeTruthy();
+    expect(screen.getByText("18.08.2026")).toBeTruthy();
   });
 
   it("links the header date to its own day page -- fix round 1, F3", () => {
     render(<DaySection day="2026-08-18" entries={[]} totalInDay={0} now={NOW} />);
-    expect(screen.getByRole("link", { name: "2026-08-18" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "18.08.2026" }).getAttribute("href")).toBe(
       "/day/2026-08-18",
     );
   });

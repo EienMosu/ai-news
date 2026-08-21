@@ -53,7 +53,7 @@ describe("FeedView", () => {
 
   it("names the vertical and the date when the day ranked fine but this section is empty", () => {
     render(<FeedView section="design" result={feedResult({ articles: [] })} now={NOW} />);
-    expect(screen.getByText("No design stories for 2026-08-18.")).toBeTruthy();
+    expect(screen.getByText("No design stories for 18.08.2026.")).toBeTruthy();
   });
 
   it("does not show the no-ranked-day message when this section is merely empty", () => {
@@ -86,7 +86,7 @@ describe("FeedView", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByText(/264 stories ranked across all sections on 2026-08-18/)).toBeTruthy();
+    expect(screen.getByText(/264 stories ranked across all sections on 18.08.2026/)).toBeTruthy();
   });
 
   it("omits the day-status line entirely when llmRankedInDay is null, rather than print a confident '0'", () => {
@@ -162,7 +162,7 @@ describe("FeedView -- quick filters", () => {
     render(
       <FeedView section="ai" result={feedResult({ articles, day: "2026-08-18" })} now={NOW} filterDef={def} />,
     );
-    expect(screen.getByRole("link", { name: "2026-08-18" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "18.08.2026" }).getAttribute("href")).toBe(
       "/day/2026-08-18",
     );
   });
@@ -181,7 +181,7 @@ describe("FeedView -- quick filters", () => {
     render(
       <FeedView section="design" result={feedResult({ articles: [] })} now={NOW} filterDef={def} />,
     );
-    expect(screen.getByText("No design stories for 2026-08-18.")).toBeTruthy();
+    expect(screen.getByText("No design stories for 18.08.2026.")).toBeTruthy();
     expect(screen.queryByTestId("filter-status")).toBeNull();
   });
 });
@@ -189,12 +189,12 @@ describe("FeedView -- quick filters", () => {
 describe("dayStatusLine", () => {
   it("uses singular 'story' for exactly one ranked article", () => {
     expect(dayStatusLine("complete", 1, 0, "2026-08-18"))
-      .toBe("1 story ranked across all sections on 2026-08-18.");
+      .toBe("1 story ranked across all sections on 18.08.2026.");
   });
 
   it("uses plural 'stories' for any count other than one", () => {
     expect(dayStatusLine("complete", 264, 0, "2026-08-18"))
-      .toBe("264 stories ranked across all sections on 2026-08-18.");
+      .toBe("264 stories ranked across all sections on 18.08.2026.");
   });
 
   it("omits the truncated clause when truncatedInDay is 0", () => {

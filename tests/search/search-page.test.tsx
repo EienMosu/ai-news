@@ -371,7 +371,7 @@ describe("SearchPage -- rendering results", () => {
     vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     render(await SearchPage({ searchParams: searchParams({ q: "story" }) }));
     expect(screen.getByText("Recent story")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: "2026-08-19" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "19.08.2026" })).toBeTruthy();
   });
 
   it("renders recent-day results before archive-day results, in document order", async () => {

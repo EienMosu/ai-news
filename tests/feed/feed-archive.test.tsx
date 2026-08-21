@@ -56,7 +56,7 @@ describe("FeedArchive", () => {
       />,
     );
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["2026-08-18", "2026-08-17"]);
+    expect(headings).toEqual(["18.08.2026", "17.08.2026"]);
   });
 
   it("shows the this-vertical-was-empty message for a day with nothing, without omitting it, while a sibling day with articles still renders its cards", () => {
@@ -77,9 +77,9 @@ describe("FeedArchive", () => {
       />,
     );
 
-    expect(screen.getByText("No design stories for 2026-08-18.")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: "2026-08-17" })).toBeTruthy();
-    expect(screen.queryByText("No design stories for 2026-08-17.")).toBeNull();
+    expect(screen.getByText("No design stories for 18.08.2026.")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "17.08.2026" })).toBeTruthy();
+    expect(screen.queryByText("No design stories for 17.08.2026.")).toBeNull();
   });
 
   it("shows a load-more link when exactly `days` days came back and the cap has not been reached", () => {
@@ -230,7 +230,7 @@ describe("FeedArchive", () => {
       render(
         <FeedArchive section="ai" results={results} failedDays={1} now={NOW} days={7} basePath="/" />,
       );
-      expect(screen.getByRole("heading", { level: 2, name: "2026-08-18" })).toBeTruthy();
+      expect(screen.getByRole("heading", { level: 2, name: "18.08.2026" })).toBeTruthy();
       expect(screen.getByTestId("feed-days-failed")).toBeTruthy();
     });
 

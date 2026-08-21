@@ -156,7 +156,7 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
     render(await DayPage({ params: params("2026-08-18") }));
 
     expect(screen.getByTestId("day-status").textContent).toContain(
-      "264 stories ranked across all sections on 2026-08-18",
+      "264 stories ranked across all sections on 18.08.2026",
     );
   });
 
@@ -212,7 +212,7 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
 
     render(await DayPage({ params: params("2026-08-18") }));
 
-    expect(screen.getByRole("heading", { level: 2, name: "2026-08-18" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "18.08.2026" })).toBeTruthy();
     expect(screen.queryByText("2099-12-31")).toBeNull();
   });
 
