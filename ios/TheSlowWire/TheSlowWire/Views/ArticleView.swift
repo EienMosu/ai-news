@@ -25,6 +25,10 @@ struct ArticleView: View {
                         Text("·")
                         Text("\(sources) sources today")
                     }
+                    if let date = article.publishedDate {
+                        Text("·")
+                        Text(date, format: .relative(presentation: .named))
+                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(accent)
@@ -91,6 +95,23 @@ struct ArticleView: View {
         .background(Color.paper)
         .navigationBarTitleDisplayMode(.inline)
         .tint(accent)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ShareLink(item: shareURL)
+            }
+        }
+    }
+
+    // Shares the WEB address, openable by anyone; the theslowwire:// scheme
+    // only resolves on a phone that has the app. Same shape as the site's
+    // route: /article/<section>/<hash>, legacy hash-only when section is null
+    // (the site redirects it).
+    private var shareURL: URL {
+        if let section = article.section {
+            FeedClient.baseURL.appending(path: "article/\(section)/\(article.urlHash)")
+        } else {
+            FeedClient.baseURL.appending(path: "article/\(article.urlHash)")
+        }
     }
 
     private var alsoCoveredBy: some View {

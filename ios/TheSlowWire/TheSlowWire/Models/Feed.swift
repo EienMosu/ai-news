@@ -28,6 +28,20 @@ struct FeedArticle: Codable, Identifiable, Hashable {
     var id: String { urlHash }
 }
 
+extension FeedArticle {
+    // publishedAt arrives as ISO 8601, usually with fractional seconds
+    // ("2026-08-21T10:05:46.000Z") but not guaranteed — try both shapes.
+    var publishedDate: Date? {
+        guard let publishedAt else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: publishedAt) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: publishedAt)
+    }
+}
+
 struct FeedResult: Codable {
     let articles: [FeedArticle]
     let day: String?
