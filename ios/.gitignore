@@ -1,0 +1,11 @@
+# Xcode user state (per-developer IDE state, like .vscode/ or .idea/)
+xcuserdata/
+*.xcuserstate
+
+# Build products
+build/
+DerivedData/
+
+# Swift Package Manager
+.swiftpm/
+.build/
