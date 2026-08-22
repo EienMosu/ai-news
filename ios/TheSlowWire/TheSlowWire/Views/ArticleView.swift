@@ -22,6 +22,7 @@ struct ArticleView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .tint(vertical.onField)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: shareURL)

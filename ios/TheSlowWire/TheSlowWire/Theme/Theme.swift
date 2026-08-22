@@ -89,6 +89,25 @@ extension Font {
     }
 }
 
+// The brand mark: the folded-corner file, same 32-grid path as app/icon.svg
+// and the site favicon. Stroke-only; colour comes from the caller.
+struct FileMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = rect.width / 32
+        var p = Path()
+        p.move(to: CGPoint(x: 8 * s, y: 6 * s))
+        p.addLine(to: CGPoint(x: 19 * s, y: 6 * s))
+        p.addLine(to: CGPoint(x: 26 * s, y: 13 * s))
+        p.addLine(to: CGPoint(x: 26 * s, y: 26 * s))
+        p.addLine(to: CGPoint(x: 8 * s, y: 26 * s))
+        p.closeSubpath()
+        p.move(to: CGPoint(x: 19 * s, y: 6 * s))
+        p.addLine(to: CGPoint(x: 19 * s, y: 13 * s))
+        p.addLine(to: CGPoint(x: 26 * s, y: 13 * s))
+        return p
+    }
+}
+
 // The apparatus voice: uppercase mono, letterspaced (web: 0.6875rem / 0.09em).
 struct Apparatus: View {
     let text: String

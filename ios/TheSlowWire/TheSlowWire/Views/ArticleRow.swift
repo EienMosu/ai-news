@@ -5,14 +5,15 @@ import SwiftUI
 // the inversion grammar from DESIGN.md.
 struct ArticleRow: View {
     let story: Story
+    let number: Int
     let vertical: Vertical
 
-    private var isLead: Bool { story.rank == 1 }
+    private var isLead: Bool { number == 1 }
     private var article: FeedArticle { story.lead }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Apparatus(String(format: "%02d", story.rank), size: 12, medium: true)
+            Apparatus(String(format: "%02d", number), size: 12, medium: true)
                 .foregroundStyle(isLead ? vertical.onField.opacity(0.8) : Color.ink.opacity(0.45))
                 .padding(.top, 4)
 
@@ -72,8 +73,8 @@ struct ArticleRow: View {
         llmImportance: 55, firstSeenAt: "2026-08-22T12:00:00.000Z"
     )
     return VStack(spacing: 0) {
-        ArticleRow(story: Story(lead: lead, others: [second], rank: 1), vertical: .ai)
-        ArticleRow(story: Story(lead: second, others: [], rank: 2), vertical: .ai)
+        ArticleRow(story: Story(lead: lead, others: [second], rank: 1), number: 1, vertical: .ai)
+        ArticleRow(story: Story(lead: second, others: [], rank: 2), number: 2, vertical: .ai)
     }
     .background(Color.paper)
     .padding()

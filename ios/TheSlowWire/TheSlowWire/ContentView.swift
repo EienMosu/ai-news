@@ -12,13 +12,13 @@ struct ContentView: View {
     @State private var deepLink: DeepLinkTarget?
 
     var body: some View {
+        // TabView keeps each world's state (feed, scroll, navigation) alive
+        // across switches; its own bar is hidden — the SectionSwitch inside
+        // each SectionView is the visible control, in the design language.
         TabView(selection: $selection) {
             ForEach(Vertical.allCases) { vertical in
-                SectionView(vertical: vertical, deepLink: $deepLink)
+                SectionView(vertical: vertical, selection: $selection, deepLink: $deepLink)
                     .tag(vertical)
-                    .tabItem {
-                        Label(vertical.title, systemImage: vertical.symbol)
-                    }
             }
         }
         .tint(selection.color)

@@ -34,7 +34,9 @@ struct DaySheet: View {
 
             ForEach(Array(stories.enumerated()), id: \.element.id) { index, story in
                 NavigationLink(value: story) {
-                    ArticleRow(story: story, vertical: vertical)
+                    // Numbered by visible position (owner's call, 2026-08-22):
+                    // folding and filtering never leave gaps in the count.
+                    ArticleRow(story: story, number: index + 1, vertical: vertical)
                 }
                 .buttonStyle(.plain)
                 if index < stories.count - 1 {

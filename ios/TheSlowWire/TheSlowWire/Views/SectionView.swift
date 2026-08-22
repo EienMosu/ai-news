@@ -4,10 +4,12 @@ import SwiftUI
 // sheets are laid on it. Switching tabs is leaving one world for another.
 struct SectionView: View {
     let vertical: Vertical
+    @Binding var selection: Vertical
     @Binding var deepLink: DeepLinkTarget?
 
     @State private var state = LoadState.loading
     @State private var activeFilterID: String?
+    @State private var searchText = ""
     // The explicit navigation path: NavigationLink taps append to it on their
     // own; deep links append to it programmatically.
     @State private var path: [Story] = []
@@ -31,10 +33,14 @@ struct SectionView: View {
                     errorView(message)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                SectionSwitch(selection: $selection)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
             .navigationDestination(for: Story.self) { story in
                 ArticleView(story: story, vertical: vertical)
             }
-            .toolbar(.hidden, for: .navigationBar)
         }
         .task {
             // Runs when the tab first appears; the guard stops a re-fetch
@@ -62,15 +68,36 @@ struct SectionView: View {
         FilterDef.chips(for: vertical).first { $0.id == activeFilterID }
     }
 
-    // The masthead: the section is the page's identity; the product name
-    // rides above it in apparatus voice.
+    // The search bar is the web's Others chip in mobile clothes: a free-text
+    // def matched with the same semantics (lowercased substring over
+    // title + summary + sourceName), narrowing the LOADED days only.
+    private var searchFilter: FilterDef? {
+        let text = searchText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
+        return FilterDef(id: text, label: text, synonyms: [.substring(text.lowercased())])
+    }
+
+    private var activeFilters: [FilterDef] {
+        [activeFilter, searchFilter].compactMap { $0 }
+    }
+
+    // The masthead: mark + wordmark in apparatus voice, the section's own
+    // news title in display, the product's claim as the tagline.
     private var masthead: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Apparatus("The Slow Wire", size: 11)
-                .foregroundStyle(vertical.onField.opacity(0.7))
-            Text(vertical.title)
-                .font(.display(40))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                FileMark()
+                    .stroke(vertical.onField, style: StrokeStyle(lineWidth: 2, lineJoin: .miter))
+                    .frame(width: 24, height: 24)
+                Apparatus("The Slow Wire", size: 11, medium: true)
+                    .foregroundStyle(vertical.onField)
+                Spacer()
+            }
+            Text("\(vertical.title) News")
+                .font(.display(34))
                 .foregroundStyle(vertical.onField)
+            Apparatus("Ranked by importance, not recency", size: 10.5)
+                .foregroundStyle(vertical.onField.opacity(0.7))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -78,20 +105,24 @@ struct SectionView: View {
     private func loadedView(_ days: [FeedResult]) -> some View {
         // Folded once for the whole list: a story shown in a newer day does
         // not repeat in an older one (index-aligned with `days`), then the
-        // active chip narrows each day, mirroring the site's ?f= behaviour.
+        // active chip and the search text narrow each day together.
         let dayStories = Story.groupDays(days)
+        let filters = activeFilters
         let filtered: [[Story]] = dayStories.map { stories in
-            guard let def = activeFilter else { return stories }
-            return stories.filter { def.matches($0.lead) }
+            guard !filters.isEmpty else { return stories }
+            return stories.filter { story in
+                filters.allSatisfy { $0.matches(story.lead) }
+            }
         }
         let shown = filtered.reduce(0) { $0 + $1.count }
 
         return ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 masthead
                 filterChips
-                if shown == 0, let def = activeFilter {
-                    emptyFilterSheet(def)
+                searchBar
+                if shown == 0, !filters.isEmpty {
+                    emptyFilterSheet(filters.map(\.label).joined(separator: " · "))
                 } else {
                     ForEach(days.indices, id: \.self) { index in
                         if !filtered[index].isEmpty {
@@ -107,9 +138,10 @@ struct SectionView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
-            .padding(.bottom, 40)
+            .padding(.bottom, 24)
         }
         .refreshable { await load() }
+        .scrollDismissesKeyboard(.immediately)
     }
 
     // The selection grammar (DESIGN.md): selected = paper background with
@@ -142,19 +174,56 @@ struct SectionView: View {
         }
     }
 
-    // A zero-match filter still keeps its sheet (web grammar) instead of a
-    // bare message floating on the field.
-    private func emptyFilterSheet(_ def: FilterDef) -> some View {
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(vertical.onField.opacity(0.7))
+            TextField(
+                "",
+                text: $searchText,
+                prompt: Text("SEARCH THESE DAYS")
+                    .font(.apparatus(11))
+                    .foregroundStyle(vertical.onField.opacity(0.5))
+            )
+            .font(.apparatus(12))
+            .foregroundStyle(vertical.onField)
+            .tint(vertical.onField)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(vertical.onField.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(vertical.onField.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    // A zero-match narrowing still keeps its sheet (web grammar) instead of
+    // a bare message floating on the field.
+    private func emptyFilterSheet(_ label: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Apparatus("Filter · \(def.label)", size: 10.5)
+            Apparatus("Filter · \(label)", size: 10.5)
                 .foregroundStyle(Color.ink.opacity(0.7))
             Text("No matches in these days.")
                 .font(.prose(15))
                 .foregroundStyle(Color.ink.opacity(0.75))
             Button {
                 activeFilterID = nil
+                searchText = ""
             } label: {
-                Apparatus("Clear filter", size: 11, medium: true)
+                Apparatus("Clear", size: 11, medium: true)
                     .foregroundStyle(vertical.onField)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
@@ -215,6 +284,53 @@ struct SectionView: View {
     }
 }
 
+// The section switch, in the web's own grammar (SectionNav): three equal
+// cells, mono uppercase, the current cell inverted to paper with its field's
+// text; inactive cells stay on the field at 70% behind a 35% border.
+struct SectionSwitch: View {
+    @Binding var selection: Vertical
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Vertical.allCases) { vertical in
+                let isCurrent = vertical == selection
+                Button {
+                    selection = vertical
+                } label: {
+                    Apparatus(vertical.title, size: 11.5, medium: isCurrent)
+                        .foregroundStyle(isCurrent ? vertical.color : selection.onField.opacity(0.7))
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .background(isCurrent ? Color.paper : .clear)
+                }
+                .buttonStyle(.plain)
+                if vertical != Vertical.allCases.last {
+                    Rectangle()
+                        .fill(selection.onField.opacity(0.35))
+                        .frame(width: 1, height: 46)
+                }
+            }
+        }
+        .background(selection.color)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(selection.onField.opacity(0.35), lineWidth: 1)
+        )
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+        .background(
+            // A soft fade so sheets scrolling under the switch stay legible.
+            LinearGradient(
+                colors: [selection.color.opacity(0), selection.color],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        )
+    }
+}
+
 #Preview {
-    SectionView(vertical: .ai, deepLink: .constant(nil))
+    SectionView(vertical: .ai, selection: .constant(.ai), deepLink: .constant(nil))
 }
