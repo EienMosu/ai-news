@@ -2,9 +2,13 @@ import SwiftUI
 
 struct SectionView: View {
     let vertical: Vertical
+    @Binding var deepLink: DeepLinkTarget?
 
     @State private var state = LoadState.loading
     @State private var activeFilterID: String?
+    // The explicit navigation path: NavigationLink taps append to it on their
+    // own; deep links append to it programmatically.
+    @State private var path: [Story] = []
 
     enum LoadState {
         case loading
@@ -13,7 +17,7 @@ struct SectionView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 switch state {
                 case .loading:
@@ -33,7 +37,22 @@ struct SectionView: View {
             // Runs when the tab first appears; the guard stops a re-fetch
             // every time the user switches back to an already-loaded tab.
             if case .loading = state { await load() }
+            await consumeDeepLink()
         }
+        .onChange(of: deepLink) {
+            Task { await consumeDeepLink() }
+        }
+    }
+
+    // A deep link for this tab pushes the fetched story onto the path. The
+    // fetch goes through /api/article (article + siblings composed server-
+    // side), so a cold start needs no feed in hand. Consuming clears the
+    // shared binding so the other two tabs stop seeing it.
+    private func consumeDeepLink() async {
+        guard let target = deepLink, target.section == vertical else { return }
+        deepLink = nil
+        guard let story = try? await FeedClient().fetchStory(urlHash: target.urlHash) else { return }
+        path.append(story)
     }
 
     private var activeFilter: FilterDef? {
@@ -169,5 +188,5 @@ struct SectionView: View {
 }
 
 #Preview {
-    SectionView(vertical: .ai)
+    SectionView(vertical: .ai, deepLink: .constant(nil))
 }
