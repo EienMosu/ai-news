@@ -3,6 +3,7 @@ import SwiftUI
 struct ArticleRow: View {
     let article: FeedArticle
     let accent: Color
+    var otherSources: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -22,6 +23,10 @@ struct ArticleRow: View {
                 if let points = article.points {
                     Text("·")
                     Text("\(points) points")
+                }
+                if otherSources > 0 {
+                    Text("·")
+                    Text("+\(otherSources) more")
                 }
             }
             .font(.caption)

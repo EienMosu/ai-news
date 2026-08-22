@@ -42,9 +42,13 @@ struct SectionView: View {
             ForEach(days.indices, id: \.self) { index in
                 let result = days[index]
                 Section(formatDay(result.day)) {
-                    ForEach(result.articles) { article in
-                        NavigationLink(value: article) {
-                            ArticleRow(article: article, accent: vertical.color)
+                    ForEach(Story.group(result.articles)) { story in
+                        NavigationLink(value: story.lead) {
+                            ArticleRow(
+                                article: story.lead,
+                                accent: vertical.color,
+                                otherSources: story.otherSources
+                            )
                         }
                         .listRowBackground(Color.paper)
                     }
