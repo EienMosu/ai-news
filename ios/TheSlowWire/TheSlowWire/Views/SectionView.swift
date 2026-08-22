@@ -1,5 +1,7 @@
 import SwiftUI
 
+// A vertical's screen: the world colour is the GROUND (the field), paper day
+// sheets are laid on it. Switching tabs is leaving one world for another.
 struct SectionView: View {
     let vertical: Vertical
     @Binding var deepLink: DeepLinkTarget?
@@ -18,20 +20,21 @@ struct SectionView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
+            ZStack {
+                vertical.color.ignoresSafeArea()
                 switch state {
                 case .loading:
-                    ProgressView("Loading \(vertical.title)…")
-                        .tint(vertical.color)
+                    loadingView
                 case .loaded(let days):
                     loadedView(days)
                 case .failed(let message):
                     errorView(message)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.paper)
-            .navigationTitle(vertical.title)
+            .navigationDestination(for: Story.self) { story in
+                ArticleView(story: story, vertical: vertical)
+            }
+            .toolbar(.hidden, for: .navigationBar)
         }
         .task {
             // Runs when the tab first appears; the guard stops a re-fetch
@@ -59,6 +62,19 @@ struct SectionView: View {
         FilterDef.chips(for: vertical).first { $0.id == activeFilterID }
     }
 
+    // The masthead: the section is the page's identity; the product name
+    // rides above it in apparatus voice.
+    private var masthead: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Apparatus("The Slow Wire", size: 11)
+                .foregroundStyle(vertical.onField.opacity(0.7))
+            Text(vertical.title)
+                .font(.display(40))
+                .foregroundStyle(vertical.onField)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func loadedView(_ days: [FeedResult]) -> some View {
         // Folded once for the whole list: a story shown in a newer day does
         // not repeat in an older one (index-aligned with `days`), then the
@@ -70,16 +86,35 @@ struct SectionView: View {
         }
         let shown = filtered.reduce(0) { $0 + $1.count }
 
-        return VStack(spacing: 0) {
-            filterChips
-            if shown == 0, let def = activeFilter {
-                emptyFilterView(def)
-            } else {
-                feedList(days, filtered)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                masthead
+                filterChips
+                if shown == 0, let def = activeFilter {
+                    emptyFilterSheet(def)
+                } else {
+                    ForEach(days.indices, id: \.self) { index in
+                        if !filtered[index].isEmpty {
+                            DaySheet(
+                                day: days[index].day,
+                                totalInDay: days[index].articles.count,
+                                stories: filtered[index],
+                                vertical: vertical
+                            )
+                        }
+                    }
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
         }
+        .refreshable { await load() }
     }
 
+    // The selection grammar (DESIGN.md): selected = paper background with
+    // field-coloured text; inactive = transparent, on-field at 70%, with a
+    // 35% on-field border.
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -88,79 +123,83 @@ struct SectionView: View {
                     Button {
                         activeFilterID = isActive ? nil : def.id
                     } label: {
-                        Text(def.label)
-                            .font(.subheadline.weight(.medium))
+                        Apparatus(def.label, size: 11, medium: isActive)
+                            .foregroundStyle(isActive ? vertical.color : vertical.onField.opacity(0.7))
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                isActive ? vertical.color : Color.ink.opacity(0.06),
-                                in: Capsule()
+                            .padding(.vertical, 7)
+                            .background(isActive ? Color.paper : .clear, in: Capsule())
+                            .overlay(
+                                Capsule().strokeBorder(
+                                    isActive ? .clear : vertical.onField.opacity(0.35),
+                                    lineWidth: 1
+                                )
                             )
-                            .foregroundStyle(isActive ? .white : Color.ink)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 2)
         }
     }
 
-    private func feedList(_ days: [FeedResult], _ filtered: [[Story]]) -> some View {
-        List {
-            // `day` is nullable in the contract, so it cannot be the row
-            // identity; the position in the newest-first response is.
-            ForEach(days.indices, id: \.self) { index in
-                if !filtered[index].isEmpty {
-                    Section(formatDay(days[index].day)) {
-                        ForEach(filtered[index]) { story in
-                            NavigationLink(value: story) {
-                                ArticleRow(
-                                    article: story.lead,
-                                    accent: vertical.color,
-                                    otherSources: story.otherSources
-                                )
-                            }
-                            .listRowBackground(Color.paper)
-                        }
-                    }
-                }
+    // A zero-match filter still keeps its sheet (web grammar) instead of a
+    // bare message floating on the field.
+    private func emptyFilterSheet(_ def: FilterDef) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Apparatus("Filter · \(def.label)", size: 10.5)
+                .foregroundStyle(Color.ink.opacity(0.7))
+            Text("No matches in these days.")
+                .font(.prose(15))
+                .foregroundStyle(Color.ink.opacity(0.75))
+            Button {
+                activeFilterID = nil
+            } label: {
+                Apparatus("Clear filter", size: 11, medium: true)
+                    .foregroundStyle(vertical.onField)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(vertical.color, in: Capsule())
             }
+            .buttonStyle(.plain)
         }
-        .scrollContentBackground(.hidden)
-        .refreshable { await load() }
-        .navigationDestination(for: Story.self) { story in
-            ArticleView(story: story, accent: vertical.color)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .shadow(color: .black.opacity(0.35), radius: 16, y: 10)
     }
 
-    private func emptyFilterView(_ def: FilterDef) -> some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Text("No \(def.label) stories in these days.")
-                .foregroundStyle(Color.ink.opacity(0.6))
-            Button("Clear filter") { activeFilterID = nil }
-                .tint(vertical.color)
-            Spacer()
+    private var loadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(vertical.onField)
+            Apparatus("Counting the day", size: 11)
+                .foregroundStyle(vertical.onField.opacity(0.7))
         }
     }
 
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 40))
-                .foregroundStyle(vertical.color)
+                .font(.system(size: 36))
+                .foregroundStyle(vertical.onField.opacity(0.8))
             Text(message)
+                .font(.prose(15))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color.ink.opacity(0.7))
-            Button("Try Again") {
+                .foregroundStyle(vertical.onField.opacity(0.85))
+            Button {
                 state = .loading
                 Task { await load() }
+            } label: {
+                Apparatus("Try again", size: 11, medium: true)
+                    .foregroundStyle(vertical.color)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.paper, in: Capsule())
             }
-            .buttonStyle(.borderedProminent)
-            .tint(vertical.color)
+            .buttonStyle(.plain)
         }
-        .padding()
+        .padding(24)
     }
 
     private func load() async {
@@ -173,17 +212,6 @@ struct SectionView: View {
             if case .loaded = state { return }
             state = .failed(error.localizedDescription)
         }
-    }
-
-    private func formatDay(_ day: String?) -> String {
-        guard let day else { return "Unknown day" }
-        let parser = DateFormatter()
-        parser.dateFormat = "yyyy-MM-dd"
-        parser.locale = Locale(identifier: "en_US_POSIX")
-        guard let date = parser.date(from: day) else { return day }
-        if Calendar.current.isDateInToday(date) { return "Today" }
-        if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
-        return date.formatted(.dateTime.weekday(.wide).day().month(.wide))
     }
 }
 

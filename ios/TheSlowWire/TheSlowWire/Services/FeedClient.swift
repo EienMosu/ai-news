@@ -45,6 +45,6 @@ struct FeedClient {
             throw FeedClientError.badStatus(http.statusCode)
         }
         let decoded = try JSONDecoder().decode(ArticleResponse.self, from: data)
-        return Story(lead: decoded.article, others: decoded.siblings)
+        return Story(lead: decoded.article, others: decoded.siblings, rank: 0)
     }
 }

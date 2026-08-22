@@ -9,6 +9,10 @@ struct Story: Identifiable, Hashable {
     // The folded cluster siblings, in score order; the reading room lists
     // them as "Also covered by" rows with their own outbound links.
     let others: [FeedArticle]
+    // The lead's position in the day's FULL article list, 1-based — rank is a
+    // fact about the day (DESIGN.md), so folding and filtering never renumber
+    // it. 0 for a story fetched outside a day (deep links).
+    let rank: Int
 
     var id: String { lead.id }
     var otherSources: Int { others.count }
@@ -31,16 +35,20 @@ extension Story {
     static func group(_ articles: [FeedArticle]) -> [Story] {
         var order: [String] = []
         var members: [String: [FeedArticle]] = [:]
+        var leadRanks: [String: Int] = [:]
 
-        for article in articles {
+        for (index, article) in articles.enumerated() {
             let key = key(for: article)
-            if members[key] == nil { order.append(key) }
+            if members[key] == nil {
+                order.append(key)
+                leadRanks[key] = index + 1
+            }
             members[key, default: []].append(article)
         }
 
         return order.compactMap { key in
             guard let group = members[key], let lead = group.first else { return nil }
-            return Story(lead: lead, others: Array(group.dropFirst()))
+            return Story(lead: lead, others: Array(group.dropFirst()), rank: leadRanks[key] ?? 0)
         }
     }
 
