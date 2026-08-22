@@ -43,6 +43,18 @@ struct SectionView: View {
             }
         }
         .task {
+            #if DEBUG
+            // Headless UI testing lever: simctl cannot tap, so launch
+            // arguments can pre-apply a chip or a search term.
+            // e.g. simctl launch <udid> <bundle> -preselectFilter anthropic
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-preselectFilter"), i + 1 < args.count {
+                activeFilterID = args[i + 1]
+            }
+            if let i = args.firstIndex(of: "-preselectSearch"), i + 1 < args.count {
+                searchText = args[i + 1]
+            }
+            #endif
             // Runs when the tab first appears; the guard stops a re-fetch
             // every time the user switches back to an already-loaded tab.
             if case .loading = state { await load() }
@@ -107,6 +119,7 @@ struct SectionView: View {
         // not repeat in an older one (index-aligned with `days`), then the
         // active chip and the search text narrow each day together.
         let dayStories = Story.groupDays(days)
+        let allStories = dayStories.flatMap { $0 }
         let filters = activeFilters
         let filtered: [[Story]] = dayStories.map { stories in
             guard !filters.isEmpty else { return stories }
@@ -119,8 +132,11 @@ struct SectionView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 masthead
-                filterChips
+                filterChips(allStories)
                 searchBar
+                if !filters.isEmpty {
+                    filterStatus(filters, shown: shown, total: allStories.count)
+                }
                 if shown == 0, !filters.isEmpty {
                     emptyFilterSheet(filters.map(\.label).joined(separator: " · "))
                 } else {
@@ -146,16 +162,28 @@ struct SectionView: View {
 
     // The selection grammar (DESIGN.md): selected = paper background with
     // field-coloured text; inactive = transparent, on-field at 70%, with a
-    // 35% on-field border.
-    private var filterChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(FilterDef.chips(for: vertical)) { def in
-                    let isActive = activeFilterID == def.id
-                    Button {
-                        activeFilterID = isActive ? nil : def.id
-                    } label: {
-                        Apparatus(def.label, size: 11, medium: isActive)
+    // 35% on-field border. Each chip names its own effect: the count is how
+    // many of the loaded stories it narrows to; the active one grows an ×.
+    private func filterChips(_ allStories: [Story]) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Stamp("Filter", color: vertical.onField)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(FilterDef.chips(for: vertical)) { def in
+                        let isActive = activeFilterID == def.id
+                        let count = allStories.count { def.matches($0.lead) }
+                        Button {
+                            activeFilterID = isActive ? nil : def.id
+                        } label: {
+                            HStack(spacing: 6) {
+                                Apparatus(def.label, size: 11, medium: isActive)
+                                Apparatus("\(count)", size: 10)
+                                    .opacity(0.6)
+                                if isActive {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 9, weight: .bold))
+                                }
+                            }
                             .foregroundStyle(isActive ? vertical.color : vertical.onField.opacity(0.7))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
@@ -166,12 +194,23 @@ struct SectionView: View {
                                     lineWidth: 1
                                 )
                             )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.vertical, 2)
             }
-            .padding(.vertical, 2)
         }
+    }
+
+    // The web's FILTER sentence, once per section: says what the narrowing
+    // did, in numbers, right where it happened.
+    private func filterStatus(_ filters: [FilterDef], shown: Int, total: Int) -> some View {
+        Apparatus(
+            "\(filters.map(\.label).joined(separator: " + ")) · \(shown) of \(total) stories in view",
+            size: 10.5
+        )
+        .foregroundStyle(vertical.onField.opacity(0.7))
     }
 
     private var searchBar: some View {

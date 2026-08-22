@@ -108,6 +108,26 @@ struct FileMark: Shape {
     }
 }
 
+// The stamp: a boxed, letterspaced mono word — the web's status grammar
+// ("state ships as a stamp, and the word is the signal").
+struct Stamp: View {
+    let text: String
+    var color: Color = .ink
+
+    init(_ text: String, color: Color = .ink) {
+        self.text = text
+        self.color = color
+    }
+
+    var body: some View {
+        Apparatus(text, size: 10, medium: true)
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .overlay(Rectangle().strokeBorder(color.opacity(0.5), lineWidth: 1))
+    }
+}
+
 // The apparatus voice: uppercase mono, letterspaced (web: 0.6875rem / 0.09em).
 struct Apparatus: View {
     let text: String
