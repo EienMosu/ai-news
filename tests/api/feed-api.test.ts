@@ -61,6 +61,6 @@ describe("GET /api/article/[urlHash]", () => {
     const res = await articleGet(new Request("http://x"), params(HASH));
     expect(res.status).toBe(200);
     expect(getDay).not.toHaveBeenCalled();
-    expect((await res.json()).siblings).toEqual([]);
+    expect(await res.json()).toMatchObject({ siblings: [] });
   });
 });
