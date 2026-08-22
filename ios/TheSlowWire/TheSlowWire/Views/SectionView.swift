@@ -43,14 +43,19 @@ struct SectionView: View {
                 let result = days[index]
                 Section(formatDay(result.day)) {
                     ForEach(result.articles) { article in
-                        ArticleRow(article: article, accent: vertical.color)
-                            .listRowBackground(Color.paper)
+                        NavigationLink(value: article) {
+                            ArticleRow(article: article, accent: vertical.color)
+                        }
+                        .listRowBackground(Color.paper)
                     }
                 }
             }
         }
         .scrollContentBackground(.hidden)
         .refreshable { await load() }
+        .navigationDestination(for: FeedArticle.self) { article in
+            ArticleView(article: article, accent: vertical.color)
+        }
     }
 
     private func errorView(_ message: String) -> some View {
