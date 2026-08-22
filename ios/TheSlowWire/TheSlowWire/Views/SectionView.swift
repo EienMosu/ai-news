@@ -95,7 +95,7 @@ struct SectionView: View {
                 if !filtered[index].isEmpty {
                     Section(formatDay(days[index].day)) {
                         ForEach(filtered[index]) { story in
-                            NavigationLink(value: story.lead) {
+                            NavigationLink(value: story) {
                                 ArticleRow(
                                     article: story.lead,
                                     accent: vertical.color,
@@ -110,8 +110,8 @@ struct SectionView: View {
         }
         .scrollContentBackground(.hidden)
         .refreshable { await load() }
-        .navigationDestination(for: FeedArticle.self) { article in
-            ArticleView(article: article, accent: vertical.color)
+        .navigationDestination(for: Story.self) { story in
+            ArticleView(story: story, accent: vertical.color)
         }
     }
 

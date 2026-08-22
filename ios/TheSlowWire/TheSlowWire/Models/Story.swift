@@ -4,11 +4,14 @@ import Foundation
 // coverage under a shared clusterId ("<day>#<slug>"); an article the model
 // left alone gets "__self__:<urlHash>" (already unique) and a degraded day
 // ships null, so the urlHash fallback keeps those rows independent.
-struct Story: Identifiable {
+struct Story: Identifiable, Hashable {
     let lead: FeedArticle
-    let otherSources: Int
+    // The folded cluster siblings, in score order; the reading room lists
+    // them as "Also covered by" rows with their own outbound links.
+    let others: [FeedArticle]
 
     var id: String { lead.id }
+    var otherSources: Int { others.count }
 }
 
 extension Story {
@@ -24,24 +27,20 @@ extension Story {
     }
 
     // The feed arrives score-ranked, so within a cluster the first article
-    // seen is the lead; the rest only add to the source count.
+    // seen is the lead; the rest ride along as the story's other sources.
     static func group(_ articles: [FeedArticle]) -> [Story] {
         var order: [String] = []
-        var members: [String: Int] = [:]
-        var leads: [String: FeedArticle] = [:]
+        var members: [String: [FeedArticle]] = [:]
 
         for article in articles {
             let key = key(for: article)
-            if leads[key] == nil {
-                leads[key] = article
-                order.append(key)
-            }
-            members[key, default: 0] += 1
+            if members[key] == nil { order.append(key) }
+            members[key, default: []].append(article)
         }
 
         return order.compactMap { key in
-            guard let lead = leads[key] else { return nil }
-            return Story(lead: lead, otherSources: members[key, default: 1] - 1)
+            guard let group = members[key], let lead = group.first else { return nil }
+            return Story(lead: lead, others: Array(group.dropFirst()))
         }
     }
 
