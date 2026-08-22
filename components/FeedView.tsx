@@ -17,6 +17,13 @@ export interface FeedViewProps {
    *  to the matches, so a survivor keeps the rank number it always had (shared-preamble.md's
    *  "Filter states" paragraph; `DaySection`'s own contract for `RankedEntry`). */
   filterDef?: FilterDef | null;
+  /** urlHashes the archive has folded away as story repeats (cluster siblings within a day,
+   *  the same slug ranked again on an older day) -- computed once per archive by
+   *  `repeatedStoryHashes` (src/lib/feed/dedupe.ts) and applied here, at the same
+   *  after-rank-assignment seam as `filterDef`, for the same reason: a survivor keeps the rank
+   *  number it always had. Omitted by `/day/[date]`, which shows the day as it was judged,
+   *  repeats and all. */
+  hiddenHashes?: Set<string>;
 }
 
 const SECTION_LABELS: Record<Section, string> = { ai: "AI", design: "design", cloud: "cloud" };
@@ -78,7 +85,7 @@ export function dayStatusLine(
  * this omits the line rather than hand `dayStatusLine` a fallback `0` it would then report as
  * fact.
  */
-export function FeedView({ section, result, now, filterDef }: FeedViewProps) {
+export function FeedView({ section, result, now, filterDef, hiddenHashes }: FeedViewProps) {
   const { day, articles, status, llmRankedInDay, truncatedInDay } = result;
 
   if (day === null) {
@@ -93,9 +100,15 @@ export function FeedView({ section, result, now, filterDef }: FeedViewProps) {
   // `i + 1` here and nowhere else, so a filtered render below still hands DaySection each
   // survivor's real day rank (01, 04, 07) instead of silently renumbering from 1.
   const allEntries: RankedEntry[] = articles.map((article, i) => ({ article, rank: i + 1 }));
-  const matchedEntries = filterDef
-    ? allEntries.filter((entry) => matchesFilter(entry.article, filterDef))
+  // Repeat-folding narrows first, then the quick filter -- both AFTER rank assignment, so both
+  // preserve day ranks. Order between the two is immaterial (they test independent fields);
+  // folding first just means the filter never has to look at a card that would not render.
+  const visibleEntries = hiddenHashes
+    ? allEntries.filter((entry) => !hiddenHashes.has(entry.article.urlHash))
     : allEntries;
+  const matchedEntries = filterDef
+    ? visibleEntries.filter((entry) => matchesFilter(entry.article, filterDef))
+    : visibleEntries;
 
   // Branch review M6: the FILTER stamp line is a section-wide summary, not a per-day one (its
   // shown/total are already summed across every rendered day, task-C3-brief.md), so it renders

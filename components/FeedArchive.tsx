@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ARCHIVE_STEP_DAYS, MAX_ARCHIVE_DAYS } from "../src/lib/feed/days.js";
+import { repeatedStoryHashes } from "../src/lib/feed/dedupe.js";
 import { matchesFilter, type FilterDef } from "../src/lib/feed/filter.js";
 import type { FeedResult } from "../src/lib/feed/read.js";
 import type { Section } from "../src/types/article.js";
@@ -112,10 +113,21 @@ export function FeedArchive({
   // its own doc comment). `matchesFilter` runs again here rather than reading a count back off
   // each `FeedView` render -- a pure function over data already in hand, cheaper than plumbing a
   // per-day count back up through a prop.
+  // Story repeats folded across the whole archive render: cluster siblings within a day, and
+  // the same slug ranked again on an older day. Computed ONCE over all rendered days -- the
+  // cross-day rule ("keep the newest appearance") is inherently an archive-level fact no single
+  // day's FeedView could decide for itself. See src/lib/feed/dedupe.ts for the full rationale.
+  const hiddenHashes = repeatedStoryHashes(results);
+
   const filterTotals = filterDef
     ? results.reduce(
         (totals, result) => ({
-          shown: totals.shown + result.articles.filter((a) => matchesFilter(a, filterDef)).length,
+          // `shown` counts what actually renders, so it excludes folded repeats too; `total`
+          // stays the day's own fact, same as DaySection's "K of N stories" header.
+          shown:
+            totals.shown +
+            result.articles.filter((a) => !hiddenHashes.has(a.urlHash) && matchesFilter(a, filterDef))
+              .length,
           total: totals.total + result.articles.length,
         }),
         { shown: 0, total: 0 },
@@ -151,6 +163,7 @@ export function FeedArchive({
           result={result}
           now={now}
           filterDef={filterDef}
+          hiddenHashes={hiddenHashes}
         />
       ))}
       </div>
