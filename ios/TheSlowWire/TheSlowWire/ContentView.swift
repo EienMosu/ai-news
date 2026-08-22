@@ -24,29 +24,6 @@ struct ContentView: View {
     }
 }
 
-struct SectionView: View {
-    let vertical: Vertical
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.paper.ignoresSafeArea()
-                VStack(spacing: 12) {
-                    Image(systemName: vertical.symbol)
-                        .font(.system(size: 44))
-                        .foregroundStyle(vertical.color)
-                    Text(vertical.title)
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(Color.ink)
-                    Text("Stories will load here.")
-                        .foregroundStyle(Color.ink.opacity(0.6))
-                }
-            }
-            .navigationTitle(vertical.title)
-        }
-    }
-}
-
 #Preview {
     ContentView()
 }
