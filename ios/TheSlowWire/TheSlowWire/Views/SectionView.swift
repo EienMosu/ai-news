@@ -36,13 +36,16 @@ struct SectionView: View {
     }
 
     private func feedList(_ days: [FeedResult]) -> some View {
-        List {
+        // Folded once for the whole list: a story shown in a newer day
+        // does not repeat in an older one (index-aligned with `days`).
+        let dayStories = Story.groupDays(days)
+        return List {
             // `day` is nullable in the contract, so it cannot be the row
             // identity; the position in the newest-first response is.
             ForEach(days.indices, id: \.self) { index in
                 let result = days[index]
                 Section(formatDay(result.day)) {
-                    ForEach(Story.group(result.articles)) { story in
+                    ForEach(dayStories[index]) { story in
                         NavigationLink(value: story.lead) {
                             ArticleRow(
                                 article: story.lead,
