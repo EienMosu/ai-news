@@ -1,133 +1,118 @@
 @import "tailwindcss";
 
 /*
-  THE DAY'S DOSSIER — the world, in one place.
+  MODERN CLASSIC — the day's wire, set like a luxury journal.
 
-  Three colour worlds, one per vertical: the AI feed is drenched ink blue, the design feed
-  vermilion, the cloud feed deep pine. Switching verticals changes world rather than filtering a
-  list. Every component therefore has to survive on any field, which is why nothing below
-  hard-codes a field colour: a route sets --field once on <main data-field>, and everything else
-  derives.
+  One ivory page, ink type, gold as the single accent (owner redesign, 2026-08-27; the visual
+  contract is the "final-design" version of the direction gallery). The three colour worlds
+  retired on the web: sections are departments on one masthead, not grounds. Rank stays
+  position, never scale; the lead is announced by the gold double-rule and its gold numeral.
 
-  Status never depends on hue. Spec §8 talks in amber and red, but red is invisible on the
-  vermilion field, so state ships as a STAMP — a boxed, letterspaced mono word — and the word is
-  the signal. Colour-blind readers and the vermilion vertical get the same information.
+  Status still never depends on hue: state ships as a STAMP — a boxed, letterspaced mono
+  word — and the word is the signal.
+
+  THEMING. The site now has a real dark mode. Three viewer states: an explicit choice stamps
+  data-theme="light"/"dark" on <html> (a ~20-line inline script in layout.tsx, the app's one
+  deliberate exception to "zero client components" — vanilla JS, no client React); the default
+  stamps nothing and prefers-color-scheme decides. Tokens are defined in full on bare :root
+  (light), redefined under the media query guarded with :not([data-theme="light"]), and
+  redefined again under [data-theme="dark"] so the toggle wins in both directions. Components
+  only ever read tokens.
 */
 
-/*
-  These live in :root, NOT in @theme. Tailwind 4 emits @theme variables only when a generated
-  utility references them, so declaring the fields there left `--color-field-ai` undefined at
-  runtime -- which made `--field` invalid, which made every `background: var(--field)` fall
-  through to transparent. The lead entry's inversion silently did nothing, and the served
-  stylesheet proved it: :root carried Tailwind's own palette and none of these. Raw custom
-  properties belong in :root; @theme is for generating classes, which none of these do.
-*/
 :root {
-  --color-ink: #151512;
-  --color-ink-soft: #4a473c;
-  --color-paper: #efe9dc;
-  --color-paper-edge: #ded6c4;
+  --ground: #f6f1e6;
+  --ink: #191512;
+  --ink-soft: #575043;
+  /* Muted carries real text (department cells, the card meta line, day counts), so it must
+     clear 4.5:1 on the ivory ground. The mock's #7c7260 measured 4.21:1; darkened minimally
+     in the same warm-stone hue to #766c5b (4.59:1). tests/design/contrast.test.ts holds the
+     floor. The dark-theme muted (#a79c85, 6.81:1) is untouched. */
+  --muted: #766c5b;
+  /* Gold carries small-caps labels and rank numerals, so it must clear 4.5:1 on the ground —
+     deeper than the decorative gold of the mock; --gold-soft keeps the mock's tone for rules
+     and other non-text uses. tests/design/contrast.test.ts holds the floor. */
+  --gold: #7d600e;
+  --gold-soft: #a6811f;
+  --hair: #c9bc9c;
+  --hair-mid: #d8cdb4;
+  --hair-soft: #e2d8c2;
 
-  /* The three worlds. Deep enough that bone type clears 4.5:1 at the softest step the design
-     uses (0.70) -- measured, not judged: AI 5.83:1, design 4.89:1, cloud 5.69:1. */
-  --color-field-ai: #16307f;
-  --color-field-design: #7e2412;
-  --color-field-cloud: #1a432b;
-
-  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-playfair), Georgia, "Times New Roman", serif;
   --font-text: var(--font-literata), Georgia, serif;
   --font-apparatus: var(--font-jetbrains), ui-monospace, monospace;
 
-  /* Overwritten per vertical by [data-field]; the AI world is the default. */
-  --field: var(--color-field-ai);
-  --on-field: #f3eee2;
+  accent-color: var(--gold);
+  caret-color: currentColor;
+  scrollbar-color: color-mix(in oklab, var(--ink) 42%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #17130d;
+    --ink: #ece3ce;
+    --ink-soft: #cdc1a6;
+    --muted: #a79c85;
+    --gold: #d8ac52;
+    --gold-soft: #d8ac52;
+    --hair: #4a4230;
+    --hair-mid: #40392a;
+    --hair-soft: #2e2819;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #17130d;
+  --ink: #ece3ce;
+  --ink-soft: #cdc1a6;
+  --muted: #a79c85;
+  --gold: #d8ac52;
+  --gold-soft: #d8ac52;
+  --hair: #4a4230;
+  --hair-mid: #40392a;
+  --hair-soft: #2e2819;
 }
 
 /*
-  Explicit even for the default world, not just design: the section switch's hover preview (A2)
-  puts `data-field` on cell links nested inside whichever `<main data-field>` is currently
-  ambient. On the design page that ambient value is design's red, and custom properties only
-  re-derive on an element that a selector matches directly -- inheritance alone would leave an
-  AI cell showing the page's red on hover instead of its own blue. Every section needs its own
-  rule here so hovering back to it always re-derives that section's own colours, regardless of
-  which world the switch is currently sitting in.
+  Legacy aliases. A long tail of components and tests reads the dossier-era names; they resolve
+  to the Modern Classic tokens so nothing can render a retired colour. New code uses the short
+  names above.
 */
-[data-field="ai"] {
-  --field: var(--color-field-ai);
-  --on-field: #f3eee2;
-}
-
-[data-field="design"] {
-  --field: var(--color-field-design);
-  --on-field: #f6ece7;
-}
-
-/* The neutral ground. /day and /search span every vertical, so painting them one section's
-   field claims something false; like the status rail, what belongs to no world wears ink. The
-   lead-entry inversion then lands ink-on-paper, which is this ground's own voice. */
-[data-ground="ink"] {
-  --field: var(--color-ink);
-  --on-field: var(--color-paper);
-}
-
-[data-field="cloud"] {
-  --field: var(--color-field-cloud);
-  --on-field: #eef2e9;
+:root {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-paper: var(--ground);
+  --color-paper-edge: var(--hair-soft);
+  --field: var(--ink);
+  --on-field: var(--ground);
 }
 
 html {
-  background: var(--color-field-ai);
+  background: var(--ground);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+html[data-theme="dark"] {
   color-scheme: dark;
 }
 
-/*
-  The overscroll ground. The browser paints pull-to-refresh and rubber-band areas from the ROOT
-  element, but the world lives on `<main data-field>` further down, so the root used to resolve
-  `--field` to its own default and every vertical flashed AI blue at the edges.
-
-  `:has()` lets the root read the world from the page below it, scoped to `main`
-  because the section switch puts `data-field` on every vertical's LINK too, with no inline style tag and no
-  per-page component to keep in sync (the earlier fix used both). A browser without `:has()`
-  simply keeps the default above, which is the pre-fix behaviour, not a broken one.
-*/
-html:has(main[data-field="design"]),
-html:has(main[data-field="design"]) body {
-  background: var(--color-field-design);
-}
-html:has(main[data-field="cloud"]),
-html:has(main[data-field="cloud"]) body {
-  background: var(--color-field-cloud);
-}
-html:has(main[data-ground="ink"]),
-html:has(main[data-ground="ink"]) body {
-  background: var(--color-ink);
-}
-
 body {
-  background: var(--field);
-  color: var(--on-field);
+  background: var(--ground);
+  color: var(--ink);
   font-family: var(--font-text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/*
-  Browser surfaces. The parts nobody draws still carry the design, and shipping the defaults here
-  is the difference between a page that was built and one that was assembled.
-*/
+/* Browser surfaces: the parts nobody draws still carry the design. */
 ::selection {
-  background: var(--color-ink);
-  color: var(--color-paper);
-}
-[data-surface="paper"] ::selection {
-  background: var(--field);
-  color: var(--on-field);
-}
-:root {
-  accent-color: var(--field);
-  caret-color: currentColor;
-  scrollbar-color: color-mix(in oklab, var(--on-field) 42%, transparent) transparent;
-  scrollbar-width: thin;
+  background: var(--ink);
+  color: var(--ground);
 }
 :focus-visible {
   outline: 2px solid currentColor;
@@ -135,9 +120,7 @@ body {
   border-radius: 1px;
 }
 /* In @layer base, deliberately: unlayered author CSS outranks every @layer rule regardless of
-   specificity, so an unlayered `a { color:inherit }` silently defeated every colour utility on
-   every anchor in the app -- the story page's outbound button computed bone-on-bone even though
-   its class matched. Base-layer element defaults are what utilities are SUPPOSED to override. */
+   specificity — base-layer element defaults are what utilities are SUPPOSED to override. */
 @layer base {
   a {
     color: inherit;
@@ -161,9 +144,8 @@ body {
 }
 
 /*
-  The stamp. One form, used for every state the reader must not miss: a day's ranking status, an
-  imputed value, an article the model never scored. It reads as pressed-on rather than styled-in,
-  which is the point — these are marks the system makes about itself.
+  The stamp. One form, used for every state the reader must not miss. It reads as pressed-on
+  rather than styled-in — these are marks the system makes about itself.
 */
 .stamp {
   font-family: var(--font-apparatus);
@@ -181,17 +163,74 @@ body {
   background: currentColor;
 }
 .stamp[data-weight="loud"] > span {
-  /* The label has to invert against whatever ground the stamp landed on. */
-  color: var(--stamp-knockout, var(--color-paper));
+  color: var(--stamp-knockout, var(--ground));
   mix-blend-mode: normal;
 }
 
 /*
-  The paper panel. A clean sheet laid on the field; the shadow does the lifting.
+  The departments bar — the one control that changes section. Hairline rules top and bottom
+  frame it as a control zone; cells are bold letterspaced serif caps; the current cell is ink
+  at full strength on a 2px gold baseline. Cells split the padding-eaten width equally.
 */
-[data-surface="paper"] {
-  background-color: var(--color-paper);
-  color: var(--color-ink);
+.depts {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--hair);
+}
+.dept {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  padding: 0.8rem 0.25rem 0.7rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--muted);
+  border-bottom: 1px solid var(--hair);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.dept + .dept {
+  border-left: 1px solid var(--hair-soft);
+}
+.dept:hover {
+  color: var(--ink);
+}
+.dept[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 800;
+  border-bottom: 2px solid var(--gold-soft);
+  padding-bottom: calc(0.7rem - 1px);
+}
+
+/*
+  The theme toggle's two labels. SSR renders both; CSS shows the one that names the action the
+  press will take (on a light page you can go Dark, and vice versa) across all three viewer
+  states, so the label is honest before any script runs.
+*/
+.theme-toggle .tt-dark {
+  display: inline-flex;
+}
+.theme-toggle .tt-light {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .theme-toggle .tt-dark {
+    display: none;
+  }
+  html:not([data-theme="light"]) .theme-toggle .tt-light {
+    display: inline-flex;
+  }
+}
+html[data-theme="dark"] .theme-toggle .tt-dark {
+  display: none;
+}
+html[data-theme="dark"] .theme-toggle .tt-light {
+  display: inline-flex;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -204,21 +243,25 @@ body {
   }
 }
 
-/* Coarse pointers only: raises the section switch's tap target to 44px without adding bulk to
-   the mouse-driven desktop layout, where the box is already comfortably clickable. */
+/* The active chip is ink-filled, so currentColor there is the ground — a focus ring drawn in
+   it disappears against the page. Ink stays visible on the ground in both themes. The search
+   field opts its input out of the ring (the box is the control), so the box itself must show
+   keyboard focus instead. */
+.filter-active-chip:focus-visible {
+  outline-color: var(--ink);
+}
+.search-field:focus-within {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* Coarse pointers only: raises tap targets to 44px without bulking the desktop layout. */
 @media (pointer: coarse) {
   nav[aria-label="Sections"] a {
-    padding-block: 0.85rem;
+    padding-block: 0.95rem;
     min-height: 44px;
   }
-
-  /* The quick-filter row (FilterRow)'s own controls get the identical treatment, for the
-     identical reason -- a target sized for a mouse cursor is too small on a touch screen.
-     Scoped to `nav[aria-label="Quick filters"]` rather than a bare attribute selector (branch
-     review M10): the previous `[data-chip]` rule covered only the chip/Others links and would
-     have applied to any future, unrelated `data-chip` anywhere in the app; this also covers the
-     Others form's text input and its Filter submit button, which the old selector missed
-     entirely. */
   nav[aria-label="Quick filters"] a,
   nav[aria-label="Quick filters"] input,
   nav[aria-label="Quick filters"] button {
@@ -227,29 +270,13 @@ body {
   }
 }
 
-/* Branch review I5 (and the same pre-existing defect on the switch's current cell):
-   `:focus-visible` (above) draws its ring in `currentColor`, which on a paper-inverted control
-   is `var(--field)` -- field on field, 1.00:1, invisible on all three worlds. Overriding just
-   the outline colour to the paper tone keeps the ring visible against the field ground. Applied
-   to both inverted controls: the active filter chip and the switch's current cell. */
-.filter-active-chip:focus-visible,
-.switch-current:focus-visible {
-  outline-color: var(--color-paper);
-}
-
 /*
   THE ONE AUTHORED MOMENT.
 
   Every route is server-rendered per request against DynamoDB, so there is a real wait to fill —
   and the honest thing to show during it is the product's own mechanism: the day being counted,
-  then stamped. Not a spinner, which would say only "something is happening".
-
-  Pure CSS, by necessity and to its benefit: this app ships no client components, so the counter
-  is a strip of digits translated under a window with `steps()` timing. Three columns running at
-  different rates read as a counter racing rather than three clocks in sync.
-
-  It never claims a figure it does not have. The loader has no data yet, so the digits cycle and
-  the stamp says what is happening — the real count lands with the real page.
+  then stamped. Pure CSS: this app ships no client React; the counter is a strip of digits
+  translated under a window with steps() timing.
 */
 .odo {
   display: inline-flex;
@@ -281,15 +308,11 @@ body {
 @keyframes land {
   0% {
     opacity: 0;
-    transform: translateY(-0.5rem) rotate(-2.4deg) scale(1.06);
-  }
-  70% {
-    opacity: 1;
-    transform: translateY(0) rotate(-1.1deg) scale(0.995);
+    transform: translateY(-0.5rem) scale(1.03);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) rotate(-1.1deg) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -297,10 +320,10 @@ body {
 .rule-fill {
   background: linear-gradient(
     90deg,
-    color-mix(in oklab, var(--color-ink) 16%, transparent) 0%,
-    color-mix(in oklab, var(--color-ink) 16%, transparent) 40%,
-    color-mix(in oklab, var(--color-ink) 6%, transparent) 55%,
-    color-mix(in oklab, var(--color-ink) 16%, transparent) 70%
+    color-mix(in oklab, var(--ink) 16%, transparent) 0%,
+    color-mix(in oklab, var(--ink) 16%, transparent) 40%,
+    color-mix(in oklab, var(--ink) 6%, transparent) 55%,
+    color-mix(in oklab, var(--ink) 16%, transparent) 70%
   );
   background-size: 260% 100%;
   animation: rule-sweep 1.6s ease-in-out infinite;
@@ -314,26 +337,9 @@ body {
   }
 }
 
-/*
-  The mark's fold. On load, the corner path draws itself once: the file being folded shut. One
-  small authored entrance on the brand, nowhere else -- the loader remains the page's only other
-  authored motion. Reduced-motion collapses it with everything else.
-*/
-.mark-fold {
-  stroke-dasharray: 15;
-  stroke-dashoffset: 15;
-  animation: mark-fold 560ms cubic-bezier(0.16, 1, 0.3, 1) 180ms forwards;
-}
-@keyframes mark-fold {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
 
 /*
-  The skip link: first tabbable element, invisible until keyboard focus, then a stamp-voiced
-  banner. Three control rows precede the stories; a keyboard reader should not pay them on
-  every page.
+  The skip link: first tabbable element, invisible until keyboard focus.
 */
 .skip-link {
   position: absolute;
@@ -345,7 +351,7 @@ body {
   top: 12px;
   transform: translateX(-50%);
   z-index: 10;
-  background: var(--color-ink);
-  color: var(--color-paper);
+  background: var(--ink);
+  color: var(--ground);
   padding: 0.6em 1em;
 }

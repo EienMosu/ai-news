@@ -13,15 +13,10 @@ afterEach(cleanup);
 const TAGLINE = "Each day’s news, ranked by importance, not recency.";
 
 describe("SectionNav", () => {
-  describe("the brand block", () => {
+  describe("the masthead block", () => {
     it("renders the wordmark 'The Slow Wire'", () => {
       render(<SectionNav current={null} />);
-      expect(screen.getByTestId("brand").textContent).toContain("The Slow Wire");
-    });
-
-    it("renders the tagline with the exact apparatus copy", () => {
-      render(<SectionNav current={null} />);
-      expect(screen.getByTestId("tagline").textContent).toBe(TAGLINE);
+      expect(screen.getByText("The Slow Wire")).toBeTruthy();
     });
 
     it("renders the masthead as the page's <h1> when asHeading is true (the default)", () => {
@@ -33,31 +28,83 @@ describe("SectionNav", () => {
     it("renders the masthead as a <p>, not a heading, when asHeading is false", () => {
       render(<SectionNav current={null} asHeading={false} />);
       expect(screen.queryByRole("heading")).toBeNull();
-      expect(screen.getByTestId("brand").textContent).toContain("The Slow Wire");
+      expect(screen.getByText("The Slow Wire")).toBeTruthy();
     });
 
-    it("hides the brand mark svg from assistive tech", () => {
-      const { container } = render(<SectionNav current={null} />);
-      const mark = container.querySelector("svg");
-      expect(mark).not.toBeNull();
-      expect(mark?.getAttribute("aria-hidden")).toBe("true");
+    it("centers the masthead and sets it in the display face (Modern Classic: the title sits mid-page like a newspaper nameplate, in --font-display which is now Playfair)", () => {
+      render(<SectionNav current={null} />);
+      const heading = screen.getByRole("heading", { level: 1 });
+      expect(heading.className).toContain("text-center");
+      expect(heading.className).toContain("font-[family-name:var(--font-display)]");
+    });
+
+    it("renders the masthead as plain text -- the old brand-mark svg is retired, so the wordmark carries the identity alone", () => {
+      render(<SectionNav current={null} />);
+      const heading = screen.getByRole("heading", { level: 1 });
+      expect(heading.querySelector("svg")).toBeNull();
     });
   });
 
-  describe("the section switch", () => {
+  describe("the subline under the masthead", () => {
+    it("renders the passed subline verbatim (the feeds pass the day and its count)", () => {
+      render(<SectionNav current="ai" subline="26.08.2026 · 99 stories" />);
+      expect(screen.getByTestId("tagline").textContent).toBe("26.08.2026 · 99 stories");
+    });
+
+    it("falls back to the exact apparatus tagline when no subline is passed (pages that belong to no day)", () => {
+      render(<SectionNav current={null} />);
+      expect(screen.getByTestId("tagline").textContent).toBe(TAGLINE);
+    });
+  });
+
+  describe("the util row", () => {
+    it("states the product's claim, 'Ranked by importance', on the left", () => {
+      render(<SectionNav current={null} />);
+      expect(screen.getByText("Ranked by importance")).toBeTruthy();
+    });
+
+    it("renders the theme toggle as a <button data-theme-toggle> with the .theme-toggle class -- layout.tsx's inline script finds it by that attribute, and the class carries the CSS that picks which label shows", () => {
+      const { container } = render(<SectionNav current={null} />);
+      const toggle = container.querySelector("button[data-theme-toggle]");
+      expect(toggle).not.toBeNull();
+      expect(toggle?.className).toContain("theme-toggle");
+    });
+
+    it("ships BOTH labels, Dark and Light, inside the toggle -- CSS shows the right one per theme, so the button is honest before any script runs", () => {
+      const { container } = render(<SectionNav current={null} />);
+      const toggle = container.querySelector("button[data-theme-toggle]");
+      expect(toggle?.textContent).toContain("Dark");
+      expect(toggle?.textContent).toContain("Light");
+    });
+
+    it("hides the toggle's decorative moon/sun icons from assistive tech", () => {
+      const { container } = render(<SectionNav current={null} />);
+      const toggle = container.querySelector("button[data-theme-toggle]");
+      const icons = toggle ? Array.from(toggle.querySelectorAll("svg")) : [];
+      expect(icons.length).toBeGreaterThan(0);
+      for (const icon of icons) {
+        expect(icon.getAttribute("aria-hidden")).toBe("true");
+      }
+    });
+  });
+
+  describe("the departments bar", () => {
     it("renders exactly one link per SECTIONS entry", () => {
       render(<SectionNav current={null} />);
       const nav = screen.getByRole("navigation", { name: "Sections" });
       expect(within(nav).getAllByRole("link")).toHaveLength(SECTIONS.length);
     });
 
-    it("gives the current cell the switch-current class the focus-ring override targets", () => {
-    render(<SectionNav current="design" />);
-    expect(screen.getByRole("link", { name: "Design" }).className).toContain("switch-current");
-    expect(screen.getByRole("link", { name: "AI" }).className).not.toContain("switch-current");
-  });
+    it("gives every cell the dept class -- the current cell is styled by CSS via .dept[aria-current], not by a special class or inline style", () => {
+      render(<SectionNav current="design" />);
+      const currentCell = screen.getByRole("link", { name: "Design News" });
+      expect(currentCell.className).toContain("dept");
+      expect(currentCell.className).not.toContain("switch-current");
+      expect(currentCell.getAttribute("style")).toBeNull();
+      expect(screen.getByRole("link", { name: "AI News" }).className).toContain("dept");
+    });
 
-  it("labels every switch link from the SECTION_LABEL map, in SECTIONS order", () => {
+    it("labels every department cell from the SECTION_LABEL map, in SECTIONS order", () => {
       render(<SectionNav current={null} />);
       const nav = screen.getByRole("navigation", { name: "Sections" });
       const links = within(nav).getAllByRole("link");
@@ -66,7 +113,7 @@ describe("SectionNav", () => {
       });
     });
 
-    it("every SECTIONS entry has a SECTION_LABEL entry, and today's labels read AI, Design and Cloud literally -- so a new section cannot ship unlabelled, and a wrong value in the map cannot pass by matching itself", () => {
+    it("every SECTIONS entry has a SECTION_LABEL entry, and today's labels read the full 'AI News', 'Design News' and 'Cloud News' literally (owner, 2026-08-27: the words are the affordance) -- so a new section cannot ship unlabelled, and a wrong value in the map cannot pass by matching itself", () => {
       for (const section of SECTIONS) {
         expect(SECTION_LABEL[section]).toBeTruthy();
       }
@@ -74,125 +121,119 @@ describe("SectionNav", () => {
       render(<SectionNav current={null} />);
       const nav = screen.getByRole("navigation", { name: "Sections" });
       const texts = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(texts).toEqual(["AI", "Design", "Cloud"]);
+      expect(texts).toEqual(["AI News", "Design News", "Cloud News"]);
     });
 
     it("renders every section link with the right href", () => {
       render(<SectionNav current={null} />);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/");
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
-      expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("href")).toBe("/cloud");
-    });
-
-    it("carries data-field on each switch link matching its own section", () => {
-      render(<SectionNav current="ai" />);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("data-field")).toBe("ai");
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("data-field")).toBe(
-        "design",
+      expect(screen.getByRole("link", { name: "AI News" }).getAttribute("href")).toBe("/");
+      expect(screen.getByRole("link", { name: "Design News" }).getAttribute("href")).toBe(
+        "/design",
       );
-      expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("data-field")).toBe(
-        "cloud",
-      );
+      expect(screen.getByRole("link", { name: "Cloud News" }).getAttribute("href")).toBe("/cloud");
     });
 
-    it("marks the AI link current via aria-current when current is 'ai'", () => {
+    it("carries NO data-field anywhere -- the per-section colour worlds are retired, and a stray data-field would resurrect dead CSS hooks", () => {
+      const { container } = render(<SectionNav current="ai" />);
+      expect(container.querySelector("[data-field]")).toBeNull();
+    });
+
+    it("shows no story counts in the cells -- the labels are the whole cell", () => {
       render(<SectionNav current="ai" />);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
+      const nav = screen.getByRole("navigation", { name: "Sections" });
+      for (const link of within(nav).getAllByRole("link")) {
+        expect(link.textContent).not.toMatch(/\d/);
+      }
     });
 
-    it("does not mark the Design link current when current is 'ai'", () => {
+    it("marks the AI cell current via aria-current when current is 'ai'", () => {
       render(<SectionNav current="ai" />);
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
-    });
-
-    it("marks the Design link current via aria-current when current is 'design'", () => {
-      render(<SectionNav current="design" />);
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBe(
+      expect(screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current")).toBe(
         "page",
       );
     });
 
-    it("does not mark the AI link current when current is 'design'", () => {
-      render(<SectionNav current="design" />);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
+    it("does not mark the Design cell current when current is 'ai'", () => {
+      render(<SectionNav current="ai" />);
+      expect(
+        screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current"),
+      ).toBeNull();
     });
 
-    it("marks neither link current when current is null", () => {
+    it("marks the Design cell current via aria-current when current is 'design'", () => {
+      render(<SectionNav current="design" />);
+      expect(screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current")).toBe(
+        "page",
+      );
+    });
+
+    it("does not mark the AI cell current when current is 'design'", () => {
+      render(<SectionNav current="design" />);
+      expect(
+        screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current"),
+      ).toBeNull();
+    });
+
+    it("marks no cell current when current is null", () => {
       render(<SectionNav current={null} />);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+      expect(
+        screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current"),
+      ).toBeNull();
+      expect(
+        screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current"),
+      ).toBeNull();
     });
 
-    it("marks the Cloud link current via aria-current when current is 'cloud', and leaves AI/Design uncurrent", () => {
+    it("marks the Cloud cell current via aria-current when current is 'cloud', and leaves AI/Design uncurrent", () => {
       render(<SectionNav current="cloud" />);
-      expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("aria-current")).toBe(
+      expect(screen.getByRole("link", { name: "Cloud News" }).getAttribute("aria-current")).toBe(
         "page",
       );
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+      expect(
+        screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current"),
+      ).toBeNull();
+      expect(
+        screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current"),
+      ).toBeNull();
     });
   });
 
   describe("carrying `?days=` across a vertical switch -- fix round 1, F9", () => {
     it("omits ?days= from both links when `days` is not given at all", () => {
       render(<SectionNav current="ai" />);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/");
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
+      expect(screen.getByRole("link", { name: "AI News" }).getAttribute("href")).toBe("/");
+      expect(screen.getByRole("link", { name: "Design News" }).getAttribute("href")).toBe(
+        "/design",
+      );
     });
 
     it("omits ?days= from both links when `days` equals the default", () => {
       render(<SectionNav current="ai" days={DEFAULT_ARCHIVE_DAYS} />);
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design");
+      expect(screen.getByRole("link", { name: "Design News" }).getAttribute("href")).toBe(
+        "/design",
+      );
     });
 
     it("carries a non-default `days` value into both links", () => {
       render(<SectionNav current="ai" days={21} />);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=21");
-      expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe(
+      expect(screen.getByRole("link", { name: "AI News" }).getAttribute("href")).toBe("/?days=21");
+      expect(screen.getByRole("link", { name: "Design News" }).getAttribute("href")).toBe(
         "/design?days=21",
       );
     });
   });
 
-  describe("the Search entry point -- Task 8 fix round 1, finding 7", () => {
-    it("renders a Search link alongside the section switch", () => {
-      render(<SectionNav current="ai" />);
-      expect(screen.getByRole("link", { name: "Search" })).toBeTruthy();
-    });
-
-    it("points a bare Search link at /search with no ?section= when current is null", () => {
-      render(<SectionNav current={null} />);
-      expect(screen.getByRole("link", { name: "Search" }).getAttribute("href")).toBe("/search");
-    });
-
-    it("carries ?section=ai into the Search link when current is 'ai'", () => {
-      render(<SectionNav current="ai" />);
-      expect(screen.getByRole("link", { name: "Search" }).getAttribute("href")).toBe(
-        "/search?section=ai",
+  describe("what moved out of the masthead -- Modern Classic, 2026-08-27", () => {
+    it("carries no /search link: the Archive entry point lives in FilterRow now, so the departments are the ONLY links here", () => {
+      // The old top-right Search link is retired from SectionNav, not from the product --
+      // FilterRow renders the Archive link (and its own tests pin that). This test pins the
+      // other half of the move: SectionNav must not grow a second, competing search entry.
+      const { container } = render(<SectionNav current="ai" />);
+      expect(container.querySelector('a[href^="/search"]')).toBeNull();
+      expect(screen.getAllByRole("link")).toHaveLength(SECTIONS.length);
+      expect(screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current")).toBe(
+        "page",
       );
-    });
-
-    it("carries ?section=design into the Search link when current is 'design'", () => {
-      render(<SectionNav current="design" />);
-      expect(screen.getByRole("link", { name: "Search" }).getAttribute("href")).toBe(
-        "/search?section=design",
-      );
-    });
-
-    it("never marks the Search link aria-current -- it is not a vertical", () => {
-      render(<SectionNav current="ai" />);
-      expect(screen.getByRole("link", { name: "Search" }).getAttribute("aria-current")).toBeNull();
-    });
-
-    it("adding the Search link does not disturb the name-scoped AI/Design/Cloud assertions elsewhere in this file", () => {
-      // Every other test in this file finds "AI", "Design" and "Cloud" by exact accessible name
-      // via getByRole("link", { name: ... }) -- a fourth link (Search, alongside the three
-      // section links) cannot make those ambiguous. This test just states that invariant
-      // explicitly, since the review that asked for this link verified it by inspection; this
-      // is what pins it as an executable fact instead.
-      render(<SectionNav current="ai" />);
-      expect(screen.getAllByRole("link")).toHaveLength(4);
-      expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
     });
   });
 });

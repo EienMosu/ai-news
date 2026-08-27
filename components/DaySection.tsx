@@ -56,31 +56,33 @@ export function DaySection({ day, entries, totalInDay, now }: DaySectionProps) {
 
   return (
     <section className="mb-10 sm:mb-14">
-      <div
-        data-surface="paper"
-        className="px-4 pb-2 pt-5 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] sm:px-7 sm:pb-4 sm:pt-7"
-      >
-        <header className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 sm:mb-6">
-          <h2 className="font-[family-name:var(--font-display)] text-[1.75rem] font-extrabold leading-none tracking-[-0.028em] sm:text-[2.25rem]">
-            <Link href={`/day/${day}`} className="no-underline hover:underline" data-numeric>
-              {formatDayKey(day)}
-            </Link>
-          </h2>
-          <span className="apparatus opacity-70" data-numeric>
-            {countLabel}
-          </span>
-        </header>
+      <header className="mb-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h2 className="font-[family-name:var(--font-display)] text-[1.375rem] font-bold leading-none tracking-[-0.02em] sm:text-[1.625rem]">
+          <Link href={`/day/${day}`} className="no-underline hover:underline" data-numeric>
+            {formatDayKey(day)}
+          </Link>
+        </h2>
+        <span className="apparatus text-[color:var(--muted)]" data-numeric>
+          {countLabel}
+        </span>
+      </header>
 
-        {entries.map((entry, i) => (
-          <ArticleCard
-            key={entry.article.urlHash}
-            article={entry.article}
-            now={now}
-            rank={entry.rank}
-            lead={i === 0}
-          />
-        ))}
-      </div>
+      {/* The lead's announcement: the gold double-rule and its tag open the day, Modern
+          Classic's replacement for the retired field inversion — rank still shows as ground
+          (the announcement), never as scale. */}
+      <div className="mt-3 h-[4px] border-y border-[var(--gold-soft)]" aria-hidden="true" />
+      <p className="apparatus mt-2.5 font-medium tracking-[0.3em] text-[color:var(--gold)]">
+        The lead
+      </p>
+
+      {entries.map((entry, i) => (
+        <div
+          key={entry.article.urlHash}
+          className={i > 0 ? "border-t border-[var(--hair-soft)]" : undefined}
+        >
+          <ArticleCard article={entry.article} now={now} rank={entry.rank} lead={i === 0} />
+        </div>
+      ))}
     </section>
   );
 }

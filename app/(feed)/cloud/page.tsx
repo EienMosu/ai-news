@@ -3,6 +3,7 @@ import { FilterRow } from "../../../components/FilterRow.js";
 import { SectionNav } from "../../../components/SectionNav.js";
 import { parseDaysParam } from "../../../src/lib/feed/days.js";
 import { resolveFilter, sanitizeFilterParam } from "../../../src/lib/feed/filter.js";
+import { feedHeaderData } from "../../../src/lib/feed/header.js";
 import { getRecentDays } from "../../../src/lib/feed/read.js";
 
 // See app/page.tsx for why this is required: without it, `pnpm build` prerenders this route
@@ -30,19 +31,19 @@ function firstOf(raw: string | string[] | undefined): string | undefined {
  * link.
  */
 export default async function CloudPage({ searchParams }: CloudPageProps) {
-  const { days: rawDays, f: rawF, others: rawOthers } = await searchParams;
+  const { days: rawDays, f: rawF } = await searchParams;
   const days = parseDaysParam(rawDays);
   const activeF = sanitizeFilterParam(firstOf(rawF));
   const filterDef = activeF !== null ? resolveFilter("cloud", activeF) : null;
-  const othersOpen = firstOf(rawOthers) === "1";
   const { results, failedDays } = await getRecentDays("cloud", days);
   const now = new Date();
+  const { subline, chipCounts } = feedHeaderData("cloud", results);
 
   return (
-    <main data-field="cloud" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+    <main className="min-h-dvh bg-[var(--ground)] px-5 py-8 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
-      <SectionNav current="cloud" days={days} />
-      <FilterRow section="cloud" basePath="/cloud" activeF={activeF} othersOpen={othersOpen} days={days} />
+      <SectionNav current="cloud" days={days} subline={subline} />
+      <FilterRow section="cloud" basePath="/cloud" activeF={activeF} chipCounts={chipCounts} days={days} />
       <FeedArchive
         section="cloud"
         results={results}

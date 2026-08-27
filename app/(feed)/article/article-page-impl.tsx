@@ -97,14 +97,14 @@ export async function ArticlePageImpl({
   const recency = computeRecency(article.publishedAt, article.firstSeenAt, now);
 
   return (
-    <main data-field={article.section ?? "ai"} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+    <main className="min-h-dvh bg-[var(--ground)] px-5 py-8 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} asHeading={false} />
 
-      <article
-        data-surface="paper"
-        className="px-5 pb-7 pt-6 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] sm:px-9 sm:pb-9 sm:pt-8"
-      >
+      {/* The document opens under the gold rule -- the lead grammar, reused for the one
+          story this page is about. */}
+      <div className="h-[4px] border-y border-[var(--gold-soft)]" aria-hidden="true" />
+      <article className="pb-7 pt-6 sm:pb-9 sm:pt-8">
         {article.imageUrl !== null ? (
           <img
             src={article.imageUrl}
@@ -114,7 +114,7 @@ export async function ArticlePageImpl({
         ) : null}
 
         <h1
-          className="font-[family-name:var(--font-display)] text-[1.5rem] font-extrabold leading-[1.12] tracking-[-0.025em] sm:text-[2rem]"
+          className="font-[family-name:var(--font-display)] text-[1.625rem] font-bold leading-[1.15] tracking-[-0.02em] sm:text-[2.125rem]"
           style={{ textWrap: "balance" }}
         >
           {article.title}
@@ -152,7 +152,7 @@ export async function ArticlePageImpl({
         {article.whyItMatters !== null ? (
           <p
             data-testid="why-it-matters"
-            className="mt-6 max-w-[62ch] border-l-[1px] border-current pl-4 font-[family-name:var(--font-text)] text-[1.1875rem] italic leading-[1.55]"
+            className="mt-6 max-w-[62ch] border-l-2 border-[var(--gold-soft)] pl-4 font-[family-name:var(--font-text)] text-[1.1875rem] italic leading-[1.55]"
           >
             {article.whyItMatters}
           </p>
@@ -184,8 +184,7 @@ export async function ArticlePageImpl({
             target="_blank"
             rel="noopener noreferrer"
             data-testid="original-link"
-            className="mt-8 inline-block px-5 py-3 font-[family-name:var(--font-display)] text-[0.9375rem] font-semibold no-underline transition-opacity hover:opacity-90"
-            style={{ background: "var(--field)", color: "var(--on-field)" }}
+            className="mt-8 inline-block bg-[var(--ink)] px-5 py-3 font-[family-name:var(--font-display)] text-[0.9375rem] font-semibold text-[color:var(--ground)] no-underline transition-opacity hover:opacity-90"
           >
             Read the original{article.sourceName !== "" ? ` at ${article.sourceName}` : ""}
           </a>

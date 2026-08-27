@@ -77,18 +77,26 @@ describe("SearchPage dynamic export", () => {
 });
 
 describe("SearchPage -- renders SectionNav (fix round 1, finding 7)", () => {
-  it("renders SectionNav with neither vertical current, even on the blank-query form", async () => {
+  // Modern Classic (owner, 2026-08-27) renamed the departments-bar cells to the full "... News"
+  // labels (`SECTION_LABEL` in components/SectionNav.tsx) -- the words themselves are the
+  // affordance now. The contract this block guards is unchanged, only its spelling: /search
+  // belongs to no vertical, so SectionNav gets `current={null}` and NO department cell may
+  // carry `aria-current="page"` -- current-ness is announced via that attribute (and styled
+  // via `.dept[aria-current]` in CSS), so its absence is the honest "you are on neither" state.
+  it("renders SectionNav with no department current, even on the blank-query form", async () => {
     render(await SearchPage({ searchParams: searchParams() }));
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "Cloud News" }).getAttribute("aria-current")).toBeNull();
   });
 
-  it("renders SectionNav with neither vertical current on a results page too", async () => {
+  it("renders SectionNav with all three departments reachable on a results page too", async () => {
     vi.mocked(searchRecentDays).mockResolvedValue(recentOutcome());
     vi.mocked(searchArchiveDays).mockResolvedValue(archiveOutcome());
     render(await SearchPage({ searchParams: searchParams({ q: "claude" }) }));
-    expect(screen.getByRole("link", { name: "AI" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Design" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "AI News" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Design News" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Cloud News" })).toBeTruthy();
   });
 });
 
@@ -160,7 +168,11 @@ describe("SearchPage -- section scope (decision 3)", () => {
     const select = screen.getByLabelText("Section") as HTMLSelectElement;
     const values = [...select.options].map((o) => o.value);
     expect(values).toContain("cloud");
-    expect(screen.getByRole("option", { name: "Cloud" })).toBeTruthy();
+    // The option's visible label now comes from `SECTION_LABEL` (the same source as the
+    // departments bar, so the dropdown and the nav can never drift apart), which the Modern
+    // Classic redesign renamed to the full "Cloud News". The C1 contract itself is untouched:
+    // the option's submitted VALUE stays the bare "cloud" the server parses -- asserted above.
+    expect(screen.getByRole("option", { name: "Cloud News" })).toBeTruthy();
   });
 });
 

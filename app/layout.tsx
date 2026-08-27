@@ -1,16 +1,17 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Bricolage_Grotesque, JetBrains_Mono, Literata } from "next/font/google";
+import { JetBrains_Mono, Literata, Playfair_Display } from "next/font/google";
 
-// Self-hosted at build time by next/font. Three roles, three faces, and each one earns its place:
-// the display grotesque does the talking, Literata is a face designed for reading at length
-// (every entry carries prose), and the mono is apparatus — filing times, counts, scores — which
-// is data in columns, not a costume for "technical".
-const display = Bricolage_Grotesque({
+// Self-hosted at build time by next/font. Three roles, three faces: Playfair Display is the
+// high-contrast Didone that carries the masthead and every headline (Modern Classic's voice),
+// Literata is a face designed for reading at length (every entry carries prose), and the mono
+// is apparatus — filing times, counts, scores — which is data in columns, not a costume for
+// "technical".
+const display = Playfair_Display({
   subsets: ["latin"],
-  weight: ["600", "800"],
-  variable: "--font-bricolage",
+  weight: ["600", "700", "800"],
+  variable: "--font-playfair",
   display: "swap",
 });
 const text = Literata({
@@ -40,44 +41,65 @@ export const metadata: Metadata = {
   description: "Each day’s news, ranked by importance, not recency.",
 };
 
+/*
+  The theme script — the app's ONE deliberate exception to "zero client components", and it is
+  not a component: ~20 lines of vanilla JS, inlined synchronously before content so an explicit
+  choice never flashes the wrong theme. It stamps data-theme from localStorage (absent = follow
+  the system), and delegates clicks from any [data-theme-toggle] button. The button's label is
+  CSS-driven (globals.css .theme-toggle), so SSR stays honest without hydration tricks.
+*/
+const THEME_SCRIPT = `
+(function () {
+  var KEY = "theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved === "light" || saved === "dark") {
+      document.documentElement.setAttribute("data-theme", saved);
+    }
+  } catch (e) {}
+  document.addEventListener("click", function (event) {
+    var toggle = event.target && event.target.closest && event.target.closest("[data-theme-toggle]");
+    if (!toggle) return;
+    var root = document.documentElement;
+    var current = root.getAttribute("data-theme");
+    if (current !== "light" && current !== "dark") {
+      current = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    var next = current === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+  });
+})();
+`;
+
 //
 // THE DIRECTION CONTRACT -- what this build committed to, and what it refused.
 // Not rendered: a JSX comment is stripped at compile time. The shipped record of this
 // world is DESIGN.md.
 //
 // THESIS: The Slow Wire
-// A day that was judged, shown as the file it was judged in. Refuses the reader's
-// default arrangement -- a white page of same-size cards sorted by recency -- because this
-// product's whole claim is that something read the day and ranked it, and a card list
-// hides the ranking inside an order nobody can see.
-// AMENDMENT (2026-08-21): The paper grid was removed for a cleaner sheet; the shadow does
-// the lifting instead.
-// AMENDMENT (2026-08-21): The masthead dropped one step so the section switch reads as
-// the primary axis.
-// AMENDMENT (2026-08-21): A third colour world, deep pine, shipped for the Cloud
-// vertical; the ranking cap rose to 375 so every vertical keeps its fair share.
-// OWN-WORLD: Three drenched colour worlds, one per vertical: ink blue #16307f for AI,
-// vermilion #7e2412 for design, deep pine #1a432b for cloud, each carrying a clean bone
-// paper sheet (#efe9dc). Bricolage Grotesque display, Literata prose, JetBrains Mono
-// apparatus. State is a boxed mono STAMP, never a hue, because red is invisible on
-// vermilion.
-// STORY: The reader sees the day was closed and counted, scans entries at one fixed size,
-// notices the lead entry because it left the paper, and opens two or three.
-// FIRST VIEWPORT: An ink status rail sits above the field, outside every colour world. On
-// the field: the brand row (mark, wordmark and tagline left, Search right), then the
-// full-width section switch, then the quick-filter row, then a clear break before the
-// first day sheet. That sheet floats below all of it: date large in display, ranked count
-// and COMPLETE/PARTIAL stamped in mono beside it, entries as numbered rows. The lead entry
-// alone sits on the field, inverted: rank shows as ground, not as scale.
-// FORM: The Day's Dossier, pinned by the user from Mosby's Files and The Matter of
-// Design, overriding roll 017543fa (which assigned candidate 7, Proceedings Index).
-// FINISH: unreviewed and undocumented is unfinished; this build ends with the finish
-// review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+// A day that was judged, shown as the journal it was published in. Rank is position and
+// the lead's gold announcement, never scale; every entry keeps one type size.
+// AMENDMENT (2026-08-27, owner redesign): MODERN CLASSIC replaced the Day's Dossier.
+// The three colour worlds retired on the web -- one ivory page (true-dark twin), ink
+// type, gold as the single accent. Sections became a departments bar ("AI News /
+// Design News / Cloud News", no counts) framed by hairlines under the masthead; the
+// quick-filter row gained a search field; a labeled Dark/Light pill sits in the util
+// row. Playfair Display took the display role from Bricolage Grotesque. The visual
+// contract is the direction gallery's "final-design" version.
+// STORY: The reader sees the day was closed and counted, scans entries at one fixed
+// size, notices the lead under its gold rule, and opens two or three.
+// FINISH: unreviewed and undocumented is unfinished; DESIGN.md follows the shipped code.
 //
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${text.variable} ${mono.variable}`}>
+    <html
+      lang="en"
+      className={`${display.variable} ${text.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <body>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         {children}
       </body>
     </html>
