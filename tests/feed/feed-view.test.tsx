@@ -144,7 +144,10 @@ describe("FeedView -- quick filters", () => {
     const rankTexts = Array.from(
       container.querySelectorAll('[aria-hidden="true"][data-numeric]'),
     ).map((el) => el.textContent);
-    expect(rankTexts).toEqual(["01", "04", "07"]);
+    // Modern Classic renders ranks as folio numerals -- "1", never a zero-padded counter
+    // "01" -- but the fact under test is unchanged: these are the day's REAL ranks (the 1st,
+    // 4th, and 7th stories of the unfiltered day), not the survivors renumbered from 1.
+    expect(rankTexts).toEqual(["1", "4", "7"]);
   });
 
   it("renders 'No matches this day.' for a day with articles but zero matches", () => {
@@ -156,15 +159,30 @@ describe("FeedView -- quick filters", () => {
     expect(screen.getByText("No matches this day.")).toBeTruthy();
   });
 
-  it("keeps the day header link and count frame for a zero-match day (the sheet, not a bare message)", () => {
+  it("keeps the day header link and count frame for a zero-match day (a framed day, not a bare message)", () => {
     const articles = buildArticles(5, new Set());
     const def = resolveFilter("ai", "anthropic");
-    render(
+    const { container } = render(
       <FeedView section="ai" result={feedResult({ articles, day: "2026-08-18" })} now={NOW} filterDef={def} />,
     );
     expect(screen.getByRole("link", { name: "18.08.2026" }).getAttribute("href")).toBe(
       "/day/2026-08-18",
     );
+    // The count keeps the "K of N" shape even at zero matches -- "0 of 5 stories" says the day
+    // had 5 stories and the filter kept none, where a bare "0 stories" would misdescribe the
+    // day itself as empty (that state has its own message, feed-empty-section).
+    expect(screen.getByText("0 of 5 stories")).toBeTruthy();
+    // Modern Classic retired the paper sheet: the zero-match day's frame is now a hairline
+    // border-y block, so the header + notice still read as a bounded day rather than stray
+    // lines floating on the ground. Walking up from the notice proves the frame actually
+    // encloses it, not merely that the classes exist somewhere on the page.
+    const notice = screen.getByText("No matches this day.");
+    const frame = notice.closest(".border-y");
+    expect(frame).not.toBeNull();
+    expect(frame?.className).toContain("border-[var(--hair-soft)]");
+    // ...and no resurrected paper/shadow: one ground, framed by rules only.
+    expect(container.querySelector("[data-surface]")).toBeNull();
+    expect(frame?.className).not.toMatch(/shadow/);
   });
 
   it("does nothing extra when filterDef is not given -- day-status stays, no filter-status appears", () => {

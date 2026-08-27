@@ -22,21 +22,19 @@ export interface FeedLoadingProps {
  * a strip of digits translated under a window by `steps()` (see `.odo` in globals.css). It also
  * means this file costs nothing to hydrate.
  */
-export function FeedLoading({ field }: FeedLoadingProps) {
+export function FeedLoading({ field: _field }: FeedLoadingProps) {
   return (
-    <main {...(field === "ink" ? { "data-ground": "ink" } : { "data-field": field })} className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+    <main className="min-h-dvh bg-[var(--ground)] px-5 py-8 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 sm:mb-11">
-          <h1 className="font-[family-name:var(--font-display)] text-[2.5rem] font-extrabold leading-[0.92] tracking-[-0.04em] sm:text-[3rem]">
+        <div className="mb-8 sm:mb-11">
+          <h1 className="text-center font-[family-name:var(--font-display)] text-[2.375rem] font-bold leading-none tracking-[-0.025em] sm:text-[2.75rem]">
             The Slow&nbsp;Wire
           </h1>
-          <p className="apparatus opacity-70">Opening the file</p>
+          <p className="apparatus mt-2 text-center opacity-70">Opening the edition</p>
         </div>
 
-        <div
-          data-surface="paper"
-          className="px-4 pb-7 pt-5 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] sm:px-7 sm:pt-7"
-        >
+        <div className="h-[4px] border-y border-[var(--gold-soft)]" aria-hidden="true" />
+        <div className="pb-7 pt-5 sm:pt-7">
           <div className="mb-8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-3">
             <p
               className="font-[family-name:var(--font-display)] text-[1.75rem] font-extrabold leading-none tracking-[-0.028em] sm:text-[2.25rem]"
@@ -63,8 +61,8 @@ export function FeedLoading({ field }: FeedLoadingProps) {
           <ul aria-hidden="true" className="space-y-6">
             {[0, 1, 2, 3, 4].map((i) => (
               <li key={i} className="flex gap-4 sm:gap-6">
-                <span data-numeric className="apparatus w-6 shrink-0 opacity-30 sm:w-8">
-                  {String(i + 1).padStart(2, "0")}
+                <span data-numeric className="w-8 shrink-0 text-right font-[family-name:var(--font-display)] text-[1.5rem] italic leading-none text-[color:var(--gold-soft)] opacity-40 sm:w-10">
+                  {i + 1}
                 </span>
                 <div className="min-w-0 flex-1 space-y-2.5">
                   <div

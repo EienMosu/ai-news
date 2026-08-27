@@ -3,6 +3,7 @@ import { FilterRow } from "../../../components/FilterRow.js";
 import { SectionNav } from "../../../components/SectionNav.js";
 import { parseDaysParam } from "../../../src/lib/feed/days.js";
 import { resolveFilter, sanitizeFilterParam } from "../../../src/lib/feed/filter.js";
+import { feedHeaderData } from "../../../src/lib/feed/header.js";
 import { getRecentDays } from "../../../src/lib/feed/read.js";
 
 // See app/page.tsx for why this is required: without it, `pnpm build` prerenders this route
@@ -27,19 +28,19 @@ function firstOf(raw: string | string[] | undefined): string | undefined {
  * share one query shape instead of a filter chip over a combined feed.
  */
 export default async function DesignPage({ searchParams }: DesignPageProps) {
-  const { days: rawDays, f: rawF, others: rawOthers } = await searchParams;
+  const { days: rawDays, f: rawF } = await searchParams;
   const days = parseDaysParam(rawDays);
   const activeF = sanitizeFilterParam(firstOf(rawF));
   const filterDef = activeF !== null ? resolveFilter("design", activeF) : null;
-  const othersOpen = firstOf(rawOthers) === "1";
   const { results, failedDays } = await getRecentDays("design", days);
   const now = new Date();
+  const { subline, chipCounts } = feedHeaderData("design", results);
 
   return (
-    <main data-field="design" className="min-h-dvh bg-[var(--field)] px-5 py-10 sm:px-8 sm:py-14">
+    <main className="min-h-dvh bg-[var(--ground)] px-5 py-8 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-3xl">
-      <SectionNav current="design" days={days} />
-      <FilterRow section="design" basePath="/design" activeF={activeF} othersOpen={othersOpen} days={days} />
+      <SectionNav current="design" days={days} subline={subline} />
+      <FilterRow section="design" basePath="/design" activeF={activeF} chipCounts={chipCounts} days={days} />
       <FeedArchive
         section="design"
         results={results}

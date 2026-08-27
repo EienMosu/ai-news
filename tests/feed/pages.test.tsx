@@ -3,16 +3,20 @@
 // Opt-in per file -- see the docblock in tests/feed/card.test.tsx for why: this file needs a
 // DOM and explicit `afterEach(cleanup)` because `test.globals` is false project-wide.
 //
-// `app/page.tsx` and `app/design/page.tsx` are a hand-copy of each other with four coupled
-// strings changed (the `getRecentDays` section argument, `SectionNav`'s `current`,
-// `FeedArchive`'s `section`, and `FeedArchive`'s `basePath`) -- the classic copy-paste seam, and
-// nothing else in this suite pins any of the four. Mocking `getRecentDays` (the module, not the
-// AWS SDK underneath it -- read.test.ts already covers that layer) lets these tests `await`
-// each page component directly and assert on exactly that seam, without a DynamoDB mock. See
-// task-5-review.md finding 3: the reviewer rewrote `app/design/page.tsx` to serve the AI
-// vertical entirely and the suite stayed green with nothing here to catch it -- these tests are
-// what closes that gap, now extended to Task 7's `?days=` search param and the day-list it
-// renders.
+// The three feed pages are a hand-copy of each other with a handful of coupled strings changed
+// (the `getRecentDays`/`resolveFilter`/`feedHeaderData` section arguments, `SectionNav`'s
+// `current`, and the `section`/`basePath` handed to `FilterRow` and `FeedArchive`) -- the
+// classic copy-paste seam, and nothing else in this suite pins any of them. Mocking
+// `getRecentDays` (the module, not the AWS SDK underneath it -- read.test.ts already covers that
+// layer) lets these tests `await` each page component directly and assert on exactly that seam,
+// without a DynamoDB mock. See task-5-review.md finding 3: the reviewer rewrote
+// `app/design/page.tsx` to serve the AI vertical entirely and the suite stayed green with
+// nothing here to catch it -- these tests are what closes that gap, extended since to Task 7's
+// `?days=` search param and the Modern Classic redesign (owner, 2026-08-27): one shared ground
+// on `<main>` instead of three per-section colour worlds, and the `{ subline, chipCounts }` pair
+// each page computes via `feedHeaderData` and threads into `SectionNav`/`FilterRow`. Component
+// -level redesign details (dept cell styling, the search form's hidden `days` input, active-chip
+// classes) live in nav.test.tsx and filter-row.test.tsx; this file pins only the page wiring.
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,9 +28,9 @@ vi.mock("../../src/lib/feed/read.js", () => ({
   getRecentDays: vi.fn(),
 }));
 
-import DesignPage from "../../app/(feed)/design/page.js";
-import CloudPage from "../../app/(feed)/cloud/page.js";
-import Home from "../../app/(feed)/page.js";
+import DesignPage, { dynamic as designDynamic } from "../../app/(feed)/design/page.js";
+import CloudPage, { dynamic as cloudDynamic } from "../../app/(feed)/cloud/page.js";
+import Home, { dynamic as homeDynamic } from "../../app/(feed)/page.js";
 import type { FeedResult, RecentDaysOutcome } from "../../src/lib/feed/read.js";
 import { getRecentDays } from "../../src/lib/feed/read.js";
 import { toFeedArticle } from "../../src/lib/feed/shape.js";
@@ -75,11 +79,64 @@ describe("Home (app/page.tsx)", () => {
     expect(getRecentDays).toHaveBeenCalledWith("ai", DEFAULT_ARCHIVE_DAYS);
   });
 
-  it("marks the AI nav link current, not Design", async () => {
+  it("marks the AI News dept cell current, not Design News", async () => {
+    // The departments bar's labels are the full "… News" names (SECTION_LABEL, owner
+    // 2026-08-27) -- the words are the affordance -- and currentness is aria-current="page"
+    // alone, styled by CSS attribute selector, so the accessible fact is the whole contract.
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await Home({ searchParams: searchParams() }));
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("renders on the one shared ground -- no per-section data-field world on <main> (redesign 2026-08-27)", async () => {
+    // The old design gave each vertical's <main> a data-field attribute that globals.css turned
+    // into a full-bleed colour world. The redesign retires the worlds: every feed main paints
+    // bg-[var(--ground)] and carries NO world attribute -- a stale data-field would resurrect
+    // dead CSS hooks and silently diverge the three parallel pages.
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    const { container } = render(await Home({ searchParams: searchParams() }));
+    const main = container.querySelector("main");
+    expect(main?.className).toContain("bg-[var(--ground)]");
+    expect(main?.hasAttribute("data-field")).toBe(false);
+    expect(main?.hasAttribute("data-ground")).toBe(false);
+  });
+
+  it("passes feedHeaderData's subline to SectionNav: the tagline slot reads the newest day and its own count", async () => {
+    // Two days mocked, the NEWEST holding two articles -- the subline is that first day's own
+    // unfiltered count ("18.08.2026 · 2 stories"), not a sum over the archive, and it displaces
+    // the static tagline. A page that forgot to pass `subline` would render the tagline fallback
+    // here and stay green on every other test in this block.
+    const one = toFeedArticle(rawArticle({ pk: `ART#${"e".repeat(64)}`, title: "One" }));
+    const two = toFeedArticle(rawArticle({ pk: `ART#${"f".repeat(64)}`, title: "Two" }));
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([
+      { ...EMPTY_DAY_RESULT, articles: [one, two] },
+      { ...EMPTY_DAY_RESULT, day: "2026-08-17" },
+    ]));
+    render(await Home({ searchParams: searchParams() }));
+    expect(screen.getByTestId("tagline").textContent).toBe("18.08.2026 · 2 stories");
+  });
+
+  it("threads feedHeaderData's chipCounts into FilterRow, so each chip names its match count before it is pressed", async () => {
+    // One Claude story in view: the Anthropic chip must carry a 1 and the OpenAI chip an honest
+    // 0 -- a page that dropped the `chipCounts` prop renders count-less chips (FilterRow treats
+    // the prop as optional) and nothing else in this suite would notice. The count lives in the
+    // chip's own [data-numeric] span, inside the link the reader presses.
+    const claude = toFeedArticle(
+      rawArticle({ pk: `ART#${"d".repeat(64)}`, title: "Claude gets a new memory system" }),
+    );
+    vi.mocked(getRecentDays).mockResolvedValue(
+      outcome([{ ...EMPTY_DAY_RESULT, articles: [claude] }]),
+    );
+    render(await Home({ searchParams: searchParams() }));
+    const anthropic = screen.getByRole("link", { name: /^Anthropic/ });
+    const openai = screen.getByRole("link", { name: /^OpenAI/ });
+    expect(anthropic.querySelector("[data-numeric]")?.textContent).toBe("1");
+    expect(openai.querySelector("[data-numeric]")?.textContent).toBe("0");
+  });
+
+  it("still forces dynamic rendering -- getRecentDays hits DynamoDB, which does not exist at build time", () => {
+    expect(homeDynamic).toBe("force-dynamic");
   });
 
   it("passes its own section through to the rendered day, not the other one", async () => {
@@ -138,6 +195,11 @@ describe("Home (app/page.tsx)", () => {
     const { container } = render(await Home({ searchParams: searchParams() }));
     expect(container.querySelector('[data-testid="feed-empty-no-day"]')).not.toBeNull();
     expect(screen.queryByText(/No AI stories for/)).toBeNull();
+    // With no resolved day, `feedHeaderData` returns `subline: undefined` and SectionNav falls
+    // back to the static tagline -- never a phantom "0 stories" line naming a day that does not
+    // exist. Same honest-empty-state discipline as the two message assertions above.
+    expect(screen.getByTestId("tagline").textContent).toContain("ranked by importance, not recency");
+    expect(screen.getByTestId("tagline").textContent).not.toContain("stories");
   });
 
   it("passes getRecentDays' failedDays through to FeedArchive, surfacing a failure notice -- final review, M2", async () => {
@@ -183,7 +245,7 @@ describe("Home (app/page.tsx)", () => {
     }));
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await Home({ searchParams: searchParams({ days: "14" }) }));
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("href")).toBe("/design?days=14");
+    expect(screen.getByRole("link", { name: "Design News" }).getAttribute("href")).toBe("/design?days=14");
   });
 
   // Fix round 1's F1 presence assertion lived here; fix round 2 removed it. `Home` alone no
@@ -204,11 +266,25 @@ describe("DesignPage (app/design/page.tsx)", () => {
     expect(getRecentDays).toHaveBeenCalledWith("design", DEFAULT_ARCHIVE_DAYS);
   });
 
-  it("marks the Design nav link current, not AI", async () => {
+  it("marks the Design News dept cell current, not AI News", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await DesignPage({ searchParams: searchParams() }));
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("renders on the one shared ground -- no per-section data-field world on <main> (redesign 2026-08-27)", async () => {
+    // Asserted per page, not just on Home: the ground class is a literal in each of the three
+    // hand-copied page files, so this is exactly the copy-paste seam this suite exists to pin.
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    const { container } = render(await DesignPage({ searchParams: searchParams() }));
+    const main = container.querySelector("main");
+    expect(main?.className).toContain("bg-[var(--ground)]");
+    expect(main?.hasAttribute("data-field")).toBe(false);
+  });
+
+  it("still forces dynamic rendering -- getRecentDays hits DynamoDB, which does not exist at build time", () => {
+    expect(designDynamic).toBe("force-dynamic");
   });
 
   it("passes its own section through to the rendered day, not the other one", async () => {
@@ -258,7 +334,7 @@ describe("DesignPage (app/design/page.tsx)", () => {
     }));
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await DesignPage({ searchParams: searchParams({ days: "14" }) }));
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
+    expect(screen.getByRole("link", { name: "AI News" }).getAttribute("href")).toBe("/?days=14");
   });
 
   // See the identical note at the end of the `Home` describe block above -- the same removal,
@@ -297,12 +373,27 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
     expect(getRecentDays).toHaveBeenCalledWith("cloud", DEFAULT_ARCHIVE_DAYS);
   });
 
-  it("marks the Cloud nav link current, not AI or Design", async () => {
+  it("marks the Cloud News dept cell current, not AI News or Design News", async () => {
     vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
     render(await CloudPage({ searchParams: searchParams() }));
-    expect(screen.getByRole("link", { name: "Cloud" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "Cloud News" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "AI News" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: "Design News" }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("renders on the one shared ground -- no per-section data-field world on <main> (redesign 2026-08-27)", async () => {
+    // Same per-page literal as Home/DesignPage -- see the DesignPage twin for why all three are
+    // pinned. Cloud is the page most likely to regress here: it was the last world added and its
+    // doc comment still narrates "deep pine".
+    vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+    const { container } = render(await CloudPage({ searchParams: searchParams() }));
+    const main = container.querySelector("main");
+    expect(main?.className).toContain("bg-[var(--ground)]");
+    expect(main?.hasAttribute("data-field")).toBe(false);
+  });
+
+  it("still forces dynamic rendering -- getRecentDays hits DynamoDB, which does not exist at build time", () => {
+    expect(cloudDynamic).toBe("force-dynamic");
   });
 
   it("passes its own section through to the rendered day, not either other one", async () => {
@@ -352,7 +443,7 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
     }));
     vi.mocked(getRecentDays).mockResolvedValue(outcome(results));
     render(await CloudPage({ searchParams: searchParams({ days: "14" }) }));
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("href")).toBe("/?days=14");
+    expect(screen.getByRole("link", { name: "AI News" }).getAttribute("href")).toBe("/?days=14");
   });
 
   // Branch review I1: "PR C widens [the copy-paste] seam from four coupled strings to six per
@@ -378,17 +469,39 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
     });
 
     it("renders the cloud section's own chips in FilterRow, not ai's -- kills a FilterRow section prop mutation", async () => {
+      // Matched by ^-anchored regex, not exact name: since the redesign every chip's accessible
+      // name also carries its match count ("AWS 0" here), and the count is chipCounts' concern
+      // (pinned in Home's dedicated test), not this mutation-killer's.
       vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
       render(await CloudPage({ searchParams: searchParams() }));
-      expect(screen.getByRole("link", { name: "AWS" })).toBeTruthy();
-      expect(screen.queryByRole("link", { name: "Anthropic" })).toBeNull();
+      expect(screen.getByRole("link", { name: /^AWS/ })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /^Anthropic/ })).toBeNull();
     });
 
-    it("opens the Others form when others=1 is in searchParams", async () => {
+    it("renders the search field on every request -- the two-step ?others= toggle is retired (redesign 2026-08-27)", async () => {
+      // The old row hid the free-text input behind an "Others" link that round-tripped
+      // `?others=1`. The Modern Classic row is an always-rendered GET form: the input (labelled
+      // for what it actually searches -- these days, not the archive) is simply there, submitted
+      // by the "Go" stamp, with the Archive link -- moved here from SectionNav -- beside it,
+      // still scoped to this page's own section.
+      vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
+      render(await CloudPage({ searchParams: searchParams() }));
+      expect(screen.getByRole("textbox", { name: "Search these days" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Go" })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Others" })).toBeNull();
+      expect(screen.getByRole("link", { name: "Archive" }).getAttribute("href")).toBe(
+        "/search?section=cloud",
+      );
+    });
+
+    it("ignores a stale ?others= param from an old bookmark -- the page no longer reads it", async () => {
+      // `others` survives in the searchParams TYPE (old URLs still arrive) but the page
+      // destructures only `days` and `f`, so the param must change nothing: same always-open
+      // field, and the pre-redesign label must not resurface.
       vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
       render(await CloudPage({ searchParams: searchParams({ others: "1" }) }));
-      expect(screen.getByRole("textbox", { name: "Filter by any word" })).toBeTruthy();
-      expect(screen.queryByRole("link", { name: "Others" })).toBeNull();
+      expect(screen.getByRole("textbox", { name: "Search these days" })).toBeTruthy();
+      expect(screen.queryByRole("textbox", { name: "Filter by any word" })).toBeNull();
     });
   });
 });

@@ -10,9 +10,15 @@ import { describe, expect, it } from "vitest";
  * past its box without ever making the box measure wider, invisible to any rect-based sweep, and
  * still inflates the document's scrollWidth and the mobile layout viewport itself.
  *
- * `break-words` (`overflow-wrap: break-word`) on the title, why-it-matters, and summary is the
+ * `break-words` (`overflow-wrap: break-word`) on every scraped-text block in the row is the
  * complete guard: same idiom as tests/design/contrast.test.ts, a source scan rather than a
  * rendered check, so deleting the class fails this test without needing a browser.
+ *
+ * Modern Classic (owner-approved 2026-08-27) removed the scraped summary from feed rows -- it
+ * now lives only on the story page -- so the row's hostile-text surfaces are the title and the
+ * why-it-matters line. The summary's guard is replaced, not dropped: a tripwire below asserts
+ * the summary stays out of the row, so reintroducing it fails this test and forces whoever does
+ * so to restore its `break-words` guard alongside it.
  */
 
 const source = readFileSync("components/ArticleCard.tsx", "utf8");
@@ -40,7 +46,11 @@ describe("ArticleCard guards scraped text against the 745px ink-overflow defect"
     expect(elementBefore("<p", "{article.whyItMatters}")).toMatch(/break-words/);
   });
 
-  it("breaks an unwrapped token in the summary", () => {
-    expect(elementBefore("<p", "{article.summary}")).toMatch(/break-words/);
+  it("keeps the scraped summary out of the row (its guard left with it)", () => {
+    // The redesign moved `article.summary` to the story page, and this file's guard on it went
+    // with the element. If the summary ever returns to the feed row, it returns as unguarded
+    // third-party text -- the exact shape of the original 745px defect -- so its reappearance
+    // here must fail loudly and force the `break-words` assertion back in with it.
+    expect(source).not.toContain("{article.summary}");
   });
 });

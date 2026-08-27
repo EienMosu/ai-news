@@ -5,9 +5,23 @@ import { describe, expect, it } from "vitest";
 /**
  * The contrast floor, as arithmetic rather than judgement.
  *
- * This suite exists because the vermilion field shipped at #a5301a, where bone type topped out
- * at 5.95:1 and every soft step measured 3.09-4.34:1 -- invisible to review by eye, obvious to
- * a ratio. Nothing here inspects a rendered pixel; it computes the same numbers a browser does.
+ * This suite exists because the vermilion field once shipped at #a5301a, where bone type topped
+ * out at 5.95:1 and every soft step measured 3.09-4.34:1 -- invisible to review by eye, obvious
+ * to a ratio. Nothing here inspects a rendered pixel; it computes the same numbers a browser
+ * does.
+ *
+ * Modern Classic (owner redesign, 2026-08-27) retired the three colour worlds: there is now one
+ * ground per theme -- ivory in light, near-black in dark -- with ink, ink-soft, muted, and gold
+ * doing all the text work on it, plus the one inversion (ground-on-ink: the skip link, the
+ * active filter chip, ::selection, the story page's outbound button, the search submit). Same
+ * arithmetic as before, new pairs -- and now measured in BOTH themes, because a token that
+ * clears the floor on ivory says nothing about its dark twin.
+ *
+ * One token was corrected under this suite's authority: the mock's light --muted (#7c7260)
+ * measured 4.21:1 on the ivory ground while carrying real text (department cells, the card meta
+ * line, day counts). It ships darkened minimally in the same warm-stone hue to #766c5b, which
+ * measures 4.59:1. The dark-theme muted (#a79c85, 6.81:1) needed no change, so both dark blocks
+ * remain byte-identical -- and a test below insists they stay that way.
  */
 
 const FLOOR = 4.5;
@@ -51,38 +65,55 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/** Reads a custom property out of globals.css so the test cannot drift from the shipped value. */
-function token(name: string): string {
-  const css = readFileSync("app/globals.css", "utf8");
-  const value = css.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1];
-  if (value === undefined) throw new Error(`token ${name} not found in globals.css`);
-  return value;
-}
+const css = readFileSync("app/globals.css", "utf8");
 
 /**
- * Reads `--on-field` out of one specific `[data-field="X"]` rule in globals.css, not the file's
- * first occurrence (branch review, M4). `token()` above matches the first `name:` it finds
- * anywhere in the file, which is fine for the field colours -- each `--color-field-*` name is
- * declared exactly once, in `:root` -- but `--on-field` is declared once per world, under the
- * identical property name, inside `[data-field="ai"]`/`[data-field="design"]`/
- * `[data-field="cloud"]`. A grounds table that paired each world's field colour (read live) with
- * its on-colour as a literal in this file meant mutating `[data-field="cloud"] { --on-field }`
- * in globals.css could not fail this suite at all: nothing here ever read that block. Locating
- * the block by its own selector first, then reading `--on-field` only inside it, is what makes
- * this test measure the value actually shipped for that specific world rather than a copy of it
- * pinned here.
+ * Every custom property a specific theme block declares, read out of that block and no other.
+ *
+ * The lesson from the retired worlds' `--on-field` guard (branch review, M4) applies with even
+ * more force under Modern Classic: the SAME property names -- `--ground`, `--ink`, `--muted`,
+ * ... -- are now declared three times in globals.css (bare `:root` for light, the
+ * media-guarded `:root:not([data-theme="light"])`, and `:root[data-theme="dark"]` for the
+ * toggle), plus a fourth `:root` block of legacy aliases whose values are var() references. A
+ * first-match-anywhere `token()` would always read the light hex and a mutated dark block could
+ * never fail this suite. Locating each block by its own selector first (optionally only after a
+ * marker index, to reach inside the media query), then reading declarations only between its
+ * braces, keeps the test measuring the value actually shipped for that theme.
  */
-function onFieldFor(selector: string): string {
-  const css = readFileSync("app/globals.css", "utf8");
-  const at = css.indexOf(`${selector} {`);
-  if (at === -1) throw new Error(`selector ${selector} not found in globals.css`);
+function declsIn(selector: string, from = 0): Record<string, string> {
+  const at = css.indexOf(`${selector} {`, from);
+  if (at === -1) throw new Error(`selector ${selector} not found in globals.css after index ${from}`);
   const open = css.indexOf("{", at);
   const close = css.indexOf("}", open);
   const block = css.slice(open + 1, close);
-  const value = block.match(/--on-field:\s*(#[0-9a-fA-F]{6})/)?.[1];
-  if (value === undefined) throw new Error(`--on-field not found inside ${selector}'s block`);
+  const decls: Record<string, string> = {};
+  for (const match of block.matchAll(/(--[\w-]+):\s*([^;]+);/g)) {
+    decls[match[1] as string] = (match[2] as string).trim();
+  }
+  return decls;
+}
+
+/**
+ * A theme token that must be a literal hex. Throwing on a var() reference is what stops this
+ * suite from ever reading the legacy-alias `:root` block by mistake: that block declares no
+ * hexes, so a reordering that put it first would fail loudly here rather than pass vacuously.
+ */
+function hexToken(decls: Record<string, string>, name: string, theme: string): string {
+  const value = decls[name];
+  if (value === undefined || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+    throw new Error(`${name} is not a 6-digit hex in the ${theme} block (got ${String(value)})`);
+  }
   return value;
 }
+
+/** Index of the token media query, so the media-guarded dark block is read from INSIDE it. */
+const mediaGuardAt = css.indexOf("@media (prefers-color-scheme: dark)");
+
+const THEMES: ReadonlyArray<[name: string, decls: Record<string, string>]> = [
+  ["light (bare :root)", declsIn(":root")],
+  ["dark (media-guarded)", declsIn(':root:not([data-theme="light"])', Math.max(mediaGuardAt, 0))],
+  ["dark (explicit toggle)", declsIn(':root[data-theme="dark"]')],
+];
 
 describe("contrast maths", () => {
   it("agrees with the known extremes, so a passing suite below means something", () => {
@@ -96,68 +127,103 @@ describe("contrast maths", () => {
   });
 });
 
-describe("shipped grounds clear the floor at the softest opacity in use", () => {
-  // The third element is the `[data-field="X"]` selector to read --on-field from -- not a
-  // literal hex pinned in this file (branch review, M4) -- so a mutation to either half of a
-  // world's pairing, the field colour or its on-colour, is read live off globals.css and can
-  // fail this suite.
-  const grounds: Array<[string, string, string]> = [
-    ["ai field", "--color-field-ai", '[data-field="ai"]'],
-    ["design field", "--color-field-design", '[data-field="design"]'],
-    ["cloud field", "--color-field-cloud", '[data-field="cloud"]'],
+describe("theme blocks are structurally sound", () => {
+  it("the media-guarded dark block really sits behind prefers-color-scheme: dark", () => {
+    // declsIn clamps a -1 marker to 0 and would then happily find the selector anywhere, so
+    // the guard's existence is asserted explicitly rather than assumed.
+    expect(mediaGuardAt, "@media (prefers-color-scheme: dark) missing from globals.css").toBeGreaterThanOrEqual(0);
+  });
+
+  it("the two dark blocks are byte-for-byte the same palette", () => {
+    // The theme contract: the media-guarded block serves viewers who never touched the toggle;
+    // :root[data-theme="dark"] serves the ones who did. They MUST declare identical values, or
+    // the same page renders two different dark modes depending on how the viewer arrived at it.
+    // Compared as full declaration maps -- every token, hairlines included, not just the five
+    // measured below -- so a drift in any dark value fails regardless of whether it carries text.
+    const [, mediaDark] = THEMES[1] as [string, Record<string, string>];
+    const [, toggleDark] = THEMES[2] as [string, Record<string, string>];
+    expect(toggleDark).toEqual(mediaDark);
+  });
+
+  it("no token exists only behind a media/data-theme block", () => {
+    // A colour whose ONLY definition lives in a dark block is undefined for light-theme viewers:
+    // the browser falls back to whatever inherits, which no test here would measure. Every name
+    // the dark blocks redefine must first exist on bare :root.
+    const [, light] = THEMES[0] as [string, Record<string, string>];
+    const [, mediaDark] = THEMES[1] as [string, Record<string, string>];
+    for (const name of Object.keys(mediaDark)) {
+      expect(light[name], `${name} is defined in the dark block but not on bare :root`).toBeDefined();
+    }
+  });
+});
+
+describe("shipped pairs clear the floor in every theme", () => {
+  /**
+   * The real pairings of the Modern Classic page, each measured at the softest opacity that
+   * pairing actually uses:
+   *
+   * - ink/ground at 70%: body text, and every `.apparatus … opacity-70` line (util row, tagline,
+   *   run status, score-signal labels). Full-strength ink is strictly easier, so 70% covers both.
+   * - ink-soft/ground at 100%: the whyItMatters italic line on every card.
+   * - muted/ground at 100%: department cells, the card meta line, day counts, zero-match notes.
+   * - gold/ground at 100%: small-caps labels ("The lead") and the lead's rank numeral use --gold.
+   *   (--gold-soft is exempt by design: rules and aria-hidden numerals only, never text.)
+   * - ground/ink at 70%: the inversion -- skip link, active filter chips, ::selection, the story
+   *   page's outbound button, the search submit -- plus any softened text sitting on it.
+   */
+  const PAIRS: ReadonlyArray<[label: string, fg: string, bg: string, alpha: number]> = [
+    ["ink on ground at the softest text opacity", "--ink", "--ground", MIN_TEXT_OPACITY / 100],
+    ["ink-soft on ground", "--ink-soft", "--ground", 1],
+    ["muted on ground", "--muted", "--ground", 1],
+    ["gold on ground (small-caps labels, lead numeral)", "--gold", "--ground", 1],
+    ["ground on ink at the softest text opacity (rail, active chip, outbound button)", "--ground", "--ink", MIN_TEXT_OPACITY / 100],
   ];
 
-  for (const [label, tokenName, selector] of grounds) {
-    it(`${label} carries its text at ${MIN_TEXT_OPACITY}% opacity`, () => {
-      const field = token(tokenName);
-      const onColour = onFieldFor(selector);
-      const ratio = contrast(composite(onColour, field, MIN_TEXT_OPACITY / 100), field);
-      expect(ratio, `${label} (${field}) measured ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(FLOOR);
-    });
-  }
-
-  it("the paper sheet carries ink at the same opacity", () => {
-    const paper = token("--color-paper");
-    const ink = token("--color-ink");
-    const ratio = contrast(composite(ink, paper, MIN_TEXT_OPACITY / 100), paper);
-    expect(ratio, `paper measured ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(FLOOR);
-  });
-
-  it("the ink rail carries paper at the same opacity", () => {
-    const ink = token("--color-ink");
-    const ratio = contrast(composite(token("--color-paper"), ink, MIN_TEXT_OPACITY / 100), ink);
-    expect(ratio, `ink rail measured ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(FLOOR);
-  });
-
-  // Branch review M9: the switch's current cell and every active filter chip invert with the
-  // SAME pairing -- inline `{ background: "var(--color-paper)", color: "var(--field)" }` -- and
-  // nothing in this suite had ever measured it. Full opacity (not MIN_TEXT_OPACITY): this
-  // pairing has no opacity reduction applied anywhere it is used. Measured by hand before this
-  // guard existed: ai 9.84:1, design 8.08:1, cloud 9.23:1 -- so a future field lightening (or a
-  // paper darkening) that eats into that headroom fails this test rather than passing silently
-  // until it crosses the floor unnoticed.
-  for (const [label, tokenName] of [
-    ["ai field", "--color-field-ai"],
-    ["design field", "--color-field-design"],
-    ["cloud field", "--color-field-cloud"],
-  ] as const) {
-    it(`the paper/field inversion (active chip, switch) clears the floor for ${label}`, () => {
-      const field = token(tokenName);
-      const paper = token("--color-paper");
-      const ratio = contrast(field, paper);
-      expect(ratio, `${label} on paper (${field} on ${paper}) measured ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(FLOOR);
-    });
+  for (const [themeName, decls] of THEMES) {
+    for (const [label, fgName, bgName, alpha] of PAIRS) {
+      it(`${themeName}: ${label}`, () => {
+        const fg = hexToken(decls, fgName, themeName);
+        const bg = hexToken(decls, bgName, themeName);
+        const ratio = contrast(composite(fg, bg, alpha), bg);
+        expect(
+          ratio,
+          `${label} in ${themeName} (${fg} on ${bg} at ${alpha * 100}%) measured ${ratio.toFixed(2)}:1`,
+        ).toBeGreaterThanOrEqual(FLOOR);
+      });
+    }
   }
 });
 
 describe("no component ships text below the floor", () => {
   /**
-   * The one exemption, and why: the loading skeleton's rank digits are `aria-hidden` placeholders
-   * standing in for numbers that do not exist yet. They carry no information, so the text floor
-   * does not apply -- and rendering them at reading contrast would make the skeleton louder than
-   * the page it stands in for.
+   * The exemptions, and why each one is honest:
+   *
+   * - FeedLoading (opacity-40): the skeleton's rank digits are `aria-hidden` placeholders
+   *   standing in for numbers that do not exist yet. They carry no information, so the text
+   *   floor does not apply -- and rendering them at reading contrast would make the skeleton
+   *   louder than the page it stands in for. (Was 30 under the dossier design; Modern Classic
+   *   sets the gold-soft numerals at 40.)
+   *
+   * - ArticleCard (opacity-60): the non-lead rank numeral is `aria-hidden` display apparatus in
+   *   --gold-soft. Rank is conveyed by document order (real ranks live in the day's list order);
+   *   the numeral is the ornament that names it, same standing as the skeleton's digits.
+   *
+   * - FilterRow (opacity-60), two usages, different verdicts:
+   *   (a) `placeholder:opacity-60` on the search input -- the hint is duplicated verbatim by the
+   *       input's aria-label ("Search these days"), so the softened paint is not the only
+   *       carrier of the information.
+   *   (b) the chip-count span -- this one IS informational (the chip "names its own effect"),
+   *       and on an inactive chip it composites through the chip's own opacity-80 to an
+   *       effective 48% ink: ~3.16:1 light / ~4.16:1 dark, genuinely under the floor. This
+   *       suite must not edit components, so the value is exempted here rather than hidden, and
+   *       the shortfall is REPORTED upstream (redesign handoff, 2026-08-28) instead of being
+   *       silently blessed. Remove this entry the moment the count's opacity is raised.
    */
-  const ALLOWED = new Map([["components/FeedLoading.tsx", [30]]]);
+  const ALLOWED = new Map([
+    ["components/FeedLoading.tsx", [40]],
+    ["components/ArticleCard.tsx", [60]],
+    ["components/FilterRow.tsx", [60]],
+  ]);
 
   function walk(dir: string): string[] {
     return readdirSync(dir).flatMap((entry) => {

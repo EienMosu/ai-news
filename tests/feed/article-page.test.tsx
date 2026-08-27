@@ -271,13 +271,21 @@ describe("ArticlePage (app/article/[urlHash]/page.tsx)", () => {
     });
   });
 
-  it("renders SectionNav with neither vertical current", async () => {
+  it("renders SectionNav with no vertical current", async () => {
     vi.mocked(getArticle).mockResolvedValue(detail({ ingestDay: null }));
 
     render(await ArticlePageImpl({ pathSection: "ai", params: params(HASH) }));
 
-    expect(screen.getByRole("link", { name: "AI" }).getAttribute("aria-current")).toBeNull();
-    expect(screen.getByRole("link", { name: "Design" }).getAttribute("aria-current")).toBeNull();
+    // Modern Classic (owner-approved 2026-08-27): the departments bar's cells carry the full
+    // "… News" labels (SECTION_LABEL), and the ONLY marker of the current section is
+    // aria-current="page" on its cell -- the styling hangs entirely off that attribute
+    // (.dept[aria-current] in globals.css), so this attribute is the whole contract. A story
+    // page belongs to no vertical (its subject is the article, not a section), so it passes
+    // current={null} and every department cell must render as a plain link: none may claim to
+    // be the page the reader is on.
+    for (const label of ["AI News", "Design News", "Cloud News"]) {
+      expect(screen.getByRole("link", { name: label }).getAttribute("aria-current")).toBeNull();
+    }
   });
 
   it("links prominently to the original article URL, leaving the app", async () => {

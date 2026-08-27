@@ -1,5 +1,5 @@
-export const Bricolage_Grotesque = () => ({
-  variable: "--font-bricolage",
+export const Playfair_Display = () => ({
+  variable: "--font-playfair",
   className: "",
 });
 

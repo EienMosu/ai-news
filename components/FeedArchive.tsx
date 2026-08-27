@@ -182,7 +182,7 @@ export function FeedArchive({
                 <Link
                   href={`/day/${day}`}
                   data-numeric
-                  className="apparatus inline-block border border-current/45 border-t-2 border-t-current px-3 py-2 no-underline opacity-70 transition-colors duration-200 hover:opacity-100 hover:bg-[var(--color-paper)] hover:text-[color:var(--field)]"
+                  className="apparatus inline-block border border-current/45 border-t-2 border-t-current px-3 py-2 no-underline opacity-70 transition-colors duration-200 hover:opacity-100 hover:bg-[var(--ink)] hover:text-[color:var(--ground)]"
                 >
                   {formatDayKey(day)}
                 </Link>
@@ -192,7 +192,7 @@ export function FeedArchive({
               <Link
                 href={`${basePath}?days=${nextDays}`}
                 data-testid="load-more-days"
-                className="apparatus inline-block border border-current/45 px-3 py-2 no-underline transition-colors duration-200 hover:bg-[var(--color-paper)] hover:text-[color:var(--field)]"
+                className="apparatus inline-block border border-current/45 px-3 py-2 no-underline transition-colors duration-200 hover:bg-[var(--ink)] hover:text-[color:var(--ground)]"
               >
                 Open all older days
               </Link>
