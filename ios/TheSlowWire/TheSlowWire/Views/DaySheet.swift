@@ -1,63 +1,53 @@
 import SwiftUI
 
-// One day, as the sheet it was judged on: paper laid on the field, a
-// display-face date, an apparatus count, numbered entries under hairlines.
+// One day in the journal: the date and its count, then the gold double-rule
+// and THE LEAD tag announcing the day's first story, then entries under
+// hairline dividers. No card, no shadow — the page itself is the sheet.
 struct DaySheet: View {
     let day: String?
     let totalInDay: Int
     let stories: [Story]
-    let vertical: Vertical
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text(dateLabel)
-                    .font(.display(21))
+                    .font(.display(20))
                     .foregroundStyle(Color.ink)
+                if let relative = relativeLabel {
+                    Apparatus(relative, size: 10)
+                        .foregroundStyle(Color.muted)
+                        .padding(.leading, 6)
+                }
                 Spacer()
                 Apparatus(countLabel, size: 10.5)
-                    .foregroundStyle(Color.ink.opacity(0.7))
+                    .foregroundStyle(Color.muted)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
             .padding(.bottom, 10)
 
-            if let relative = relativeLabel {
-                Apparatus(relative, size: 10.5)
-                    .foregroundStyle(Color.ink.opacity(0.7))
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 10)
-                    .padding(.top, -6)
-            }
-
-            hairline
+            GoldRule()
+            Apparatus("The lead", size: 10, medium: true)
+                .kerning(3)
+                .foregroundStyle(Color.gold)
+                .padding(.top, 9)
 
             ForEach(Array(stories.enumerated()), id: \.element.id) { index, story in
                 NavigationLink(value: story) {
-                    // Numbered by visible position (owner's call, 2026-08-22):
-                    // folding and filtering never leave gaps in the count.
-                    ArticleRow(story: story, number: index + 1, vertical: vertical)
+                    // Numbered by visible position (owner's call): folding and
+                    // filtering never leave gaps in the count.
+                    ArticleRow(story: story, number: index + 1, isLead: index == 0)
                 }
                 .buttonStyle(.plain)
                 if index < stories.count - 1 {
-                    hairline
+                    Rectangle()
+                        .fill(Color.hairSoft)
+                        .frame(height: 0.5)
                 }
             }
         }
-        .padding(.bottom, 4)
-        .background(Color.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .shadow(color: .black.opacity(0.35), radius: 16, y: 10)
     }
 
-    private var hairline: some View {
-        Rectangle()
-            .fill(Color.ink.opacity(0.12))
-            .frame(height: 0.5)
-            .padding(.horizontal, 16)
-    }
-
-    // Header count follows the web's sheet grammar: the day's own total, or
+    // Header count follows the web's grammar: the day's own total, or
     // "K of N" when folding/filtering narrowed what is shown.
     private var countLabel: String {
         if stories.count == totalInDay {
@@ -67,7 +57,7 @@ struct DaySheet: View {
         }
     }
 
-    // Dates read DD.MM.YYYY (owner request, DESIGN.md); the store key stays ISO.
+    // Dates read DD.MM.YYYY (owner request); the store key stays ISO.
     private var dateLabel: String {
         guard let day else { return "Unknown day" }
         let parts = day.split(separator: "-")

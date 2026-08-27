@@ -1,9 +1,11 @@
 import SwiftUI
+import UIKit
 
-// The three verticals and the locked design language (DESIGN.md: "A day that
-// was judged, shown as the file it was judged in"). The world colour is the
-// FIELD — the screen's ground; paper sheets are laid on it. Nothing informational
-// renders below 70% opacity (the contrast floor).
+// MODERN CLASSIC — the day's wire, set like a luxury journal (DESIGN.md, owner
+// redesign 2026-08-27/28). One ivory page, ink type, gold as the single accent;
+// the app follows the system appearance, so every token is a dynamic colour
+// carrying both the light value and its true-dark twin. The web and this app
+// read the same palette; change it there first, mirror it here.
 
 enum Vertical: String, CaseIterable, Identifiable {
     case ai
@@ -20,29 +22,12 @@ enum Vertical: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    // The departments bar speaks full names — the words are the affordance.
+    var navTitle: String {
         switch self {
-        case .ai: "brain"
-        case .design: "paintbrush"
-        case .cloud: "cloud"
-        }
-    }
-
-    // The field: the ground a section's whole screen wears.
-    var color: Color {
-        switch self {
-        case .ai: .worldAI
-        case .design: .worldDesign
-        case .cloud: .worldCloud
-        }
-    }
-
-    // Type on the field — each world has its own warm off-white (DESIGN.md).
-    var onField: Color {
-        switch self {
-        case .ai: Color(hex: 0xF3EEE2)
-        case .design: Color(hex: 0xF6ECE7)
-        case .cloud: Color(hex: 0xEEF2E9)
+        case .ai: "AI News"
+        case .design: "Design News"
+        case .cloud: "Cloud News"
         }
     }
 }
@@ -56,20 +41,49 @@ extension Color {
         )
     }
 
-    static let ink = Color(hex: 0x151512)
-    static let paper = Color(hex: 0xEFE9DC)
-    static let worldAI = Color(hex: 0x16307F)
-    static let worldDesign = Color(hex: 0x7E2412)
-    static let worldCloud = Color(hex: 0x1A432B)
+    /// A token: the light value and its dark twin, resolved by the system.
+    init(light: UInt32, dark: UInt32) {
+        self.init(uiColor: UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: 1
+            )
+        })
+    }
+
+    // The Modern Classic tokens (mirrors app/globals.css).
+    static let ground = Color(light: 0xF6F1E6, dark: 0x17130D)
+    static let ink = Color(light: 0x191512, dark: 0xECE3CE)
+    static let inkSoft = Color(light: 0x575043, dark: 0xCDC1A6)
+    static let muted = Color(light: 0x766C5B, dark: 0xA79C85)
+    /// Gold that carries TEXT — deep enough for the 4.5:1 floor on ivory.
+    static let gold = Color(light: 0x7D600E, dark: 0xD8AC52)
+    /// Gold that carries RULES — the mock's brighter tone.
+    static let goldSoft = Color(light: 0xA6811F, dark: 0xD8AC52)
+    static let hair = Color(light: 0xC9BC9C, dark: 0x4A4230)
+    static let hairMid = Color(light: 0xD8CDB4, dark: 0x40392A)
+    static let hairSoft = Color(light: 0xE2D8C2, dark: 0x2E2819)
 }
 
-// Three faces, three jobs (DESIGN.md): Bricolage Grotesque for display
-// (dates, headlines, the masthead), Literata for prose, JetBrains Mono for
-// apparatus (counts, sources, scores). Bundled in Fonts/, registered via
-// UIAppFonts; the names are the variable fonts' named instances.
+// Three faces, three jobs: Playfair Display (display: masthead, headlines,
+// folio numerals), Literata (prose), JetBrains Mono (apparatus). Bundled in
+// Fonts/, registered via UIAppFonts; names are the variable fonts' instances.
 extension Font {
     static func display(_ size: CGFloat) -> Font {
-        .custom("BricolageGrotesque-ExtraBold", size: size)
+        .custom("PlayfairDisplayRoman-Bold", size: size)
+    }
+
+    static func displayHeavy(_ size: CGFloat) -> Font {
+        .custom("PlayfairDisplayRoman-ExtraBold", size: size)
+    }
+
+    static func displayItalicish(_ size: CGFloat) -> Font {
+        // Playfair's roman file carries no italic instances; the folio
+        // numeral leans via .italic() at the call site instead.
+        .custom("PlayfairDisplayRoman-Medium", size: size)
     }
 
     static func prose(_ size: CGFloat) -> Font {
@@ -89,27 +103,27 @@ extension Font {
     }
 }
 
-// The brand mark: the folded-corner file, same 32-grid path as app/icon.svg
-// and the site favicon. Stroke-only; colour comes from the caller.
-struct FileMark: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = rect.width / 32
-        var p = Path()
-        p.move(to: CGPoint(x: 8 * s, y: 6 * s))
-        p.addLine(to: CGPoint(x: 19 * s, y: 6 * s))
-        p.addLine(to: CGPoint(x: 26 * s, y: 13 * s))
-        p.addLine(to: CGPoint(x: 26 * s, y: 26 * s))
-        p.addLine(to: CGPoint(x: 8 * s, y: 26 * s))
-        p.closeSubpath()
-        p.move(to: CGPoint(x: 19 * s, y: 6 * s))
-        p.addLine(to: CGPoint(x: 19 * s, y: 13 * s))
-        p.addLine(to: CGPoint(x: 26 * s, y: 13 * s))
-        return p
+// The apparatus voice: uppercase mono, letterspaced (web: 0.6875rem / 0.09em).
+struct Apparatus: View {
+    let text: String
+    var size: CGFloat = 11
+    var medium = false
+
+    init(_ text: String, size: CGFloat = 11, medium: Bool = false) {
+        self.text = text
+        self.size = size
+        self.medium = medium
+    }
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(medium ? .apparatusMedium(size) : .apparatus(size))
+            .kerning(size * 0.09)
     }
 }
 
-// The stamp: a boxed, letterspaced mono word — the web's status grammar
-// ("state ships as a stamp, and the word is the signal").
+// The stamp: a boxed, letterspaced mono word — state never depends on hue;
+// the word is the signal.
 struct Stamp: View {
     let text: String
     var color: Color = .ink
@@ -128,21 +142,14 @@ struct Stamp: View {
     }
 }
 
-// The apparatus voice: uppercase mono, letterspaced (web: 0.6875rem / 0.09em).
-struct Apparatus: View {
-    let text: String
-    var size: CGFloat = 11
-    var medium = false
-
-    init(_ text: String, size: CGFloat = 11, medium: Bool = false) {
-        self.text = text
-        self.size = size
-        self.medium = medium
-    }
-
+// The gold double-rule: the lead's announcement and the document's opening —
+// the design's signature detail, shared with the web (border-y gold, 4px tall).
+struct GoldRule: View {
     var body: some View {
-        Text(text.uppercased())
-            .font(medium ? .apparatusMedium(size) : .apparatus(size))
-            .kerning(size * 0.09)
+        VStack(spacing: 2) {
+            Rectangle().fill(Color.goldSoft).frame(height: 1)
+            Rectangle().fill(Color.goldSoft).frame(height: 1)
+        }
+        .accessibilityHidden(true)
     }
 }

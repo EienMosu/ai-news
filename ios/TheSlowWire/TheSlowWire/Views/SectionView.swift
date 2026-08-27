@@ -1,7 +1,8 @@
 import SwiftUI
 
-// A vertical's screen: the world colour is the GROUND (the field), paper day
-// sheets are laid on it. Switching tabs is leaving one world for another.
+// A section's screen, Modern Classic: one ground, the journal masthead, the
+// filter zone, then the day list. The departments bar at the bottom is the
+// one control that changes section.
 struct SectionView: View {
     let vertical: Vertical
     @Binding var selection: Vertical
@@ -23,7 +24,7 @@ struct SectionView: View {
     var body: some View {
         NavigationStack(path: $path) {
             ZStack {
-                vertical.color.ignoresSafeArea()
+                Color.ground.ignoresSafeArea()
                 switch state {
                 case .loading:
                     loadingView
@@ -39,14 +40,13 @@ struct SectionView: View {
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
             .navigationDestination(for: Story.self) { story in
-                ArticleView(story: story, vertical: vertical)
+                ArticleView(story: story)
             }
         }
         .task {
             #if DEBUG
             // Headless UI testing lever: simctl cannot tap, so launch
             // arguments can pre-apply a chip or a search term.
-            // e.g. simctl launch <udid> <bundle> -preselectFilter anthropic
             let args = ProcessInfo.processInfo.arguments
             if let i = args.firstIndex(of: "-preselectFilter"), i + 1 < args.count {
                 activeFilterID = args[i + 1]
@@ -65,10 +65,7 @@ struct SectionView: View {
         }
     }
 
-    // A deep link for this tab pushes the fetched story onto the path. The
-    // fetch goes through /api/article (article + siblings composed server-
-    // side), so a cold start needs no feed in hand. Consuming clears the
-    // shared binding so the other two tabs stop seeing it.
+    // A deep link for this tab pushes the fetched story onto the path.
     private func consumeDeepLink() async {
         guard let target = deepLink, target.section == vertical else { return }
         deepLink = nil
@@ -80,9 +77,8 @@ struct SectionView: View {
         FilterDef.chips(for: vertical).first { $0.id == activeFilterID }
     }
 
-    // The search bar is the web's Others chip in mobile clothes: a free-text
-    // def matched with the same semantics (lowercased substring over
-    // title + summary + sourceName), narrowing the LOADED days only.
+    // The search field is the web's quick-filter twin: a free-text def with
+    // identical matching semantics, narrowing the LOADED days only.
     private var searchFilter: FilterDef? {
         let text = searchText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return nil }
@@ -93,33 +89,28 @@ struct SectionView: View {
         [activeFilter, searchFilter].compactMap { $0 }
     }
 
-    // The masthead: mark + wordmark in apparatus voice, the section's own
-    // news title in display, the product's claim as the tagline.
-    private var masthead: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
-                FileMark()
-                    .stroke(vertical.onField, style: StrokeStyle(lineWidth: 2, lineJoin: .miter))
-                    .frame(width: 24, height: 24)
-                Apparatus("The Slow Wire", size: 11, medium: true)
-                    .foregroundStyle(vertical.onField)
-                Spacer()
+    // The masthead: the product's claim, the centered Playfair wordmark, and
+    // the newest day's own line beneath it — the journal's opening.
+    private func masthead(_ days: [FeedResult]) -> some View {
+        VStack(spacing: 8) {
+            Apparatus("Ranked by importance", size: 10)
+                .foregroundStyle(Color.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("The Slow Wire")
+                .font(.displayHeavy(34))
+                .foregroundStyle(Color.ink)
+            if let first = days.first(where: { $0.day != nil }), let day = first.day {
+                Apparatus("\(formatDDMMYYYY(day)) · \(first.articles.count) stories", size: 10.5)
+                    .foregroundStyle(Color.muted)
             }
-            Text("\(vertical.title) News")
-                .font(.display(34))
-                .foregroundStyle(vertical.onField)
-            Apparatus("Ranked by importance, not recency", size: 10.5)
-                .foregroundStyle(vertical.onField.opacity(0.7))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 
     private func loadedView(_ days: [FeedResult]) -> some View {
-        // Folded once for the whole list: a story shown in a newer day does
-        // not repeat in an older one (index-aligned with `days`), then the
-        // active chip and the search text narrow each day together.
+        // Folded once for the whole list, then the active chip and the search
+        // text narrow each day together, mirroring the web.
         let dayStories = Story.groupDays(days)
-        let allStories = dayStories.flatMap { $0 }
         let filters = activeFilters
         let filtered: [[Story]] = dayStories.map { stories in
             guard !filters.isEmpty else { return stories }
@@ -128,45 +119,47 @@ struct SectionView: View {
             }
         }
         let shown = filtered.reduce(0) { $0 + $1.count }
+        let total = dayStories.reduce(0) { $0 + $1.count }
 
         return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                masthead
-                filterChips(allStories)
+            VStack(alignment: .leading, spacing: 18) {
+                masthead(days)
+                filterChips(dayStories.flatMap { $0 })
                 searchBar
                 if !filters.isEmpty {
-                    filterStatus(filters, shown: shown, total: allStories.count)
+                    Apparatus(
+                        "\(filters.map(\.label).joined(separator: " + ")) · \(shown) of \(total) stories in view",
+                        size: 10.5
+                    )
+                    .foregroundStyle(Color.muted)
                 }
                 if shown == 0, !filters.isEmpty {
-                    emptyFilterSheet(filters.map(\.label).joined(separator: " · "))
+                    emptyFilterBlock(filters.map(\.label).joined(separator: " · "))
                 } else {
                     ForEach(days.indices, id: \.self) { index in
                         if !filtered[index].isEmpty {
                             DaySheet(
                                 day: days[index].day,
                                 totalInDay: days[index].articles.count,
-                                stories: filtered[index],
-                                vertical: vertical
+                                stories: filtered[index]
                             )
                         }
                     }
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
             .padding(.bottom, 24)
         }
         .refreshable { await load() }
         .scrollDismissesKeyboard(.immediately)
     }
 
-    // The selection grammar (DESIGN.md): selected = paper background with
-    // field-coloured text; inactive = transparent, on-field at 70%, with a
-    // 35% on-field border. Each chip names its own effect: the count is how
-    // many of the loaded stories it narrows to; the active one grows an ×.
+    // The chips, Modern Classic grammar: hairline capsules with counts; the
+    // active chip presses in — ink fill, ground text, an ×.
     private func filterChips(_ allStories: [Story]) -> some View {
         HStack(alignment: .center, spacing: 10) {
-            Stamp("Filter", color: vertical.onField)
+            Stamp("Filter", color: .ink)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(FilterDef.chips(for: vertical)) { def in
@@ -178,19 +171,19 @@ struct SectionView: View {
                             HStack(spacing: 6) {
                                 Apparatus(def.label, size: 11, medium: isActive)
                                 Apparatus("\(count)", size: 10)
-                                    .opacity(0.6)
+                                    .foregroundStyle(isActive ? Color.ground.opacity(0.8) : Color.muted)
                                 if isActive {
                                     Image(systemName: "xmark")
                                         .font(.system(size: 9, weight: .bold))
                                 }
                             }
-                            .foregroundStyle(isActive ? vertical.color : vertical.onField.opacity(0.7))
+                            .foregroundStyle(isActive ? Color.ground : Color.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(isActive ? Color.paper : .clear, in: Capsule())
+                            .background(isActive ? Color.ink : .clear, in: Capsule())
                             .overlay(
                                 Capsule().strokeBorder(
-                                    isActive ? .clear : vertical.onField.opacity(0.35),
+                                    isActive ? .clear : Color.hairMid,
                                     lineWidth: 1
                                 )
                             )
@@ -203,31 +196,21 @@ struct SectionView: View {
         }
     }
 
-    // The web's FILTER sentence, once per section: says what the narrowing
-    // did, in numbers, right where it happened.
-    private func filterStatus(_ filters: [FilterDef], shown: Int, total: Int) -> some View {
-        Apparatus(
-            "\(filters.map(\.label).joined(separator: " + ")) · \(shown) of \(total) stories in view",
-            size: 10.5
-        )
-        .foregroundStyle(vertical.onField.opacity(0.7))
-    }
-
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(vertical.onField.opacity(0.7))
+                .foregroundStyle(Color.muted)
             TextField(
                 "",
                 text: $searchText,
                 prompt: Text("SEARCH THESE DAYS")
                     .font(.apparatus(11))
-                    .foregroundStyle(vertical.onField.opacity(0.5))
+                    .foregroundStyle(Color.muted.opacity(0.8))
             )
             .font(.apparatus(12))
-            .foregroundStyle(vertical.onField)
-            .tint(vertical.onField)
+            .foregroundStyle(Color.ink)
+            .tint(.ink)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
             if !searchText.isEmpty {
@@ -236,7 +219,7 @@ struct SectionView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(vertical.onField.opacity(0.7))
+                        .foregroundStyle(Color.muted)
                 }
                 .buttonStyle(.plain)
             }
@@ -244,45 +227,43 @@ struct SectionView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(vertical.onField.opacity(0.35), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 3)
+                .strokeBorder(Color.hairMid, lineWidth: 1)
         )
     }
 
-    // A zero-match narrowing still keeps its sheet (web grammar) instead of
-    // a bare message floating on the field.
-    private func emptyFilterSheet(_ label: String) -> some View {
+    // A zero-match narrowing keeps its frame (web grammar).
+    private func emptyFilterBlock(_ label: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Apparatus("Filter · \(label)", size: 10.5)
-                .foregroundStyle(Color.ink.opacity(0.7))
+                .foregroundStyle(Color.muted)
             Text("No matches in these days.")
                 .font(.prose(15))
-                .foregroundStyle(Color.ink.opacity(0.75))
+                .foregroundStyle(Color.inkSoft)
             Button {
                 activeFilterID = nil
                 searchText = ""
             } label: {
                 Apparatus("Clear", size: 11, medium: true)
-                    .foregroundStyle(vertical.onField)
+                    .foregroundStyle(Color.ground)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(vertical.color, in: Capsule())
+                    .background(Color.ink, in: Capsule())
             }
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .shadow(color: .black.opacity(0.35), radius: 16, y: 10)
+        .padding(.vertical, 14)
+        .overlay(alignment: .top) { Rectangle().fill(Color.hairSoft).frame(height: 0.5) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.hairSoft).frame(height: 0.5) }
     }
 
     private var loadingView: some View {
         VStack(spacing: 12) {
             ProgressView()
-                .tint(vertical.onField)
-            Apparatus("Counting the day", size: 11)
-                .foregroundStyle(vertical.onField.opacity(0.7))
+                .tint(.ink)
+            Apparatus("Opening the edition", size: 11)
+                .foregroundStyle(Color.muted)
         }
     }
 
@@ -290,20 +271,20 @@ struct SectionView: View {
         VStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 36))
-                .foregroundStyle(vertical.onField.opacity(0.8))
+                .foregroundStyle(Color.muted)
             Text(message)
                 .font(.prose(15))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(vertical.onField.opacity(0.85))
+                .foregroundStyle(Color.inkSoft)
             Button {
                 state = .loading
                 Task { await load() }
             } label: {
                 Apparatus("Try again", size: 11, medium: true)
-                    .foregroundStyle(vertical.color)
+                    .foregroundStyle(Color.ground)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color.paper, in: Capsule())
+                    .background(Color.ink, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -321,52 +302,52 @@ struct SectionView: View {
             state = .failed(error.localizedDescription)
         }
     }
+
+    private func formatDDMMYYYY(_ day: String) -> String {
+        let parts = day.split(separator: "-")
+        guard parts.count == 3 else { return day }
+        return "\(parts[2]).\(parts[1]).\(parts[0])"
+    }
 }
 
-// The section switch, in the web's own grammar (SectionNav): three equal
-// cells, mono uppercase, the current cell inverted to paper with its field's
-// text; inactive cells stay on the field at 70% behind a 35% border.
+// The departments bar, the web's SectionNav in the app: three equal cells in
+// display caps between hairlines, the current one ink at full strength on a
+// 2pt gold baseline. Bottom placement is the mobile convention for "this
+// changes where you are".
 struct SectionSwitch: View {
     @Binding var selection: Vertical
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Vertical.allCases) { vertical in
-                let isCurrent = vertical == selection
-                Button {
-                    selection = vertical
-                } label: {
-                    Apparatus(vertical.title, size: 11.5, medium: isCurrent)
-                        .foregroundStyle(isCurrent ? vertical.color : selection.onField.opacity(0.7))
-                        .frame(maxWidth: .infinity, minHeight: 46)
-                        .background(isCurrent ? Color.paper : .clear)
-                }
-                .buttonStyle(.plain)
-                if vertical != Vertical.allCases.last {
-                    Rectangle()
-                        .fill(selection.onField.opacity(0.35))
-                        .frame(width: 1, height: 46)
+        VStack(spacing: 0) {
+            Rectangle().fill(Color.hair).frame(height: 0.5)
+            HStack(spacing: 0) {
+                ForEach(Vertical.allCases) { vertical in
+                    let isCurrent = vertical == selection
+                    Button {
+                        selection = vertical
+                    } label: {
+                        VStack(spacing: 0) {
+                            Text(vertical.navTitle.uppercased())
+                                .font(.display(11.5))
+                                .kerning(1.1)
+                                .foregroundStyle(isCurrent ? Color.ink : Color.muted)
+                                .frame(maxWidth: .infinity, minHeight: 46)
+                            Rectangle()
+                                .fill(isCurrent ? Color.goldSoft : .clear)
+                                .frame(height: 2)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    if vertical != Vertical.allCases.last {
+                        Rectangle()
+                            .fill(Color.hairSoft)
+                            .frame(width: 0.5, height: 30)
+                    }
                 }
             }
+            .background(Color.ground)
         }
-        .background(selection.color)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(selection.onField.opacity(0.35), lineWidth: 1)
-        )
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 2)
-        .background(
-            // A soft fade so sheets scrolling under the switch stay legible.
-            LinearGradient(
-                colors: [selection.color.opacity(0), selection.color],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
-        )
+        .background(Color.ground)
     }
 }
 

@@ -21,7 +21,7 @@ struct ContentView: View {
                     .tag(vertical)
             }
         }
-        .tint(selection.color)
+        .tint(.ink)
         .onOpenURL { url in
             guard let target = DeepLinkTarget.parse(url) else { return }
             selection = target.section
