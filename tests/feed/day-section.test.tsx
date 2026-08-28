@@ -46,15 +46,18 @@ const rankTexts = (container: HTMLElement): (string | null)[] =>
     (el) => el.textContent,
   );
 
-/** The rank numerals rendered with the lead treatment. Modern Classic retired the field
- *  inversion; on the entry itself the lead now reads as the full-strength gold display numeral
- *  (`text-[color:var(--gold)]`), while every non-lead numeral gets soft gold
- *  (`text-[color:var(--gold-soft)]` -- note the closing bracket keeps the two class strings
- *  from matching each other as substrings). */
-const leadRankTexts = (container: HTMLElement): (string | null)[] =>
-  Array.from(container.querySelectorAll('[aria-hidden="true"][data-numeric]'))
-    .filter((el) => el.className.includes("text-[color:var(--gold)]"))
-    .map((el) => el.textContent);
+/** The rank numerals carrying the lead treatment. Since live search (owner, 2026-08-28) the
+ *  full-gold promotion is position-driven CSS, not a class the markup bakes in: `.folio`'s
+ *  base style IS the lead, and the `[data-entry]:not([hidden]) ~ [data-entry]:not([hidden])
+ *  .folio` sibling rule demotes every numeral after the first visible entry to soft gold. So
+ *  "which numeral is the lead" is, in markup terms, "the folio inside the first non-hidden
+ *  [data-entry]" -- exactly what this helper reads. */
+const leadRankTexts = (container: HTMLElement): (string | null)[] => {
+  const first = container.querySelector("[data-entry]:not([hidden])");
+  return first === null
+    ? []
+    : Array.from(first.querySelectorAll(".folio")).map((el) => el.textContent);
+};
 
 const entriesFrom = (items: ReturnType<typeof toFeedArticle>[]): RankedEntry[] =>
   items.map((article, i) => ({ article, rank: i + 1 }));

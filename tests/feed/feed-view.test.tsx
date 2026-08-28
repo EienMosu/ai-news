@@ -4,7 +4,7 @@
 // DOM and explicit `afterEach(cleanup)` because `test.globals` is false project-wide.
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { dayStatusLine, FeedView } from "../../components/FeedView.js";
+import { FeedView } from "../../components/FeedView.js";
 import { resolveFilter } from "../../src/lib/feed/filter.js";
 import type { FeedResult } from "../../src/lib/feed/read.js";
 import { toFeedArticle } from "../../src/lib/feed/shape.js";
@@ -78,15 +78,19 @@ describe("FeedView", () => {
     expect(screen.getByText("1 story")).toBeTruthy();
   });
 
-  it("shows the day-wide status line above the list, distinct from the per-section count", () => {
-    render(
+  it("never renders the day-wide status line -- it left the web outright (owner, 2026-08-28)", () => {
+    // The "N stories ranked across all sections" sentence was a pipeline fact above the day
+    // sheet. It is gone even when every count is known; the sheet header's own K of N is the
+    // page's number, and the pipeline's state lives behind the info FAB's run rail.
+    const { container } = render(
       <FeedView
         section="ai"
         result={feedResult({ llmRankedInDay: 264, truncatedInDay: 14, status: "partial" })}
         now={NOW}
       />,
     );
-    expect(screen.getByText(/264 stories ranked across all sections on 18.08.2026/)).toBeTruthy();
+    expect(container.querySelector('[data-testid="day-status"]')).toBeNull();
+    expect(screen.queryByText(/ranked across all sections/)).toBeNull();
   });
 
   it("omits the day-status line entirely when llmRankedInDay is null, rather than print a confident '0'", () => {
@@ -185,13 +189,12 @@ describe("FeedView -- quick filters", () => {
     expect(frame?.className).not.toMatch(/shadow/);
   });
 
-  it("does nothing extra when filterDef is not given -- day-status stays, no filter-status appears", () => {
+  it("does nothing extra when filterDef is not given -- no filter-status line appears", () => {
     const articles = buildArticles(3, new Set([0]));
     const { container } = render(
       <FeedView section="ai" result={feedResult({ articles })} now={NOW} />,
     );
     expect(container.querySelector('[data-testid="filter-status"]')).toBeNull();
-    expect(container.querySelector('[data-testid="day-status"]')).not.toBeNull();
   });
 
   it("keeps the existing empty-section message, not a filter message, when this section had zero articles that day", () => {
@@ -204,40 +207,3 @@ describe("FeedView -- quick filters", () => {
   });
 });
 
-describe("dayStatusLine", () => {
-  it("uses singular 'story' for exactly one ranked article", () => {
-    expect(dayStatusLine("complete", 1, 0, "2026-08-18"))
-      .toBe("1 story ranked across all sections on 18.08.2026.");
-  });
-
-  it("uses plural 'stories' for any count other than one", () => {
-    expect(dayStatusLine("complete", 264, 0, "2026-08-18"))
-      .toBe("264 stories ranked across all sections on 18.08.2026.");
-  });
-
-  it("omits the truncated clause when truncatedInDay is 0", () => {
-    expect(dayStatusLine("complete", 264, 0, "2026-08-18")).not.toContain("truncated");
-  });
-
-  it("includes the truncated count when truncatedInDay is greater than 0", () => {
-    expect(dayStatusLine("partial", 264, 14, "2026-08-18")).toContain("14 truncated");
-  });
-
-  it("states a partial day plainly, without error/failure wording", () => {
-    const line = dayStatusLine("partial", 264, 14, "2026-08-18");
-    expect(line).toContain("that day's ranking was partial");
-    expect(line).not.toMatch(/error|fail|broken/i);
-  });
-
-  it("says nothing about partial status for a complete day", () => {
-    expect(dayStatusLine("complete", 264, 14, "2026-08-18")).not.toContain("partial");
-  });
-
-  it("never calls a ranked day 'today' -- the function has no `now` and cannot know", () => {
-    // The day shown is routinely yesterday (or, on a quietly-broken pipeline, weeks old --
-    // the archive reaches 30 days back). A day named "2020-01-01" makes the point
-    // regardless of when this test happens to run.
-    const line = dayStatusLine("partial", 264, 14, "2020-01-01");
-    expect(line).not.toMatch(/\btoday\b/i);
-  });
-});

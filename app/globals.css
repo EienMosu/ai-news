@@ -250,10 +250,34 @@ html[data-theme="dark"] .theme-toggle .tt-light {
 .filter-active-chip:focus-visible {
   outline-color: var(--ink);
 }
+/* Focus stays quiet (owner, 2026-08-28: no second ring around the bar — the iOS input's
+   grammar). The hairline firming to ink is the visible focus signal instead. */
 .search-field:focus-within {
-  outline: 2px solid currentColor;
-  outline-offset: 3px;
-  border-radius: 1px;
+  border-color: var(--ink);
+}
+
+/* The day sheet's entries, position-driven so the live-search script only has to flip
+   [hidden]: the FIRST VISIBLE entry is the lead (full-gold folio numeral, no divider above),
+   every later visible entry gets the soft numeral and the hairline — exactly how the iOS
+   list re-derives its lead when a filter narrows it. Server renders carry no [hidden], so
+   an unfiltered page looks identical to the old per-entry classes. */
+.folio {
+  font-size: 2.4rem;
+  color: var(--gold);
+}
+@media (min-width: 640px) {
+  .folio {
+    font-size: 2.8rem;
+  }
+}
+[data-entry]:not([hidden]) ~ [data-entry]:not([hidden]) {
+  border-top: 1px solid var(--hair-soft);
+}
+[data-entry]:not([hidden]) ~ [data-entry]:not([hidden]) .folio {
+  margin-top: 0.1rem;
+  font-size: 1.5rem;
+  color: var(--gold-soft);
+  opacity: 0.6;
 }
 
 /* The chip row rides sideways, never wraps — the iOS app's slider grammar (owner,

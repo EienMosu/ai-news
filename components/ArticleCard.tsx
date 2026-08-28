@@ -8,9 +8,9 @@ export interface ArticleCardProps {
   /** Position within its day, 1-based. Rank order is the information this product exists to
    *  produce, so the number is content, not ornament. */
   rank?: number;
-  /** The day's top entry. Modern Classic announces it with the gold rule and THE LEAD tag
-   *  (DaySection's job) and a full-gold numeral here — never a larger headline, so every entry
-   *  keeps one type size. */
+  /** The day's top entry AS RENDERED (first in the server's list) — sets the data-lead marker
+   *  only. The full-gold numeral treatment is position-driven CSS on `.folio` (globals.css),
+   *  keyed to the first VISIBLE entry, so live search re-derives it without touching this. */
   lead?: boolean;
 }
 
@@ -43,16 +43,15 @@ export function ArticleCard({ article, now: _now, rank, lead = false }: ArticleC
       className="group block py-5 no-underline"
     >
       <article className="flex gap-4 sm:gap-6">
+        {/* Size and colour live in globals.css (.folio + the [data-entry] sibling rule), keyed
+            to VISIBLE position, not to the `lead` prop: when live search hides the lead, the
+            first entry still showing inherits the full-gold treatment, exactly as the iOS list
+            re-derives its lead. Only layout (width, alignment, face) stays inline. */}
         {rank !== undefined ? (
           <span
             aria-hidden="true"
             data-numeric
-            className={[
-              "w-8 shrink-0 text-right font-[family-name:var(--font-display)] italic leading-none sm:w-10",
-              lead
-                ? "text-[2.4rem] text-[color:var(--gold)] sm:text-[2.8rem]"
-                : "mt-[0.1rem] text-[1.5rem] text-[color:var(--gold-soft)] opacity-60",
-            ].join(" ")}
+            className="folio w-8 shrink-0 text-right font-[family-name:var(--font-display)] italic leading-none sm:w-10"
           >
             {rank}
           </span>

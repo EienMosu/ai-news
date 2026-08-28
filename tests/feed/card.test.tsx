@@ -113,23 +113,27 @@ describe("ArticleCard", () => {
     expect(container.querySelector("[data-numeric]")).toBeNull();
   });
 
-  it("lead strengthens the numeral to full gold but never inverts the row", () => {
+  it("renders one folio treatment in markup -- lead is position-driven CSS -- and never inverts the row", () => {
     // Old design: data-lead flipped the whole card into an inverted ink-on-field block. Modern
-    // Classic moved the lead's announcement into DaySection (gold rule + THE LEAD tag); inside
-    // the row, `lead` only promotes the numeral from soft gold to full gold. The data-lead
-    // attribute may remain as an inert anchor, but no inversion classes may appear anywhere in
-    // the row -- bg-[var(--ink)] is the active-chip/outbound-link treatment, never a card's.
+    // Classic moved the lead's announcement into DaySection (gold rule + THE LEAD tag). Since
+    // live search (owner, 2026-08-28) the numeral's gold promotion is not a class the markup
+    // bakes in either: every numeral is the same `.folio`, and globals.css's [data-entry]
+    // sibling rule decides which one reads full gold -- the first VISIBLE entry's, so hiding
+    // the lead re-derives it. The data-lead attribute stays as an inert anchor; no inversion
+    // classes may appear anywhere in the row -- bg-[var(--ink)] is the active-chip/outbound-
+    // link treatment, never a card's.
     const article = toFeedArticle(raw());
     const leadRender = render(<ArticleCard article={article} now={NOW} rank={1} lead={true} />);
     const leadNumeral = leadRender.container.querySelector("[data-numeric]");
-    expect(leadNumeral?.className).toContain("text-[color:var(--gold)]");
+    expect(leadNumeral?.className).toContain("folio");
+    expect(leadNumeral?.className).not.toContain("text-[color:var(--gold)");
     expect(leadRender.container.innerHTML).not.toContain("bg-[var(--ink)]");
     cleanup();
 
     const plainRender = render(<ArticleCard article={article} now={NOW} rank={2} />);
     const plainNumeral = plainRender.container.querySelector("[data-numeric]");
-    expect(plainNumeral?.className).toContain("text-[color:var(--gold-soft)]");
-    expect(plainNumeral?.className).not.toContain("text-[color:var(--gold)]");
+    expect(plainNumeral?.className).toContain("folio");
+    expect(plainNumeral?.className).not.toContain("text-[color:var(--gold-soft)");
   });
 
   // ---- whyItMatters: the row's own prose ----

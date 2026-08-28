@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { DaySection } from "../../../../components/DaySection.js";
-import { dayStatusLine } from "../../../../components/FeedView.js";
 import { SectionNav } from "../../../../components/SectionNav.js";
 import { getDay } from "../../../../src/lib/feed/read.js";
 import { isValidDay } from "../../../../src/lib/search/range.js";
@@ -68,12 +67,8 @@ export default async function DayPage({ params }: DayPageProps) {
       <div className="mx-auto max-w-3xl">
       <SectionNav current={null} />
 
-      {result.llmRankedInDay !== null ? (
-        <p data-testid="day-status" className="mb-4 text-xs opacity-75">
-          {dayStatusLine(result.status, result.llmRankedInDay, result.truncatedInDay, date)}
-        </p>
-      ) : null}
-
+      {/* The day-status line ("N stories ranked across all sections...") left the web with
+          FeedView's (owner, 2026-08-28) -- the sheet header's own count is the page's number. */}
       {result.articles.length === 0 ? (
         <p data-testid="day-empty" className="opacity-80">
           This day ranked but produced no stories in either vertical.

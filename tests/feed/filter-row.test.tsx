@@ -11,7 +11,7 @@
 // is unchanged and still what most assertions pin down.
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { FilterRow } from "../../components/FilterRow.js";
+import { FilterRow, LIVE_SEARCH_SCRIPT } from "../../components/FilterRow.js";
 import { FILTERS } from "../../src/lib/feed/filter.js";
 import { DEFAULT_ARCHIVE_DAYS } from "../../src/lib/feed/days.js";
 
@@ -284,10 +284,13 @@ describe("FilterRow", () => {
       // serialized markup shows the entities) and the input's value attribute, where the HTML
       // attribute serializer legally leaves < and > unescaped because they are inert inside a
       // quoted attribute. So the honest contract is not "the raw string never appears in
-      // innerHTML" but "no <script> element ever materialises" -- plus the value round-trips
-      // as plain data, character for character.
+      // innerHTML" but "no INJECTED script element ever materialises" -- the row's only script
+      // is the authored LIVE_SEARCH_SCRIPT, verbatim -- plus the value round-trips as plain
+      // data, character for character.
       expect(container.innerHTML).toContain("&lt;script&gt;");
-      expect(container.querySelector("script")).toBeNull();
+      const scripts = container.querySelectorAll("script");
+      expect(scripts.length).toBe(1);
+      expect(scripts[0]?.textContent).toBe(LIVE_SEARCH_SCRIPT);
       expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe(payload);
     });
   });

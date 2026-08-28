@@ -151,7 +151,9 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
     }
   });
 
-  it("shows the day-status line when llmRankedInDay is known", async () => {
+  it("never renders the day-status line, even when every count is known (owner, 2026-08-28)", async () => {
+    // The "N stories ranked across all sections" sentence left the web outright, here as on
+    // the feeds -- the day sheet's own header count is the page's number.
     vi.mocked(getDay).mockResolvedValue({
       articles: [toFeedArticle(rawArticle())],
       day: "2026-08-18",
@@ -162,23 +164,8 @@ describe("DayPage (app/day/[date]/page.tsx)", () => {
 
     render(await DayPage({ params: params("2026-08-18") }));
 
-    expect(screen.getByTestId("day-status").textContent).toContain(
-      "264 stories ranked across all sections on 18.08.2026",
-    );
-  });
-
-  it("omits the day-status line when llmRankedInDay is null (no META#DAY record for this day)", async () => {
-    vi.mocked(getDay).mockResolvedValue({
-      articles: [toFeedArticle(rawArticle())],
-      day: "2026-08-18",
-      status: null,
-      llmRankedInDay: null,
-      truncatedInDay: null,
-    });
-
-    render(await DayPage({ params: params("2026-08-18") }));
-
     expect(screen.queryByTestId("day-status")).toBeNull();
+    expect(screen.queryByText(/ranked across all sections/)).toBeNull();
   });
 
   it("404s a calendar-impossible but shape-valid date WITHOUT ever calling getDay -- final review, L3", async () => {

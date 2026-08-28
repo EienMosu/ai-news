@@ -86,11 +86,19 @@ the clear URL. A free-text `f` still gets its own active chip.
 The chips wear the iOS app's exact grammar (owner, 2026-08-28): a fixed FILTER stamp on the
 left, the chips riding sideways past it on one line. The old two-step Others link/form is an
 always-visible **search field** under them: a hairline box, magnifier, mono placeholder
-"Search these days" (its aria-label too), a plain GET form — and NO button. With a single text
-field the browser submits implicitly on Enter; `enterKeyHint="search"` makes that the
-keyboard's own search key on phones. No JS, honest URLs. It searches the loaded days, which is
-why the "Search the whole archive" link to `/search` (DynamoDB for the recent window + the
-public GitHub NDJSON archive beyond) sits on its own line beneath the field, never beside it.
+"Search these days" (its aria-label too), and NO button. Search is **live** (owner,
+2026-08-28): `LIVE_SEARCH_SCRIPT` in `FilterRow` — the site's second authored inline-vanilla
+exception, after the theme script — debounces 250ms and narrows the rendered days as you
+type, matching each entry's `data-haystack` (the same title+summary+source haystack the
+server's `matchesFilter` uses), renumbering visible folios 1..k, rewriting each sheet's
+`K of N` count, hiding sheets with no matches (the app hides empty days too), and showing
+"No matches in these days." when nothing survives. The lead numeral and the between-entry
+hairline re-derive by position-driven CSS (`[data-entry]` sibling rules), so the first
+VISIBLE entry is always the lead. Enter just dismisses the keyboard; focus firms the field's
+hairline to ink instead of drawing a second ring. Without JS the markup is still the honest
+GET form (`?f=`). The field searches the loaded days, which is why the "Search the whole
+archive" link to `/search` (DynamoDB for the recent window + the public GitHub NDJSON archive
+beyond) sits on its own line beneath the field, never beside it.
 
 **Numbers count what you see.** `FeedView` renumbers entries after repeat-folding and
 filtering (owner's call, 2026-08-28, matching the iOS app): the list always reads 1, 2, 3 —
@@ -126,8 +134,9 @@ Pure CSS; `prefers-reduced-motion` collapses every animation in the build.
 
 ## Constraints this world lives under
 
-- **Zero client React components.** The theme script is inline vanilla JS, documented above;
-  everything else is server-rendered with plain GET forms.
+- **Zero client React components.** Two authored inline vanilla scripts — the theme script
+  and the live-search script, both documented above; everything else is server-rendered with
+  plain GET forms.
 - **Cost governs.** Server-rendered per request against one DynamoDB table; no image pipeline;
   self-hosted fonts only.
 - **Both device classes matter equally.** 44px tap targets on coarse pointers; the bar, chips

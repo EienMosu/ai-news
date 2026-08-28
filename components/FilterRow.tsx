@@ -43,13 +43,85 @@ function buildHref(basePath: string, params: Record<string, string | undefined>)
 }
 
 /**
+ * The live-search hand: the site's SECOND authored exception to the zero-client-JS rule
+ * (the first is layout.tsx's THEME_SCRIPT), added at the owner's explicit ask (2026-08-28)
+ * to match the iOS app's as-you-type search. Plain inline vanilla — still no client React.
+ *
+ * What it does, debounced 250ms: substring-match each entry's `data-haystack` (the exact
+ * haystack `matchesFilter` uses server-side: title + summary + sourceName, lowercased),
+ * flip `[hidden]` on misses, renumber the visible folios 1..k (the owner's visible-position
+ * rule), rewrite each sheet's `K of N stories` count, hide sheets with no matches, and show
+ * one "No matches in these days." note when nothing survives — each move mirroring
+ * SectionView.swift's filtered rebuild. The lead treatment and the between-entry hairline
+ * re-derive by CSS alone ([data-entry] sibling rules in globals.css).
+ *
+ * Enter/the keyboard's search key just dismisses the keyboard (preventDefault + blur), like
+ * the app. With JS disabled the listener never attaches and the form falls back to its plain
+ * GET submit — the honest `?f=` URL still works, it is just no longer the primary path.
+ */
+export const LIVE_SEARCH_SCRIPT = `(function () {
+  var nav = document.querySelector('nav[aria-label="Quick filters"]');
+  if (nav === null) return;
+  var input = nav.querySelector('input[name="f"]');
+  if (input === null || input.form === null) return;
+  input.form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    input.blur();
+  });
+  var timer;
+  input.addEventListener("input", function () {
+    clearTimeout(timer);
+    timer = setTimeout(apply, 250);
+  });
+  function apply() {
+    var query = input.value.trim().toLowerCase();
+    var shownEverywhere = 0;
+    document.querySelectorAll("[data-day-sheet]").forEach(function (sheet) {
+      var shown = 0;
+      sheet.querySelectorAll("[data-entry]").forEach(function (entry) {
+        var hit = query === "" ||
+          (entry.getAttribute("data-haystack") || "").indexOf(query) !== -1;
+        entry.hidden = !hit;
+        if (hit) {
+          shown += 1;
+          var folio = entry.querySelector(".folio");
+          if (folio !== null) folio.textContent = String(shown);
+        }
+      });
+      sheet.hidden = shown === 0;
+      var count = sheet.querySelector("[data-day-count]");
+      if (count !== null) {
+        var total = Number(count.getAttribute("data-total"));
+        count.textContent = shown === total
+          ? total + (total === 1 ? " story" : " stories")
+          : shown + " of " + total + " stories";
+      }
+      shownEverywhere += shown;
+    });
+    var note = document.getElementById("live-empty");
+    if (shownEverywhere === 0 && query !== "") {
+      if (note === null) {
+        note = document.createElement("p");
+        note.id = "live-empty";
+        note.className = "font-[family-name:var(--font-text)] text-[1.0625rem] italic opacity-80";
+        note.textContent = "No matches in these days.";
+        nav.parentNode.insertBefore(note, nav.nextSibling);
+      }
+      note.hidden = false;
+    } else if (note !== null) {
+      note.hidden = true;
+    }
+  }
+})();`;
+
+/**
  * The quick-filter zone, Modern Classic, in the iOS app's exact grammar (owner, 2026-08-28):
  * a fixed FILTER stamp with the five named chips riding sideways past it, then the app's
- * search bar underneath — hairline box, magnifier, mono placeholder, and NO button. Same
- * mechanism as ever: a plain GET form submitting `f` to the page, no JS, honest URLs; with a
- * single text field the browser submits it implicitly on Enter, which `enterKeyHint` surfaces
- * as the keyboard's own "search" key on phones. The field's placeholder says exactly what it
- * searches: these days, not the archive; the archive link sits on its own line beneath.
+ * search bar underneath — hairline box, magnifier, mono placeholder, and NO button. The
+ * primary search path is `LIVE_SEARCH_SCRIPT` above: typing narrows the rendered days as on
+ * iOS. The markup underneath stays the same honest GET form (`?f=`), which is also the no-JS
+ * fallback. The field's placeholder says exactly what it searches: these days, not the
+ * archive; the archive link sits on its own line beneath.
  */
 export function FilterRow({ section, basePath, activeF, chipCounts, days }: FilterRowProps) {
   const daysParam = days !== undefined && days !== DEFAULT_ARCHIVE_DAYS ? String(days) : undefined;
@@ -129,6 +201,10 @@ export function FilterRow({ section, basePath, activeF, chipCounts, days }: Filt
           </Link>
         </p>
       </form>
+
+      {/* Runs as soon as it is parsed: the nav above already exists, and the day sheets it
+          narrows are only queried inside event handlers, by which time the page is complete. */}
+      <script dangerouslySetInnerHTML={{ __html: LIVE_SEARCH_SCRIPT }} />
     </nav>
   );
 }
