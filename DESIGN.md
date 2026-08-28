@@ -95,10 +95,12 @@ server's `matchesFilter` uses), renumbering visible folios 1..k, rewriting each 
 "No matches in these days." when nothing survives. The lead numeral and the between-entry
 hairline re-derive by position-driven CSS (`[data-entry]` sibling rules), so the first
 VISIBLE entry is always the lead. Enter just dismisses the keyboard; focus firms the field's
-hairline to ink instead of drawing a second ring. Without JS the markup is still the honest
-GET form (`?f=`). The field searches the loaded days, which is why the "Search the whole
-archive" link to `/search` (DynamoDB for the recent window + the public GitHub NDJSON archive
-beyond) sits on its own line beneath the field, never beside it.
+hairline to ink instead of drawing a second ring (the input opts out of the global
+`:focus-visible` ring — unlayered, since a layered utility can never beat it). Without JS the
+markup is still the honest GET form (`?f=`). The field searches the loaded days only; the
+archive page `/search` (DynamoDB for the recent window + the public GitHub NDJSON archive
+beyond) kept its route but lost its last on-site link (owner, 2026-08-28) — it is a
+direct-URL surface now.
 
 **Numbers count what you see.** `FeedView` renumbers entries after repeat-folding and
 filtering (owner's call, 2026-08-28, matching the iOS app): the list always reads 1, 2, 3 —

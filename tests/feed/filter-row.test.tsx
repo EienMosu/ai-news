@@ -5,10 +5,11 @@
 //
 // Modern Classic redesign (owner, 2026-08-27): the two-step Others link/form is gone -- the
 // search field is always rendered -- and the "Inside X" section label is retired. The active
-// chip's inversion moved from inline styles to the ink-fill utility classes, chips may carry a
-// match count, and the Archive link moved here from SectionNav. These tests encode that shipped
-// contract; the mechanism underneath (plain GET links and a plain GET form, honest URLs, no JS)
-// is unchanged and still what most assertions pin down.
+// chip's inversion moved from inline styles to the ink-fill utility classes, and chips may
+// carry a match count. The archive link (ex-SectionNav) later left the zone outright (owner,
+// 2026-08-28). These tests encode that shipped contract; the mechanism underneath (plain GET
+// links and a plain GET form, honest URLs) is unchanged and still what most assertions pin
+// down; the live-search script layered on top has its own suite in live-search.test.tsx.
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { FilterRow, LIVE_SEARCH_SCRIPT } from "../../components/FilterRow.js";
@@ -19,20 +20,20 @@ afterEach(cleanup);
 
 describe("FilterRow", () => {
   describe("the row's own shape", () => {
-    it("renders the section's five chip names plus the archive link, in FILTERS order", () => {
+    it("renders exactly the section's five chip names, in FILTERS order -- no other link in the zone", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
-      // The archive link is the row's only other link now that Others is gone -- it moved here
-      // from SectionNav so "leave these days entirely" sits next to "search within these days".
+      // Others is gone, and the archive link left the zone too (owner, 2026-08-28): the chips
+      // are the row's only links. /search kept its route but has no on-site link.
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Search the whole archive"]);
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label)]);
     });
 
     it("renders the design section's own five chips, not the ai section's", () => {
       render(<FilterRow section="design" basePath="/design" activeF={null} />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.design.map((chip) => chip.label), "Search the whole archive"]);
+      expect(names).toEqual([...FILTERS.design.map((chip) => chip.label)]);
     });
 
     // The "Inside AI"/"Inside Design"/"Inside Cloud" heading is retired outright -- the
@@ -221,10 +222,9 @@ describe("FilterRow", () => {
       render(<FilterRow section="ai" basePath="/" activeF="nvidia" />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       // textContent includes the aria-hidden × glyph; the accessible name (asserted below) does
-      // not. The archive link stays last -- the free-text chip belongs to the chip cluster, not
-      // the form.
+      // not.
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "nvidia×", "Search the whole archive"]);
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "nvidia×"]);
     });
 
     it("gives the free-text chip the same ink-fill active classes as a matched chip", () => {
@@ -263,14 +263,14 @@ describe("FilterRow", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Search the whole archive"]);
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label)]);
     });
 
     it("does not render an extra free-text chip when f matches a known id", () => {
       render(<FilterRow section="ai" basePath="/" activeF="anthropic" />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Search the whole archive"].map((name) =>
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label)].map((name) =>
         name === "Anthropic" ? "Anthropic×" : name,
       ));
     });
@@ -323,8 +323,7 @@ describe("FilterRow", () => {
       // The 40 mirrors sanitizeFilterParam's MAX_FILTER_PARAM_LENGTH: the browser stops the
       // reader where the server would truncate anyway.
       expect(input.maxLength).toBe(40);
-      // The placeholder says exactly what the field searches: these days, not the archive --
-      // the archive link beneath it covers the rest.
+      // The placeholder says exactly what the field searches: these days, not the archive.
       expect(input.placeholder).toBe("Search these days");
     });
 
@@ -405,22 +404,15 @@ describe("FilterRow", () => {
     });
   });
 
-  describe("the archive link", () => {
-    // Moved here from SectionNav in the redesign: it sits under the field (never beside it --
-    // owner, 2026-08-28) so "search these days" and "search everything" are one decision,
-    // made in one place.
-    it("links to /search scoped to the current section", () => {
+  describe("the archive link's absence", () => {
+    // It lived beside the button, then under the field, then left outright (owner,
+    // 2026-08-28): the zone is chips + field, nothing else. /search keeps its route as a
+    // direct-URL surface with no on-site link.
+    it("renders no link to /search anywhere in the zone", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
-      expect(screen.getByRole("link", { name: "Search the whole archive" }).getAttribute("href")).toBe(
-        "/search?section=ai",
-      );
-    });
-
-    it("carries the section through for the non-default sections too", () => {
-      render(<FilterRow section="cloud" basePath="/cloud" activeF={null} />);
-      expect(screen.getByRole("link", { name: "Search the whole archive" }).getAttribute("href")).toBe(
-        "/search?section=cloud",
-      );
+      const nav = screen.getByRole("navigation", { name: "Quick filters" });
+      const hrefs = Array.from(nav.querySelectorAll("a")).map((a) => a.getAttribute("href"));
+      expect(hrefs.some((href) => href?.startsWith("/search"))).toBe(false);
     });
   });
 });

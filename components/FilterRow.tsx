@@ -117,11 +117,12 @@ export const LIVE_SEARCH_SCRIPT = `(function () {
 /**
  * The quick-filter zone, Modern Classic, in the iOS app's exact grammar (owner, 2026-08-28):
  * a fixed FILTER stamp with the five named chips riding sideways past it, then the app's
- * search bar underneath — hairline box, magnifier, mono placeholder, and NO button. The
- * primary search path is `LIVE_SEARCH_SCRIPT` above: typing narrows the rendered days as on
- * iOS. The markup underneath stays the same honest GET form (`?f=`), which is also the no-JS
- * fallback. The field's placeholder says exactly what it searches: these days, not the
- * archive; the archive link sits on its own line beneath.
+ * search bar underneath — hairline box, magnifier, mono placeholder, and NO button, NO link,
+ * nothing else in the zone (owner). The primary search path is `LIVE_SEARCH_SCRIPT` above:
+ * typing narrows the rendered days as on iOS. The markup underneath stays the same honest GET
+ * form (`?f=`), which is also the no-JS fallback. The field's placeholder says exactly what
+ * it searches: these days — the archive page (`/search`) kept its route but lost its last
+ * on-site link with the owner's 2026-08-28 call; it is a direct-URL surface now.
  */
 export function FilterRow({ section, basePath, activeF, chipCounts, days }: FilterRowProps) {
   const daysParam = days !== undefined && days !== DEFAULT_ARCHIVE_DAYS ? String(days) : undefined;
@@ -190,16 +191,6 @@ export function FilterRow({ section, basePath, activeF, chipCounts, days }: Filt
             className="apparatus w-full border-0 bg-transparent p-0 placeholder:opacity-60"
           />
         </div>
-        {/* The only road to /search on the site, so it survives the button's removal — as a
-            footnote under the field, never beside it. */}
-        <p className="mt-2 text-right">
-          <Link
-            href={`/search${section ? `?section=${section}` : ""}`}
-            className="apparatus opacity-70 underline decoration-current/40 hover:opacity-100"
-          >
-            Search the whole archive
-          </Link>
-        </p>
       </form>
 
       {/* Runs as soon as it is parsed: the nav above already exists, and the day sheets it
