@@ -481,16 +481,16 @@ describe("CloudPage (app/cloud/page.tsx)", () => {
     it("renders the search field on every request -- the two-step ?others= toggle is retired (redesign 2026-08-27)", async () => {
       // The old row hid the free-text input behind an "Others" link that round-tripped
       // `?others=1`. The Modern Classic row is an always-rendered GET form: the input (labelled
-      // for what it actually searches -- these days, not the archive) is simply there, submitted
-      // by the spelled-out "Search it!" button (below the field on phones, beside it from sm:),
-      // with the Archive link -- moved here from SectionNav -- beside it, still scoped to this
-      // page's own section.
+      // for what it actually searches -- these days, not the archive) is simply there, with NO
+      // button beside it (owner, 2026-08-28: the iOS app's bare search bar; a single text field
+      // submits implicitly on Enter). The archive link sits on its own line under the field,
+      // still scoped to this page's own section.
       vi.mocked(getRecentDays).mockResolvedValue(outcome([EMPTY_DAY_RESULT]));
       render(await CloudPage({ searchParams: searchParams() }));
       expect(screen.getByRole("textbox", { name: "Search these days" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Search it!" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Search it!" })).toBeNull();
       expect(screen.queryByRole("link", { name: "Others" })).toBeNull();
-      expect(screen.getByRole("link", { name: "Archive" }).getAttribute("href")).toBe(
+      expect(screen.getByRole("link", { name: "Search the whole archive" }).getAttribute("href")).toBe(
         "/search?section=cloud",
       );
     });

@@ -83,11 +83,14 @@ carrying its match count over the rendered days — the chip names its effect be
 pressed. The active chip presses in: ink fill, ground text, an `aria-hidden ×`, and it links to
 the clear URL. A free-text `f` still gets its own active chip.
 
-The old two-step Others link/form is replaced by an always-visible **search field** under the
-chips: a hairline box, mono placeholder "Search these days" (its aria-label too), a stamped Go,
-a plain GET form — no JS, honest URLs. It searches the loaded days, which is why the ARCHIVE
-link to `/search` (DynamoDB for the recent window + the public GitHub NDJSON archive beyond)
-sits right beside it.
+The chips wear the iOS app's exact grammar (owner, 2026-08-28): a fixed FILTER stamp on the
+left, the chips riding sideways past it on one line. The old two-step Others link/form is an
+always-visible **search field** under them: a hairline box, magnifier, mono placeholder
+"Search these days" (its aria-label too), a plain GET form — and NO button. With a single text
+field the browser submits implicitly on Enter; `enterKeyHint="search"` makes that the
+keyboard's own search key on phones. No JS, honest URLs. It searches the loaded days, which is
+why the "Search the whole archive" link to `/search` (DynamoDB for the recent window + the
+public GitHub NDJSON archive beyond) sits on its own line beneath the field, never beside it.
 
 **Numbers count what you see.** `FeedView` renumbers entries after repeat-folding and
 filtering (owner's call, 2026-08-28, matching the iOS app): the list always reads 1, 2, 3 —

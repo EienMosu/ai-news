@@ -19,20 +19,20 @@ afterEach(cleanup);
 
 describe("FilterRow", () => {
   describe("the row's own shape", () => {
-    it("renders the section's five chip names plus Archive, in FILTERS order", () => {
+    it("renders the section's five chip names plus the archive link, in FILTERS order", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
-      // Archive is the row's only other link now that Others is gone -- it moved here from
-      // SectionNav so "leave these days entirely" sits next to "search within these days".
+      // The archive link is the row's only other link now that Others is gone -- it moved here
+      // from SectionNav so "leave these days entirely" sits next to "search within these days".
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Archive"]);
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Search the whole archive"]);
     });
 
     it("renders the design section's own five chips, not the ai section's", () => {
       render(<FilterRow section="design" basePath="/design" activeF={null} />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.design.map((chip) => chip.label), "Archive"]);
+      expect(names).toEqual([...FILTERS.design.map((chip) => chip.label), "Search the whole archive"]);
     });
 
     // The "Inside AI"/"Inside Design"/"Inside Cloud" heading is retired outright -- the
@@ -221,9 +221,10 @@ describe("FilterRow", () => {
       render(<FilterRow section="ai" basePath="/" activeF="nvidia" />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       // textContent includes the aria-hidden × glyph; the accessible name (asserted below) does
-      // not. Archive stays last -- the free-text chip belongs to the chip cluster, not the form.
+      // not. The archive link stays last -- the free-text chip belongs to the chip cluster, not
+      // the form.
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "nvidia×", "Archive"]);
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "nvidia×", "Search the whole archive"]);
     });
 
     it("gives the free-text chip the same ink-fill active classes as a matched chip", () => {
@@ -262,14 +263,14 @@ describe("FilterRow", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Archive"]);
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Search the whole archive"]);
     });
 
     it("does not render an extra free-text chip when f matches a known id", () => {
       render(<FilterRow section="ai" basePath="/" activeF="anthropic" />);
       const nav = screen.getByRole("navigation", { name: "Quick filters" });
       const names = within(nav).getAllByRole("link").map((link) => link.textContent);
-      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Archive"].map((name) =>
+      expect(names).toEqual([...FILTERS.ai.map((chip) => chip.label), "Search the whole archive"].map((name) =>
         name === "Anthropic" ? "Anthropic×" : name,
       ));
     });
@@ -320,7 +321,7 @@ describe("FilterRow", () => {
       // reader where the server would truncate anyway.
       expect(input.maxLength).toBe(40);
       // The placeholder says exactly what the field searches: these days, not the archive --
-      // the Archive link beside it covers the rest.
+      // the archive link beneath it covers the rest.
       expect(input.placeholder).toBe("Search these days");
     });
 
@@ -331,13 +332,23 @@ describe("FilterRow", () => {
       expect(screen.getByRole("textbox", { name: "Search these days" })).toBeTruthy();
     });
 
-    it("renders the spelled-out submit button (owner, 2026-08-28): 'Search it!' in the pressed ink fill", () => {
+    it("renders NO button beside the field (owner, 2026-08-28): the app's bare search bar, submitted implicitly", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
-      const button = screen.getByRole("button", { name: "Search it!" });
-      expect(button.getAttribute("type")).toBe("submit");
-      // The pressed grammar: ink fill, ground text -- same voice as the active chip.
-      expect(button.className).toContain("bg-[var(--ink)]");
-      expect(button.className).toContain("text-[color:var(--ground)]");
+      // The short-lived "Search it!" submit is gone: with a single text field the browser's
+      // implicit submission fires on Enter, so the form needs no button at all -- and the
+      // enterKeyHint surfaces that as the keyboard's own "search" key on phones.
+      expect(screen.queryByRole("button")).toBeNull();
+      const input = screen.getByRole("textbox") as HTMLInputElement;
+      expect(input.getAttribute("enterkeyhint")).toBe("search");
+    });
+
+    it("stamps FILTER before the chips, fixed outside the slider (the app's Stamp + ScrollView grammar)", () => {
+      render(<FilterRow section="ai" basePath="/" activeF={null} />);
+      const stamp = screen.getByText("Filter");
+      expect(stamp.className).toContain("stamp");
+      // Fixed beside the slider, not scrolling inside it: the stamp is the chip-row's sibling.
+      expect(stamp.closest(".chip-row")).toBeNull();
+      expect(stamp.parentElement?.querySelector(".chip-row")).not.toBeNull();
     });
 
     it("adds a hidden days input when days is non-default", () => {
@@ -391,19 +402,20 @@ describe("FilterRow", () => {
     });
   });
 
-  describe("the Archive link", () => {
-    // Moved here from SectionNav in the redesign: it sits beside the field so "search these
-    // days" and "search everything" are one decision, made in one place.
+  describe("the archive link", () => {
+    // Moved here from SectionNav in the redesign: it sits under the field (never beside it --
+    // owner, 2026-08-28) so "search these days" and "search everything" are one decision,
+    // made in one place.
     it("links to /search scoped to the current section", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
-      expect(screen.getByRole("link", { name: "Archive" }).getAttribute("href")).toBe(
+      expect(screen.getByRole("link", { name: "Search the whole archive" }).getAttribute("href")).toBe(
         "/search?section=ai",
       );
     });
 
     it("carries the section through for the non-default sections too", () => {
       render(<FilterRow section="cloud" basePath="/cloud" activeF={null} />);
-      expect(screen.getByRole("link", { name: "Archive" }).getAttribute("href")).toBe(
+      expect(screen.getByRole("link", { name: "Search the whole archive" }).getAttribute("href")).toBe(
         "/search?section=cloud",
       );
     });

@@ -327,8 +327,7 @@ html[data-theme="dark"] .theme-toggle .tt-light {
   }
   /* The tap target is the search BOX, never the input inside it — sizing the input
      inflated the bordered field to twice the design's height on phones. */
-  nav[aria-label="Quick filters"] .search-field,
-  nav[aria-label="Quick filters"] .search-go {
+  nav[aria-label="Quick filters"] .search-field {
     min-height: 44px;
   }
 }
