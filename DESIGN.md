@@ -12,7 +12,8 @@ Day's Dossier", whose three colour worlds are retired on the web.
 A day that was judged, set like a luxury journal.
 
 The product's whole claim is that something read the day and ranked it. Rank is visible as
-**position** (a numbered row, the numeral a display-serif folio figure, never zero-padded) and
+**position** (a numbered row counting what is visible, the numeral a display-serif folio
+figure, never zero-padded) and
 as the **lead's announcement** (the gold double-rule and THE LEAD tag opening each day, plus the
 only full-gold numeral) — never as scale. Every entry keeps one type size, which is what makes
 them comparable.
@@ -88,10 +89,11 @@ a plain GET form — no JS, honest URLs. It searches the loaded days, which is w
 link to `/search` (DynamoDB for the recent window + the public GitHub NDJSON archive beyond)
 sits right beside it.
 
-**Original ranks survive a filter.** `FeedView` still builds every entry's rank off the day's
-full list before any narrowing (repeat-folding, then the filter), so a survivor keeps the
-day-wide number it always had. A zero-match day keeps its frame (hairline block, `0 of N
-stories`) rather than vanishing.
+**Numbers count what you see.** `FeedView` renumbers entries after repeat-folding and
+filtering (owner's call, 2026-08-28, matching the iOS app): the list always reads 1, 2, 3 —
+a gapped count reads as a bug to a reader. The day's true size stays honest in the header's
+`K of N stories`. A zero-match day keeps its frame (hairline block, `0 of N stories`) rather
+than vanishing.
 
 ## The day and its entries
 
@@ -133,7 +135,6 @@ Pure CSS; `prefers-reduced-motion` collapses every animation in the build.
 - **`opengraph-image` still wears the dossier brand** (ink ground, three world blocks,
   Bricolage raw bytes for satori). Deliberately untouched this round; the share card is its own
   follow-up.
-- **`/search` still renumbers ranks after searching** — pre-existing, deferred.
 - The search input opts out of the global focus ring; the box shows focus via
   `.search-field:focus-within` instead. The placeholder sits at 60% opacity with the aria-label
   carrying the accessible name — exempted in the contrast test.

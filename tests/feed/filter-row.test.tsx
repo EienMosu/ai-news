@@ -331,13 +331,13 @@ describe("FilterRow", () => {
       expect(screen.getByRole("textbox", { name: "Search these days" })).toBeTruthy();
     });
 
-    it("renders a submit button whose Go label is a stamp", () => {
+    it("renders the spelled-out submit button (owner, 2026-08-28): 'Search it!' in the pressed ink fill", () => {
       render(<FilterRow section="ai" basePath="/" activeF={null} />);
-      const button = screen.getByRole("button", { name: "Go" });
+      const button = screen.getByRole("button", { name: "Search it!" });
       expect(button.getAttribute("type")).toBe("submit");
-      // The stamp class moved off the button element onto its label span in the redesign; the
-      // stamp is typography, the button is the control.
-      expect(within(button).getByText("Go").className).toContain("stamp");
+      // The pressed grammar: ink fill, ground text -- same voice as the active chip.
+      expect(button.className).toContain("bg-[var(--ink)]");
+      expect(button.className).toContain("text-[color:var(--ground)]");
     });
 
     it("adds a hidden days input when days is non-default", () => {

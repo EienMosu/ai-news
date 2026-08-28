@@ -65,9 +65,16 @@ export default async function FeedLayout({ children }: { children: ReactNode }) 
           status is a fact about the pipeline, not about the vertical you happen to be reading, so
           sitting outside both colour worlds is what it actually means. */}
       <a href="#stories" className="skip-link apparatus">Skip to the stories</a>
-      <div className="bg-[var(--color-ink)] px-5 py-2.5 text-[color:var(--color-paper)] sm:px-8">
+      {/* The rail is now opt-in (owner, 2026-08-28): hidden by default, toggled by the fixed
+          info FAB bottom-right. Pure CSS — a focusable checkbox the label flips; the ~ sibling
+          selector in globals.css shows the rail when checked. No client component, no script:
+          the zero-client-JS rule holds. The input must precede both the rail and the label for
+          the sibling selector to reach them. */}
+      <input type="checkbox" id="info-toggle" className="info-toggle-box" aria-label="Show the pipeline status bar" />
+      <div className="run-rail bg-[var(--ink)] px-5 py-2.5 text-[color:var(--ground)] sm:px-8">
         <div className="mx-auto max-w-3xl">{await RunStatusLine({ now })}</div>
       </div>
+      <label htmlFor="info-toggle" className="info-fab" aria-hidden="true">i</label>
       {children}
     </>
   );

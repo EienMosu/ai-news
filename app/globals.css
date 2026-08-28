@@ -256,16 +256,79 @@ html[data-theme="dark"] .theme-toggle .tt-light {
   border-radius: 1px;
 }
 
+/* The chip row rides sideways, never wraps — the iOS app's slider grammar (owner,
+   2026-08-28). Scrollbar hidden; the cut-off chip at the edge is the affordance. */
+.chip-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.chip-row::-webkit-scrollbar {
+  display: none;
+}
+.chip-row > * {
+  flex: none;
+}
+
+/* The info FAB and the opt-in rail (owner, 2026-08-28: the status bar is not part of
+   the design's first screen). A focusable checkbox carries the state; the label is the
+   fixed button; the ~ selector shows the rail only when checked. */
+.info-toggle-box {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.run-rail {
+  display: none;
+}
+.info-toggle-box:checked ~ .run-rail {
+  display: block;
+}
+.info-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--ground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 1.25rem;
+  cursor: pointer;
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.5);
+}
+.info-toggle-box:focus-visible ~ .info-fab {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
 /* Coarse pointers only: raises tap targets to 44px without bulking the desktop layout. */
 @media (pointer: coarse) {
   nav[aria-label="Sections"] a {
     padding-block: 0.95rem;
     min-height: 44px;
   }
-  nav[aria-label="Quick filters"] a,
-  nav[aria-label="Quick filters"] input,
-  nav[aria-label="Quick filters"] button {
+  nav[aria-label="Quick filters"] a {
     padding-block: 0.85rem;
+    min-height: 44px;
+  }
+  /* The tap target is the search BOX, never the input inside it — sizing the input
+     inflated the bordered field to twice the design's height on phones. */
+  nav[aria-label="Quick filters"] .search-field,
+  nav[aria-label="Quick filters"] .search-go {
     min-height: 44px;
   }
 }

@@ -134,7 +134,7 @@ describe("FeedView -- quick filters", () => {
     expect(container.querySelector('[data-testid="filter-status"]')).toBeNull();
   });
 
-  it("keeps only the matching entries and their original day ranks (1, 4, 7 of 9), not renumbered", () => {
+  it("keeps only the matching entries, renumbered by visible position (1, 2, 3) -- owner's call, 2026-08-28", () => {
     const matchAt = new Set([0, 3, 6]);
     const articles = buildArticles(9, matchAt);
     const def = resolveFilter("ai", "anthropic");
@@ -144,10 +144,10 @@ describe("FeedView -- quick filters", () => {
     const rankTexts = Array.from(
       container.querySelectorAll('[aria-hidden="true"][data-numeric]'),
     ).map((el) => el.textContent);
-    // Modern Classic renders ranks as folio numerals -- "1", never a zero-padded counter
-    // "01" -- but the fact under test is unchanged: these are the day's REAL ranks (the 1st,
-    // 4th, and 7th stories of the unfiltered day), not the survivors renumbered from 1.
-    expect(rankTexts).toEqual(["1", "4", "7"]);
+    // The numbers count what is visible (owner's call, 2026-08-28, matching the iOS app):
+    // folding and filtering renumber, so the list never shows gaps -- the day's real size
+    // lives in the header's "K of N stories", not in the numerals.
+    expect(rankTexts).toEqual(["1", "2", "3"]);
   });
 
   it("renders 'No matches this day.' for a day with articles but zero matches", () => {

@@ -59,7 +59,8 @@ export function FilterRow({ section, basePath, activeF, chipCounts, days }: Filt
 
   return (
     <nav aria-label="Quick filters" className="mb-8 sm:mb-11">
-      <div className="flex flex-wrap items-center justify-center gap-2">
+      {/* One sideways-scrolling line, never a second row — the app's slider grammar. */}
+      <div className="chip-row items-center">
         {chips.map((chip) => {
           const isActive = activeChip?.id === chip.id;
           const count = chipCounts?.[chip.id];
@@ -92,7 +93,9 @@ export function FilterRow({ section, basePath, activeF, chipCounts, days }: Filt
         ) : null}
       </div>
 
-      <form action={basePath} method="get" className="mt-3 flex items-center gap-2">
+      {/* Field on its own line on phones with the submit BELOW it (owner, 2026-08-28);
+          side by side from sm: up. The button is the field's verb, spelled out. */}
+      <form action={basePath} method="get" className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
         {daysParam !== undefined ? (
           <input type="hidden" name="days" defaultValue={daysParam} />
         ) : null}
@@ -107,16 +110,21 @@ export function FilterRow({ section, basePath, activeF, chipCounts, days }: Filt
             defaultValue={freeTextActive && activeF !== null ? activeF : undefined}
             className="apparatus w-full border-0 bg-transparent p-0 placeholder:opacity-60 focus:outline-none"
           />
-          <button type="submit" className="cursor-pointer border-0 bg-transparent p-0">
-            <span className="stamp">Go</span>
-          </button>
         </div>
-        <Link
-          href={`/search${section ? `?section=${section}` : ""}`}
-          className="apparatus shrink-0 opacity-70 underline decoration-current/40 hover:opacity-100"
-        >
-          Archive
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            className="search-go apparatus flex-1 cursor-pointer rounded-[3px] border-0 bg-[var(--ink)] px-4 py-2.5 font-medium text-[color:var(--ground)] sm:flex-none"
+          >
+            Search it!
+          </button>
+          <Link
+            href={`/search${section ? `?section=${section}` : ""}`}
+            className="apparatus shrink-0 opacity-70 underline decoration-current/40 hover:opacity-100"
+          >
+            Archive
+          </Link>
+        </div>
       </form>
     </nav>
   );

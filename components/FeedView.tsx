@@ -96,19 +96,19 @@ export function FeedView({ section, result, now, filterDef, hiddenHashes }: Feed
     );
   }
 
-  // Built from the FULL, unfiltered article list before any filter narrows it down -- `rank` is
-  // `i + 1` here and nowhere else, so a filtered render below still hands DaySection each
-  // survivor's real day rank (01, 04, 07) instead of silently renumbering from 1.
-  const allEntries: RankedEntry[] = articles.map((article, i) => ({ article, rank: i + 1 }));
-  // Repeat-folding narrows first, then the quick filter -- both AFTER rank assignment, so both
-  // preserve day ranks. Order between the two is immaterial (they test independent fields);
-  // folding first just means the filter never has to look at a card that would not render.
+  // Owner's call (2026-08-28, matching the iOS app): the number beside an entry is its
+  // VISIBLE position, renumbered after every narrowing, so repeat-folding and filtering
+  // never leave gaps (1, 2, 3 — not 1, 5, 7). A skipped number reads as a bug to a reader,
+  // not as a fact about the day; the day's own totals stay honest in the header's K of N.
+  const allEntries: RankedEntry[] = articles.map((article) => ({ article, rank: 0 }));
   const visibleEntries = hiddenHashes
     ? allEntries.filter((entry) => !hiddenHashes.has(entry.article.urlHash))
     : allEntries;
-  const matchedEntries = filterDef
-    ? visibleEntries.filter((entry) => matchesFilter(entry.article, filterDef))
-    : visibleEntries;
+  const matchedEntries = (
+    filterDef
+      ? visibleEntries.filter((entry) => matchesFilter(entry.article, filterDef))
+      : visibleEntries
+  ).map((entry, i) => ({ article: entry.article, rank: i + 1 }));
 
   // Branch review M6: the FILTER stamp line is a section-wide summary, not a per-day one (its
   // shown/total are already summed across every rendered day, task-C3-brief.md), so it renders

@@ -3,11 +3,11 @@ import type { FeedArticle } from "../src/lib/feed/shape.js";
 import { ArticleCard } from "./ArticleCard.js";
 import { formatDayKey } from "../src/lib/feed/format.js";
 
-/** One entry on a day sheet: the article, paired with its rank within the day. Rank travels
- *  with the entry rather than being derived from array position, so a filtered subset of a day
- *  (see `totalInDay` below) can still print each entry's real, day-wide rank instead of
- *  renumbering from 1 -- the rank is a fact about the day, not about whatever filter is
- *  currently narrowing what is shown. */
+/** One entry on a day sheet: the article, paired with the number it displays. Since the
+ *  owner's 2026-08-28 call (matching the iOS app), that number is the entry's VISIBLE
+ *  position — `FeedView` renumbers after folding and filtering, so the list always counts
+ *  1, 2, 3 with no gaps. The day's own size still reads honestly from the header's
+ *  `K of N stories`. */
 export interface RankedEntry {
   article: FeedArticle;
   rank: number;
@@ -37,11 +37,9 @@ export interface DaySectionProps {
  * header instead reads `K of N stories`: a filtered day still says how big the day was, not just
  * how many matches survived the filter (shared-preamble.md's "Filter states" paragraph).
  *
- * Ranks are read off each entry (`entry.rank`), never re-derived from array position -- the
- * whole point of carrying them explicitly is that a filtered render still prints the day's real
- * numbers (e.g. 01, 04, 07 for a day's #1, #4, and #7 stories) rather than silently renumbering
- * the survivors from 1, which would make a filtered sheet's ranks incomparable to the same day
- * unfiltered.
+ * Numbers are read off each entry (`entry.rank`) exactly as `FeedView` assigned them:
+ * sequential visible positions (owner's call, 2026-08-28) — a gapped count reads as a bug,
+ * not as a fact about the day.
  *
  * The first entry given -- whatever its rank number is -- is the day's lead and renders
  * inverted, on the field rather than the paper. That is the whole ranking device: no entry is
