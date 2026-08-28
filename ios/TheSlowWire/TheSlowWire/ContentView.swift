@@ -10,6 +10,9 @@ import SwiftUI
 struct ContentView: View {
     @State private var selection: Vertical = .ai
     @State private var deepLink: DeepLinkTarget?
+    // The masthead's ThemeToggle writes this key; "" = no choice yet, follow
+    // the system (preferredColorScheme(nil)), the site's exact behaviour.
+    @AppStorage("appearance") private var appearance = ""
 
     var body: some View {
         // TabView keeps each world's state (feed, scroll, navigation) alive
@@ -22,6 +25,9 @@ struct ContentView: View {
             }
         }
         .tint(.ink)
+        .preferredColorScheme(
+            appearance == "dark" ? .dark : appearance == "light" ? .light : nil
+        )
         .onOpenURL { url in
             guard let target = DeepLinkTarget.parse(url) else { return }
             selection = target.section

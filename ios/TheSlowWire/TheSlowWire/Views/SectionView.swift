@@ -90,12 +90,16 @@ struct SectionView: View {
     }
 
     // The masthead: the product's claim, the centered Playfair wordmark, and
-    // the newest day's own line beneath it — the journal's opening.
+    // the newest day's own line beneath it — the journal's opening. The util
+    // row on top carries the theme toggle at its right, as on the site.
     private func masthead(_ days: [FeedResult]) -> some View {
         VStack(spacing: 8) {
-            Apparatus("Ranked by importance", size: 10)
-                .foregroundStyle(Color.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .center) {
+                Apparatus("Ranked by importance", size: 10)
+                    .foregroundStyle(Color.muted)
+                Spacer()
+                ThemeToggle()
+            }
             Text("The Slow Wire")
                 .font(.displayHeavy(34))
                 .foregroundStyle(Color.ink)
