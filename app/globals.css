@@ -255,6 +255,14 @@ html[data-theme="dark"] .theme-toggle .tt-light {
 .search-field:focus-within {
   border-color: var(--ink);
 }
+/* Text inputs ALWAYS match :focus-visible while focused, so the global ring above would
+   draw itself around the input, inside the box — the "second circle" the owner vetoed.
+   This opt-out must live here, unlayered: a Tailwind focus:outline-none on the element
+   sits in @layer utilities and can never beat the unlayered global rule (the layering
+   note at that rule). The box's firmed hairline remains the focus signal. */
+.search-field input:focus-visible {
+  outline: none;
+}
 
 /* The day sheet's entries, position-driven so the live-search script only has to flip
    [hidden]: the FIRST VISIBLE entry is the lead (full-gold folio numeral, no divider above),

@@ -187,7 +187,7 @@ export function FilterRow({ section, basePath, activeF, chipCounts, days }: Filt
             placeholder="Search these days"
             aria-label="Search these days"
             defaultValue={freeTextActive && activeF !== null ? activeF : undefined}
-            className="apparatus w-full border-0 bg-transparent p-0 placeholder:opacity-60 focus:outline-none"
+            className="apparatus w-full border-0 bg-transparent p-0 placeholder:opacity-60"
           />
         </div>
         {/* The only road to /search on the site, so it survives the button's removal — as a
