@@ -1,0 +1,179 @@
+package com.eienmosu.theslowwire.ui.section
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.eienmosu.theslowwire.ui.Apparatus
+import com.eienmosu.theslowwire.ui.GoldRule
+import com.eienmosu.theslowwire.ui.theme.Palette
+import com.eienmosu.theslowwire.ui.theme.current
+import com.eienmosu.theslowwire.ui.theme.display
+import com.eienmosu.theslowwire.ui.theme.leadTag
+import com.eienmosu.theslowwire.ui.theme.prose
+
+/**
+ * A section's screen: the masthead, then the day sheets.
+ *
+ * `LazyColumn` is the list that only composes what is on screen — SwiftUI's
+ * `List`/`LazyVStack`, RecyclerView's replacement. Everything above the first
+ * day scrolls with the days rather than sitting in a fixed header, exactly as
+ * the site's masthead does.
+ */
+@Composable
+fun SectionScreen(
+    section: String = "ai",
+    modifier: Modifier = Modifier,
+    viewModel: FeedViewModel = viewModel(),
+) {
+    val palette = Palette.current
+    // collectAsStateWithLifecycle stops collecting while the app is in the
+    // background — the lifecycle-aware read, and the reason the plain
+    // collectAsState() is a lint warning on Android.
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(section) { viewModel.load(section) }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(palette.ground)
+    ) {
+        when (val current = state) {
+            is LoadState.Loading -> CenteredNote("Reading the wire")
+            is LoadState.Failed -> CenteredNote(current.message)
+            is LoadState.Loaded -> DayList(current.days)
+        }
+    }
+}
+
+@Composable
+private fun DayList(days: List<DaySheet>) {
+    LazyColumn(
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 40.dp)
+    ) {
+        item { Masthead(days) }
+        days.forEach { sheet ->
+            item { DayHeader(sheet) }
+            // `items` with a stable key lets Compose reuse rows across
+            // recompositions instead of rebuilding the list — the same reason
+            // SwiftUI's ForEach wants Identifiable.
+            items(sheet.stories, key = { it.id }) { story ->
+                val isLead = story === sheet.stories.first()
+                if (!isLead) Hairline()
+                ArticleRow(story = story, isLead = isLead)
+            }
+        }
+    }
+}
+
+/** The journal's opening: the claim, the wordmark, and the newest day's line. */
+@Composable
+private fun Masthead(days: List<DaySheet>) {
+    val palette = Palette.current
+    val newest = days.firstOrNull()
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Apparatus("Ranked by importance", size = 10, modifier = Modifier.fillMaxWidth())
+        Text(
+            text = "The Slow Wire",
+            style = display(34, FontWeight.ExtraBold),
+            color = palette.ink,
+            textAlign = TextAlign.Center,
+        )
+        newest?.day?.let { day ->
+            Apparatus("${formatDay(day)} · ${newest.totalInDay} stories", size = 10)
+        }
+    }
+}
+
+/** A day opens on its date and its count, under the gold double-rule. */
+@Composable
+private fun DayHeader(sheet: DaySheet) {
+    val palette = Palette.current
+    val shown = sheet.stories.size
+    val count = if (shown == sheet.totalInDay) {
+        "$shown ${if (shown == 1) "story" else "stories"}"
+    } else {
+        "$shown of ${sheet.totalInDay} stories"
+    }
+
+    Column(Modifier.padding(top = 8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Text(
+                text = sheet.day?.let(::formatDay) ?: "",
+                style = display(22, FontWeight.Bold),
+                color = palette.ink,
+            )
+            Apparatus(count, size = 11)
+        }
+        GoldRule(Modifier.padding(top = 10.dp))
+        Text(
+            text = "THE LEAD",
+            style = leadTag(),
+            color = palette.gold,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun Hairline() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(Palette.current.hairSoft)
+    )
+}
+
+/** The wait and the failure share one shape: a quiet line on the page, never a
+ *  spinner over a blank screen — the reader should always be told which it is. */
+@Composable
+private fun CenteredNote(text: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = text,
+            style = prose(15),
+            color = Palette.current.muted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 40.dp),
+        )
+    }
+}
+
+/** "2026-08-30" reads as "30.08.2026" everywhere in this product. */
+private fun formatDay(day: String): String {
+    val parts = day.split("-")
+    return if (parts.size == 3) "${parts[2]}.${parts[1]}.${parts[0]}" else day
+}

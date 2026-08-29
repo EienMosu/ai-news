@@ -93,3 +93,12 @@ fun stamp(size: Int = 10) = TextStyle(
     fontSize = size.sp,
     letterSpacing = (size * 0.14f).sp,
 )
+
+/** THE LEAD: the day's announcement tag, letterspaced far wider than the
+ *  apparatus (web: 0.3em) so three words read as a mark, not a sentence. */
+fun leadTag() = TextStyle(
+    fontFamily = Apparatus,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.sp,
+    letterSpacing = 3.3.sp,
+)
