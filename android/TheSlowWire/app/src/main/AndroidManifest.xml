@@ -16,8 +16,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TheSlowWire">
+        <!-- singleTop is load-bearing for deep links: under the default launch
+             mode a second VIEW intent starts a SECOND copy of this Activity,
+             each with its own NavHost and its own back stack, and onNewIntent
+             never runs at all. singleTop delivers the new intent to the
+             instance already on top, which is what makes the onNewIntent
+             override in MainActivity reachable. -->
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.TheSlowWire"
@@ -26,6 +33,35 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- The app scheme, iOS's twin: theslowwire://article/<section>/<hash>.
+                 BROWSABLE is what lets a link in another app reach us; DEFAULT is
+                 what lets an implicit intent resolve here at all. Miss either and
+                 the link silently does nothing. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="theslowwire" android:host="article" />
+            </intent-filter>
+
+            <!-- Shared web links, ready but not yet live. autoVerify asks Android
+                 to fetch https://<host>/.well-known/assetlinks.json and match the
+                 app's signing-certificate fingerprint; until that file exists on
+                 the site, Android 12+ sends https links straight to the browser
+                 (no chooser, silently) — verified: the link opened Chrome. The
+                 file needs the RELEASE signing cert, which this project does not
+                 have yet, so publishing it waits for the first signed build. The
+                 theslowwire:// scheme above needs no verification and works now. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="ai-news-ten-bice.vercel.app"
+                    android:pathPrefix="/article" />
             </intent-filter>
         </activity>
     </application>

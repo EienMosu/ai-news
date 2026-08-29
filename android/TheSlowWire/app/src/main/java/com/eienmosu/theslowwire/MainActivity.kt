@@ -1,5 +1,6 @@
 package com.eienmosu.theslowwire
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,7 +14,9 @@ import androidx.compose.ui.Modifier
 import com.eienmosu.theslowwire.ui.theme.Palette
 import com.eienmosu.theslowwire.ui.theme.current
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.eienmosu.theslowwire.model.DeepLinkTarget
 import com.eienmosu.theslowwire.ui.AppNav
 import com.eienmosu.theslowwire.ui.theme.Appearance
 import com.eienmosu.theslowwire.ui.theme.ThemeController
@@ -29,8 +32,16 @@ import com.eienmosu.theslowwire.ui.theme.TheSlowWireTheme
  * the CONTENT back out of the system bars' way.
  */
 class MainActivity : ComponentActivity() {
+
+    /** The link that started (or re-entered) this Activity. A cold start reads
+     *  it from the launching intent; a link that arrives while the app is
+     *  already running comes through onNewIntent instead — miss that second
+     *  path and the app looks broken exactly once per session. */
+    private val deepLink = mutableStateOf<DeepLinkTarget?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deepLink.value = DeepLinkTarget.parse(intent?.data)
         // Transparent bars, both styles: the default `auto` picks its scrim
         // from the SYSTEM's light/dark setting, which is not this app's theme —
         // a dark app under a light system got a pale status-bar band with pale
@@ -63,9 +74,17 @@ class MainActivity : ComponentActivity() {
                     AppNav(
                         isDark = isDark,
                         onToggleTheme = { theme.toggle(isDark) },
+                        deepLink = deepLink.value,
+                        onDeepLinkHandled = { deepLink.value = null },
                     )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deepLink.value = DeepLinkTarget.parse(intent.data)
     }
 }

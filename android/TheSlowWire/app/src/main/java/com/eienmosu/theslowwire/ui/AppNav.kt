@@ -2,6 +2,7 @@ package com.eienmosu.theslowwire.ui
 
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -13,6 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.eienmosu.theslowwire.model.DeepLinkTarget
 import com.eienmosu.theslowwire.model.Vertical
 import com.eienmosu.theslowwire.ui.section.FeedViewModel
 import com.eienmosu.theslowwire.ui.section.SectionScreen
@@ -34,6 +36,8 @@ import com.eienmosu.theslowwire.ui.story.StoryScreen
 fun AppNav(
     isDark: Boolean,
     onToggleTheme: () -> Unit,
+    deepLink: DeepLinkTarget? = null,
+    onDeepLinkHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -42,6 +46,23 @@ fun AppNav(
     // to the saved-instance bundle), so the reader comes back to the
     // department they were reading, not to AI.
     var vertical by rememberSaveable { mutableStateOf(Vertical.AI) }
+
+    // A link arriving from outside: switch to its department, then open the
+    // story on top of the feed, so Back lands the reader on a real page rather
+    // than dumping them out of the app. LaunchedEffect keyed on the target runs
+    // once per link, including a second link while the app is already open.
+    LaunchedEffect(deepLink) {
+        val target = deepLink ?: return@LaunchedEffect
+        vertical = target.section
+        navController.navigate(Routes.story(target.urlHash)) {
+            // Always exactly one story above the feed, so one Back from any
+            // deep link lands on the department it belongs to — never on
+            // another story, never out of the app.
+            popUpTo(Routes.FEED)
+            launchSingleTop = true
+        }
+        onDeepLinkHandled()
+    }
 
     NavHost(
         navController = navController,
