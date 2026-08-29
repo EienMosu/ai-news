@@ -1,58 +1,65 @@
 package com.eienmosu.theslowwire.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
-
+/**
+ * The design's one entry point. Wraps the app in the Modern Classic palette and
+ * hands Material3 just enough of it that the components we do borrow (text
+ * fields, ripples, the system bars) speak the same language.
+ *
+ * `dark` is nullable on purpose: null means "follow the system", which is what
+ * the app does until the reader touches the theme toggle — the same three-state
+ * model as the site (light / dark / unset) and the iOS app's AppStorage key.
+ */
 @Composable
 fun TheSlowWireTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    dark: Boolean? = null,
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
+    val isDark = dark ?: isSystemInDarkTheme()
+    val palette = if (isDark) DarkPalette else LightPalette
 
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    // Material3 still paints a few surfaces we do not draw ourselves (the text
+    // cursor, selection handles, ripples). Pointing its handful of load-bearing
+    // roles at our tokens keeps those from arriving in Material's default
+    // purple. Everything the design owns reads Palette.current instead.
+    val colorScheme = if (isDark) {
+        darkColorScheme(
+            primary = palette.ink,
+            background = palette.ground,
+            surface = palette.ground,
+            onPrimary = palette.ground,
+            onBackground = palette.ink,
+            onSurface = palette.ink,
+        )
+    } else {
+        lightColorScheme(
+            primary = palette.ink,
+            background = palette.ground,
+            surface = palette.ground,
+            onPrimary = palette.ground,
+            onBackground = palette.ink,
+            onSurface = palette.ink,
+        )
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        // The status-bar icons: dark glyphs on the ivory page, light on the
+        // night one. Without this the clock and battery vanish into the ground.
+        val window = (view.context as Activity).window
+        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
+    }
+
+    CompositionLocalProvider(LocalPalette provides palette) {
+        MaterialTheme(colorScheme = colorScheme, content = content)
+    }
 }
