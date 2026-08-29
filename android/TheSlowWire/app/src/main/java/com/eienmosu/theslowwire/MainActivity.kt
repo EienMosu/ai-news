@@ -4,9 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.ui.Modifier
-import com.eienmosu.theslowwire.ui.section.SectionScreen
+import com.eienmosu.theslowwire.ui.AppNav
 import com.eienmosu.theslowwire.ui.theme.TheSlowWireTheme
 
 /**
@@ -15,9 +13,8 @@ import com.eienmosu.theslowwire.ui.theme.TheSlowWireTheme
  * below it the app is one tree of @Composable functions, exactly like the
  * SwiftUI app is one tree of Views.
  *
- * `enableEdgeToEdge` lets the ivory ground reach the screen edges;
- * `safeDrawingPadding` then insets the CONTENT back out of the system bars'
- * way — the two halves of SwiftUI's ignoresSafeArea plus safe-area insets.
+ * `enableEdgeToEdge` lets the ivory ground reach the screen edges; AppNav then
+ * insets the CONTENT back out of the system bars' way.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,7 +22,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             TheSlowWireTheme {
-                SectionScreen(modifier = Modifier.safeDrawingPadding())
+                AppNav()
             }
         }
     }

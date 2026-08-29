@@ -1,6 +1,7 @@
 package com.eienmosu.theslowwire.ui.section
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,6 +46,7 @@ fun SectionScreen(
     section: String = "ai",
     modifier: Modifier = Modifier,
     viewModel: FeedViewModel = viewModel(),
+    onOpenStory: (String) -> Unit = {},
 ) {
     val palette = Palette.current
     // collectAsStateWithLifecycle stops collecting while the app is in the
@@ -62,13 +64,13 @@ fun SectionScreen(
         when (val current = state) {
             is LoadState.Loading -> CenteredNote("Reading the wire")
             is LoadState.Failed -> CenteredNote(current.message)
-            is LoadState.Loaded -> DayList(current.days)
+            is LoadState.Loaded -> DayList(current.days, onOpenStory)
         }
     }
 }
 
 @Composable
-private fun DayList(days: List<DaySheet>) {
+private fun DayList(days: List<DaySheet>, onOpenStory: (String) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 40.dp)
     ) {
@@ -81,7 +83,11 @@ private fun DayList(days: List<DaySheet>) {
             items(sheet.stories, key = { it.id }) { story ->
                 val isLead = story === sheet.stories.first()
                 if (!isLead) Hairline()
-                ArticleRow(story = story, isLead = isLead)
+                ArticleRow(
+                    story = story,
+                    isLead = isLead,
+                    modifier = Modifier.clickable { onOpenStory(story.lead.urlHash) },
+                )
             }
         }
     }

@@ -69,6 +69,21 @@ class FeedViewModel(
         }
     }
 
+    /**
+     * The story behind a urlHash: the one already folded into the loaded feed
+     * when there is one, otherwise fetched from /api/article. The cache hit is
+     * the normal path (the reader tapped a row that is on screen); the fetch is
+     * the cold-start path a deep link or a process restart takes, where no feed
+     * is in hand yet.
+     */
+    suspend fun story(urlHash: String): Story? {
+        val loaded = (_state.value as? LoadState.Loaded)?.days
+            ?.flatMap { it.stories }
+            ?.firstOrNull { it.lead.urlHash == urlHash }
+        if (loaded != null) return loaded
+        return runCatching { client.fetchStory(urlHash) }.getOrNull()
+    }
+
     fun retry() {
         loadedSection?.let { section ->
             loadedSection = null
