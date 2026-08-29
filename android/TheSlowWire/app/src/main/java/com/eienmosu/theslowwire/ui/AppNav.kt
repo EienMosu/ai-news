@@ -2,6 +2,10 @@ package com.eienmosu.theslowwire.ui
 
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -9,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.eienmosu.theslowwire.model.Vertical
 import com.eienmosu.theslowwire.ui.section.FeedViewModel
 import com.eienmosu.theslowwire.ui.section.SectionScreen
 import com.eienmosu.theslowwire.ui.story.StoryScreen
@@ -29,6 +34,10 @@ import com.eienmosu.theslowwire.ui.story.StoryScreen
 fun AppNav(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val feedViewModel: FeedViewModel = viewModel()
+    // rememberSaveable survives both rotation and process death (it is written
+    // to the saved-instance bundle), so the reader comes back to the
+    // department they were reading, not to AI.
+    var vertical by rememberSaveable { mutableStateOf(Vertical.AI) }
 
     NavHost(
         navController = navController,
@@ -37,6 +46,8 @@ fun AppNav(modifier: Modifier = Modifier) {
     ) {
         composable(Routes.FEED) {
             SectionScreen(
+                vertical = vertical,
+                onSelect = { vertical = it },
                 viewModel = feedViewModel,
                 onOpenStory = { urlHash -> navController.navigate(Routes.story(urlHash)) },
             )

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.eienmosu.theslowwire.model.Vertical
 import com.eienmosu.theslowwire.ui.Apparatus
 import com.eienmosu.theslowwire.ui.GoldRule
 import com.eienmosu.theslowwire.ui.theme.Palette
@@ -43,7 +44,8 @@ import com.eienmosu.theslowwire.ui.theme.prose
  */
 @Composable
 fun SectionScreen(
-    section: String = "ai",
+    vertical: Vertical,
+    onSelect: (Vertical) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: FeedViewModel = viewModel(),
     onOpenStory: (String) -> Unit = {},
@@ -52,20 +54,27 @@ fun SectionScreen(
     // collectAsStateWithLifecycle stops collecting while the app is in the
     // background — the lifecycle-aware read, and the reason the plain
     // collectAsState() is a lint warning on Android.
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val states by viewModel.states.collectAsStateWithLifecycle()
+    val state = states[vertical] ?: LoadState.Loading
 
-    LaunchedEffect(section) { viewModel.load(section) }
+    LaunchedEffect(vertical) { viewModel.load(vertical) }
 
-    Box(
+    Column(
         modifier
             .fillMaxSize()
             .background(palette.ground)
     ) {
-        when (val current = state) {
-            is LoadState.Loading -> CenteredNote("Reading the wire")
-            is LoadState.Failed -> CenteredNote(current.message)
-            is LoadState.Loaded -> DayList(current.days, onOpenStory)
+        // weight(1f) hands the list every pixel the departments bar does not
+        // take — Compose's way of saying "fill the rest", and the reason the
+        // bar never scrolls away with the days.
+        Box(Modifier.weight(1f)) {
+            when (val current = state) {
+                is LoadState.Loading -> CenteredNote("Reading the wire")
+                is LoadState.Failed -> CenteredNote(current.message)
+                is LoadState.Loaded -> DayList(current.days, onOpenStory)
+            }
         }
+        SectionSwitch(current = vertical, onSelect = onSelect)
     }
 }
 
