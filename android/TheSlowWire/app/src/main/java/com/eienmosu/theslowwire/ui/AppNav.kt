@@ -31,7 +31,11 @@ import com.eienmosu.theslowwire.ui.story.StoryScreen
  * of refetching it. (`viewModel()` inside each screen would give each its own.)
  */
 @Composable
-fun AppNav(modifier: Modifier = Modifier) {
+fun AppNav(
+    isDark: Boolean,
+    onToggleTheme: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val navController = rememberNavController()
     val feedViewModel: FeedViewModel = viewModel()
     // rememberSaveable survives both rotation and process death (it is written
@@ -48,6 +52,8 @@ fun AppNav(modifier: Modifier = Modifier) {
             SectionScreen(
                 vertical = vertical,
                 onSelect = { vertical = it },
+                isDark = isDark,
+                onToggleTheme = onToggleTheme,
                 viewModel = feedViewModel,
                 onOpenStory = { urlHash -> navController.navigate(Routes.story(urlHash)) },
             )

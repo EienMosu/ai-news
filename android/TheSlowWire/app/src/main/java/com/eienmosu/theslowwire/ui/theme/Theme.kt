@@ -15,16 +15,21 @@ import androidx.core.view.WindowCompat
  * hands Material3 just enough of it that the components we do borrow (text
  * fields, ripples, the system bars) speak the same language.
  *
- * `dark` is nullable on purpose: null means "follow the system", which is what
- * the app does until the reader touches the theme toggle — the same three-state
- * model as the site (light / dark / unset) and the iOS app's AppStorage key.
+ * `appearance` carries the reader's own choice, defaulting to DARK (owner,
+ * 2026-08-30): this app opens on the night page unless told otherwise, where
+ * the site and the iOS app open on whatever the system says. SYSTEM remains a
+ * real state so the behaviour can be aligned later without new plumbing.
  */
 @Composable
 fun TheSlowWireTheme(
-    dark: Boolean? = null,
+    appearance: Appearance = Appearance.DARK,
     content: @Composable () -> Unit,
 ) {
-    val isDark = dark ?: isSystemInDarkTheme()
+    val isDark = when (appearance) {
+        Appearance.DARK -> true
+        Appearance.LIGHT -> false
+        Appearance.SYSTEM -> isSystemInDarkTheme()
+    }
     val palette = if (isDark) DarkPalette else LightPalette
 
     // Material3 still paints a few surfaces we do not draw ourselves (the text

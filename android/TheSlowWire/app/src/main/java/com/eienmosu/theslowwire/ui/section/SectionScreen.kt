@@ -34,6 +34,7 @@ import com.eienmosu.theslowwire.model.FilterDef
 import com.eienmosu.theslowwire.model.Vertical
 import com.eienmosu.theslowwire.ui.Apparatus
 import com.eienmosu.theslowwire.ui.GoldRule
+import com.eienmosu.theslowwire.ui.ThemeToggle
 import com.eienmosu.theslowwire.ui.theme.Palette
 import com.eienmosu.theslowwire.ui.theme.current
 import com.eienmosu.theslowwire.ui.theme.display
@@ -52,6 +53,8 @@ import com.eienmosu.theslowwire.ui.theme.prose
 fun SectionScreen(
     vertical: Vertical,
     onSelect: (Vertical) -> Unit,
+    isDark: Boolean,
+    onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: FeedViewModel = viewModel(),
     onOpenStory: (String) -> Unit = {},
@@ -103,6 +106,8 @@ fun SectionScreen(
                     DayList(
                         days = narrowed,
                         onOpenStory = onOpenStory,
+                        isDark = isDark,
+                        onToggleTheme = onToggleTheme,
                         header = {
                             FilterZone(
                                 chips = chips,
@@ -132,6 +137,8 @@ fun SectionScreen(
 private fun DayList(
     days: List<DaySheet>,
     onOpenStory: (String) -> Unit,
+    isDark: Boolean,
+    onToggleTheme: () -> Unit,
     header: @Composable () -> Unit = {},
     emptyNote: String? = null,
     mastheadDays: List<DaySheet> = days,
@@ -139,7 +146,7 @@ private fun DayList(
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 40.dp)
     ) {
-        item { Masthead(mastheadDays) }
+        item { Masthead(mastheadDays, isDark, onToggleTheme) }
         item {
             header()
             Spacer(Modifier.height(20.dp))
@@ -174,7 +181,7 @@ private fun DayList(
 
 /** The journal's opening: the claim, the wordmark, and the newest day's line. */
 @Composable
-private fun Masthead(days: List<DaySheet>) {
+private fun Masthead(days: List<DaySheet>, isDark: Boolean, onToggleTheme: () -> Unit) {
     val palette = Palette.current
     val newest = days.firstOrNull()
 
@@ -185,7 +192,12 @@ private fun Masthead(days: List<DaySheet>) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Apparatus("Ranked by importance", size = 10, modifier = Modifier.fillMaxWidth())
+        // The util row: the product's claim on the left, the theme control on
+        // the right, exactly where the site puts it.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Apparatus("Ranked by importance", size = 10, modifier = Modifier.weight(1f))
+            ThemeToggle(isDark = isDark, onToggle = onToggleTheme)
+        }
         Text(
             text = "The Slow Wire",
             style = display(34, FontWeight.ExtraBold),
