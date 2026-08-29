@@ -17,6 +17,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +29,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.text.input.TextFieldValue
+import com.eienmosu.theslowwire.model.FilterDef
 import com.eienmosu.theslowwire.model.Vertical
 import com.eienmosu.theslowwire.ui.Apparatus
 import com.eienmosu.theslowwire.ui.GoldRule
@@ -57,6 +63,14 @@ fun SectionScreen(
     val states by viewModel.states.collectAsStateWithLifecycle()
     val state = states[vertical] ?: LoadState.Loading
 
+    // Per-department narrowing: switching to Design must not carry AI's chip
+    // or search text with it, and coming back must not have lost them. Keyed
+    // by vertical, saved across rotation.
+    var activeChipId by rememberSaveable(vertical) { mutableStateOf<String?>(null) }
+    var query by rememberSaveable(vertical, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(""))
+    }
+
     LaunchedEffect(vertical) { viewModel.load(vertical) }
 
     Column(
@@ -71,7 +85,43 @@ fun SectionScreen(
             when (val current = state) {
                 is LoadState.Loading -> CenteredNote("Reading the wire")
                 is LoadState.Failed -> CenteredNote(current.message)
-                is LoadState.Loaded -> DayList(current.days, onOpenStory)
+                is LoadState.Loaded -> {
+                    val chips = FilterDef.chips(vertical)
+                    val active = chips.firstOrNull { it.id == activeChipId }
+                    val free = FilterDef.freeText(query.text)
+                    val filters = listOfNotNull(active, free)
+
+                    // Narrowing happens here, over the days already in hand —
+                    // the same "these days, not the archive" contract the web's
+                    // field states in its placeholder. remember(...) keeps the
+                    // work off every unrelated recomposition.
+                    val narrowed = remember(current.days, activeChipId, query.text) {
+                        narrow(current.days, filters)
+                    }
+                    val counts = remember(current.days) { counts(current.days, chips) }
+
+                    DayList(
+                        days = narrowed,
+                        onOpenStory = onOpenStory,
+                        header = {
+                            FilterZone(
+                                chips = chips,
+                                counts = counts,
+                                activeChipId = activeChipId,
+                                onChipToggle = { id ->
+                                    activeChipId = if (activeChipId == id) null else id
+                                },
+                                query = query,
+                                onQueryChange = { query = it },
+                            )
+                        },
+                        emptyNote = if (narrowed.isEmpty() && filters.isNotEmpty()) {
+                            "No matches in these days."
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
         }
         SectionSwitch(current = vertical, onSelect = onSelect)
@@ -79,11 +129,31 @@ fun SectionScreen(
 }
 
 @Composable
-private fun DayList(days: List<DaySheet>, onOpenStory: (String) -> Unit) {
+private fun DayList(
+    days: List<DaySheet>,
+    onOpenStory: (String) -> Unit,
+    header: @Composable () -> Unit = {},
+    emptyNote: String? = null,
+    mastheadDays: List<DaySheet> = days,
+) {
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 40.dp)
     ) {
-        item { Masthead(days) }
+        item { Masthead(mastheadDays) }
+        item {
+            header()
+            Spacer(Modifier.height(20.dp))
+        }
+        if (emptyNote != null) {
+            item {
+                Text(
+                    text = emptyNote,
+                    style = prose(15),
+                    color = Palette.current.muted,
+                    modifier = Modifier.padding(vertical = 24.dp),
+                )
+            }
+        }
         days.forEach { sheet ->
             item { DayHeader(sheet) }
             // `items` with a stable key lets Compose reuse rows across
@@ -185,6 +255,29 @@ private fun CenteredNote(text: String) {
             modifier = Modifier.padding(horizontal = 40.dp),
         )
     }
+}
+
+/** Applies every active filter to every day, dropping days left with nothing —
+ *  the app hides an empty sheet rather than showing an empty frame, matching
+ *  the web's live search. `totalInDay` is untouched, so a narrowed sheet still
+ *  says K of N honestly. */
+private fun narrow(days: List<DaySheet>, filters: List<FilterDef>): List<DaySheet> {
+    if (filters.isEmpty()) return days
+    return days.mapNotNull { sheet ->
+        val kept = sheet.stories
+            .filter { story -> filters.all { it.matches(story.lead) } }
+            // Visible position, renumbered after narrowing (owner, 2026-08-28):
+            // 1, 2, 3, never a gap where a filtered-out story used to be.
+            .mapIndexed { index, story -> story.copy(rank = index + 1) }
+        if (kept.isEmpty()) null else sheet.copy(stories = kept)
+    }
+}
+
+/** How many of the rendered stories each chip narrows to — the chip names its
+ *  own effect before it is pressed. */
+private fun counts(days: List<DaySheet>, chips: List<FilterDef>): Map<String, Int> {
+    val leads = days.flatMap { it.stories }.map { it.lead }
+    return chips.associate { chip -> chip.id to leads.count(chip::matches) }
 }
 
 /** "2026-08-30" reads as "30.08.2026" everywhere in this product. */
