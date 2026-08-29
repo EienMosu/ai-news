@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The page itself: the design's light ground, so the launcher icon reads
+         as a sheet of paper whatever wallpaper sits behind it. -->
+    <color name="ic_launcher_background">#F6F1E6</color>
+</resources>

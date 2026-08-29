@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 /** One day, already folded into stories and paired with the day it belongs to. */
 data class DaySheet(
@@ -65,8 +68,7 @@ class FeedViewModel(
             val next = try {
                 LoadState.Loaded(sheets(client.fetchFeed(vertical.id).results))
             } catch (error: Exception) {
-                // The message is for a reader, not a log.
-                LoadState.Failed(error.message ?: "The feed could not be reached.")
+                LoadState.Failed(readerMessage(error))
             }
             loading.remove(vertical)
             put(vertical, next)
@@ -77,6 +79,32 @@ class FeedViewModel(
         _states.value = _states.value - vertical
         load(vertical)
     }
+
+    /** Pull to refresh: re-reads the section while LEAVING the current page on
+     *  screen, so the reader is never thrown back to a loading line for a list
+     *  they were already reading. The spinner is the only thing that changes
+     *  until the new days arrive. */
+    fun refresh(vertical: Vertical) {
+        if (!loading.add(vertical)) return
+        _refreshing.value = _refreshing.value + vertical
+        viewModelScope.launch {
+            val next = try {
+                LoadState.Loaded(sheets(client.fetchFeed(vertical.id).results))
+            } catch (error: Exception) {
+                // A failed refresh keeps the page it could not replace: losing
+                // readable stories to a dropped connection would be worse than
+                // showing slightly stale ones.
+                _states.value[vertical] as? LoadState.Loaded
+                    ?: LoadState.Failed(readerMessage(error))
+            }
+            loading.remove(vertical)
+            _refreshing.value = _refreshing.value - vertical
+            put(vertical, next)
+        }
+    }
+
+    private val _refreshing = MutableStateFlow<Set<Vertical>>(emptySet())
+    val refreshing: StateFlow<Set<Vertical>> = _refreshing.asStateFlow()
 
     /**
      * The story behind a urlHash: the one already folded into a loaded feed
@@ -92,6 +120,23 @@ class FeedViewModel(
             .firstOrNull { it.lead.urlHash == urlHash }
         if (loaded != null) return loaded
         return runCatching { client.fetchStory(urlHash) }.getOrNull()
+    }
+
+    /**
+     * What the reader is told when a read fails.
+     *
+     * Never `error.message`: that is a log line written for whoever wrote the
+     * networking stack ("Unable to resolve host ... No address associated with
+     * hostname"), and it names a hostname the reader did not choose and cannot
+     * act on. These three say what happened in the product's own voice, and
+     * each points at the one thing worth trying.
+     */
+    private fun readerMessage(error: Exception): String = when (error) {
+        is UnknownHostException, is ConnectException ->
+            "The wire is out of reach. Check your connection."
+        is SocketTimeoutException ->
+            "The wire did not answer in time."
+        else -> "The wire could not be read just now."
     }
 
     /** Sections with a request in flight, so a recomposition cannot start a

@@ -17,6 +17,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.eienmosu.theslowwire.model.Story
+import com.eienmosu.theslowwire.model.isUnranked
+import com.eienmosu.theslowwire.ui.Stamp
 import com.eienmosu.theslowwire.ui.theme.Palette
 import com.eienmosu.theslowwire.ui.theme.apparatus
 import com.eienmosu.theslowwire.ui.theme.current
@@ -57,6 +59,10 @@ fun ArticleRow(
                 style = display(17, FontWeight.Bold),
                 color = palette.ink,
             )
+            if (article.isUnranked) {
+                Spacer(Modifier.height(8.dp))
+                Stamp("New since last ranking")
+            }
             article.whyItMatters?.takeIf { it.isNotBlank() }?.let { why ->
                 Spacer(Modifier.height(6.dp))
                 Text(text = why, style = prose(14), color = palette.inkSoft)

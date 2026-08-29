@@ -36,6 +36,12 @@ data class FeedArticle(
     val firstSeenAt: String,
 )
 
+/** True exactly when the model never scored this article and capture's degraded
+ *  score stood in — the same rule as the site's isUnranked (shape.ts). The feed
+ *  says so out loud rather than letting a guessed rank pass as a measured one. */
+val FeedArticle.isUnranked: Boolean
+    get() = scoreVersion == "v1-degraded"
+
 @Serializable
 data class FeedResult(
     val articles: List<FeedArticle>,

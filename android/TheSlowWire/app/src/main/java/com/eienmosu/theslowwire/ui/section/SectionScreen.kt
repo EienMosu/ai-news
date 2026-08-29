@@ -6,6 +6,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,6 +71,7 @@ fun SectionScreen(
     // background — the lifecycle-aware read, and the reason the plain
     // collectAsState() is a lint warning on Android.
     val states by viewModel.states.collectAsStateWithLifecycle()
+    val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val state = states[vertical] ?: LoadState.Loading
 
     // Per-department narrowing: switching to Design must not carry AI's chip
@@ -87,7 +95,10 @@ fun SectionScreen(
         Box(Modifier.weight(1f)) {
             when (val current = state) {
                 is LoadState.Loading -> CenteredNote("Reading the wire")
-                is LoadState.Failed -> CenteredNote(current.message)
+                is LoadState.Failed -> FailureNote(
+                    message = current.message,
+                    onRetry = { viewModel.retry(vertical) },
+                )
                 is LoadState.Loaded -> {
                     val chips = FilterDef.chips(vertical)
                     val active = chips.firstOrNull { it.id == activeChipId }
@@ -108,6 +119,8 @@ fun SectionScreen(
                         onOpenStory = onOpenStory,
                         isDark = isDark,
                         onToggleTheme = onToggleTheme,
+                        isRefreshing = vertical in refreshing,
+                        onRefresh = { viewModel.refresh(vertical) },
                         header = {
                             FilterZone(
                                 chips = chips,
@@ -133,16 +146,42 @@ fun SectionScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DayList(
     days: List<DaySheet>,
     onOpenStory: (String) -> Unit,
     isDark: Boolean,
     onToggleTheme: () -> Unit,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     header: @Composable () -> Unit = {},
     emptyNote: String? = null,
     mastheadDays: List<DaySheet> = days,
 ) {
+    // Pull to refresh: the one gesture every Android reader already knows, and
+    // the app's only way to ask for a newer day short of killing it.
+    //
+    // The state is created HERE and handed to both the box and its indicator.
+    // Calling rememberPullToRefreshState() inside the indicator lambda instead
+    // creates a SECOND, unrelated state: the refresh still fires but the
+    // indicator never follows the drag, which is exactly how it first shipped
+    // and exactly what the on-device check caught.
+    val pullState = rememberPullToRefreshState()
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
+        state = pullState,
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = pullState,
+                isRefreshing = isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = Palette.current.ground,
+                color = Palette.current.gold,
+            )
+        },
+    ) {
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 40.dp)
     ) {
@@ -175,6 +214,7 @@ private fun DayList(
                     modifier = Modifier.clickable { onOpenStory(story.lead.urlHash) },
                 )
             }
+        }
         }
     }
 }
@@ -254,8 +294,39 @@ private fun Hairline() {
     )
 }
 
-/** The wait and the failure share one shape: a quiet line on the page, never a
- *  spinner over a blank screen — the reader should always be told which it is. */
+/** A failure states what happened AND offers the way out. The retry is the
+ *  pressed grammar, ink on ground: the one thing on this screen to do. */
+@Composable
+private fun FailureNote(message: String, onRetry: () -> Unit) {
+    val palette = Palette.current
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 40.dp),
+        ) {
+            Text(
+                text = message,
+                style = prose(15),
+                color = palette.muted,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(16.dp))
+            Apparatus(
+                "Try again",
+                size = 11,
+                medium = true,
+                color = palette.ground,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(palette.ink)
+                    .clickable(onClick = onRetry)
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+            )
+        }
+    }
+}
+
+/** The wait is a quiet line on the page, never a spinner over a blank screen. */
 @Composable
 private fun CenteredNote(text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
