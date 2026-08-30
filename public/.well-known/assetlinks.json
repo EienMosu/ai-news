@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.eienmosu.theslowwire",
+      "sha256_cert_fingerprints": [
+        "1F:34:32:0B:B5:21:9E:FE:83:01:3B:66:93:35:C4:64:53:5A:12:8F:1B:FE:9E:38:AD:F3:61:4E:C9:4F:65:6F"
+      ]
+    }
+  }
+]

@@ -20,11 +20,32 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Signing credentials come from ~/.gradle/gradle.properties, which is
+    // outside this repo and never committed. A machine without them still
+    // builds every debug variant; only assembleRelease needs them.
+    signingConfigs {
+        create("release") {
+            val storePath = providers.gradleProperty("THESLOWWIRE_STORE_FILE").orNull
+            if (storePath != null) {
+                storeFile = file(storePath)
+                storePassword = providers.gradleProperty("THESLOWWIRE_STORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("THESLOWWIRE_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("THESLOWWIRE_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            // R8 shrinks and renames what nothing reaches. The template shipped
+            // with optimization disabled, which is fine for a placeholder app
+            // and wrong for one that ships: this build drops roughly half the
+            // APK. Compose and kotlinx-serialization bring their own keep rules
+            // through consumer-rules, so the project file below stays short.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
